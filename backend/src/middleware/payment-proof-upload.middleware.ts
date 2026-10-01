@@ -9,6 +9,7 @@ import {
 } from '../services/proof-storage.service.js';
 import {
   ensurePaymentProofUploadDirectories,
+  paymentProofUploadRoot,
   paymentProofTemporaryDirectory
 } from '../config/uploads.js';
 import { AppError } from '../utils/app-error.js';
@@ -39,13 +40,14 @@ interface OnceEmitter {
 export function registerTemporaryProofCleanup(
   request: OnceEmitter,
   response: OnceEmitter,
-  filePath: string
+  filePath: string,
+  privateRoot = paymentProofUploadRoot
 ): void {
   let cleanupStarted = false;
   const cleanup = (): void => {
     if (cleanupStarted) return;
     cleanupStarted = true;
-    void removeProofFileBestEffort(filePath, 'request lifecycle cleanup');
+    void removeProofFileBestEffort(filePath, 'request lifecycle cleanup', privateRoot);
   };
   request.once('aborted', cleanup);
   response.once('finish', cleanup);
@@ -69,7 +71,7 @@ export async function paymentProofUpload(
   upload(request, response, (error) => {
     if (error) {
       if (request.file?.path) {
-        void removeProofFileBestEffort(request.file.path, 'multipart rejection cleanup');
+        void removeProofFileBestEffort(request.file.path, 'multipart rejection cleanup', paymentProofUploadRoot);
       }
       next(error instanceof multer.MulterError ? mapMulterError(error) : error);
       return;
@@ -86,12 +88,12 @@ export async function paymentProofUpload(
       originalFilename: uploadedFile.originalname,
       declaredMimeType: uploadedFile.mimetype,
       byteSize: uploadedFile.size
-    })).then((validated) => {
+    }, paymentProofUploadRoot)).then((validated) => {
       request.validatedPaymentProof = validated;
       registerTemporaryProofCleanup(request, response, validated.path);
       next();
     }, async (error) => {
-      await removeProofFileBestEffort(uploadedFile.path, 'middleware validation cleanup');
+      await removeProofFileBestEffort(uploadedFile.path, 'middleware validation cleanup', paymentProofUploadRoot);
       next(error);
     });
   });

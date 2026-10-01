@@ -144,7 +144,7 @@ test('cleanup lifecycle removes temporary files on request abort and response er
     await writeFile(filePath, png, { mode: 0o600 });
     const request = new EventEmitter();
     const response = new EventEmitter();
-    registerTemporaryProofCleanup(request, response, filePath);
+    registerTemporaryProofCleanup(request, response, filePath, directory);
     (event === 'aborted' ? request : response).emit(event, new Error('connection failed'));
     await new Promise((resolve) => setTimeout(resolve, 10));
     await assert.rejects(stat(filePath));

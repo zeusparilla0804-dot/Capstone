@@ -170,6 +170,18 @@ test('persists the exact validated bytes even if the temporary pathname changes'
   assert.deepEqual(await readFile(path.join(root, ...stored.storageKey.split('/'))), signatures.png);
 });
 
+test('uses the persisted validated byte length instead of stale file metadata', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-byte-size-'));
+  const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
+  const file = await temporaryFile(temp, 'proof.png', signatures.png, 'image/png');
+  const validated = await validateProofFile(file);
+  validated.byteSize = 999;
+
+  const stored = await new FileSystemProofStorage(root).save(validated);
+
+  assert.equal(stored.byteSize, signatures.png.byteLength);
+});
+
 test('preserves the write error even when temporary cleanup also fails', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'proof-store-failure-'));
   const blockingPath = path.join(root, 'payment-proofs');
@@ -224,17 +236,30 @@ test('rejects a non-regular stored path', async () => {
   await assert.rejects(new FileSystemProofStorage(root).open(key), /regular file/i);
 });
 
-test('rejects symlink substitution and non-regular stored paths where no-follow is supported', {
-  skip: process.platform === 'win32'
-}, async () => {
+test('rejects a symlink or junction substituted for the private storage directory', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'proof-symlink-'));
-  const proofDirectory = path.join(root, 'payment-proofs');
-  await mkdir(proofDirectory, { mode: 0o700 });
-  const target = path.join(root, 'target.png');
-  await writeFile(target, signatures.png);
+  const outside = await mkdtemp(path.join(tmpdir(), 'proof-outside-'));
   const key = 'payment-proofs/123e4567-e89b-42d3-a456-426614174000.png';
-  await symlink(target, path.join(root, ...key.split('/')));
+  await writeFile(path.join(outside, path.basename(key)), signatures.png);
+  await symlink(outside, path.join(root, 'payment-proofs'), 'junction');
 
-  await assert.rejects(new FileSystemProofStorage(root).open(key));
+  await assert.rejects(new FileSystemProofStorage(root).open(key), /link|private/i);
+});
+
+test('rejects a symlink or junction in a temporary upload path without deleting its target', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-private-root-'));
+  const outside = await mkdtemp(path.join(tmpdir(), 'proof-outside-'));
+  const outsideFile = path.join(outside, 'upload.tmp');
+  await writeFile(outsideFile, signatures.png);
+  await symlink(outside, path.join(root, '.tmp'), 'junction');
+  const file: TemporaryProofFile = {
+    path: path.join(root, '.tmp', 'upload.tmp'),
+    originalFilename: 'proof.png',
+    declaredMimeType: 'image/png',
+    byteSize: signatures.png.byteLength
+  };
+
+  await assert.rejects(validateProofFile(file, root), /link|private/i);
+  assert.deepEqual(await readFile(outsideFile), signatures.png);
 });
 

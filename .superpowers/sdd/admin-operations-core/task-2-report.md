@@ -177,3 +177,84 @@ Result: `found 0 vulnerabilities`.
 
 - The current workstation runs Node `22.22.0`, slightly below the newly declared project minimum `22.22.3`; verification passed, but deployment and CI should use Node `22.22.3` or newer.
 - POSIX permission-bit and no-follow assertions are skipped on Windows because those semantics are not exposed there; descriptor regular-file validation remains active cross-platform.
+
+## Fix Round 2
+
+### Status
+
+COMPLETE
+
+### Findings Addressed
+
+- Added non-skipped Windows-capable junction/symlink tests for both the temporary upload path and stored proof directory.
+- Every path component beneath the configured private root is checked with `lstat`; symbolic links and Windows junction/reparse links are rejected.
+- `realpath` must match the expected path beneath the real private root, preventing component redirection that lexical containment alone cannot detect.
+- Descriptor `fstat` identity is compared with path entries before use while retaining `O_NOFOLLOW` where supported.
+- Safe cleanup performs the same containment/link checks and therefore refuses to follow a substituted junction to delete an external target.
+- Validation repeats descriptor and path checks after the bounded read and rejects size, modification-time, or identity changes during validation.
+- Validated and stored `byteSize` now comes from `bytes.byteLength`, matching the exact buffer persisted rather than the initial stat value.
+- Stored-file deletion now applies private-path checks before unlinking.
+- Scoped `git diff --check` is clean; the reported trailing blank-line issue is removed.
+
+### RED Evidence
+
+The focused service test initially produced three expected failures:
+
+```text
+stale byte metadata: expected 29, received 999
+stored directory junction: missing expected rejection
+temporary directory junction: missing expected rejection
+```
+
+These failures reproduced the reviewer findings on the Windows test host without skipping the junction threat.
+
+### GREEN Evidence
+
+Focused command:
+
+```text
+npx.cmd tsx --test src/services/proof-storage.service.test.ts src/middleware/payment-proof-upload.middleware.test.ts
+```
+
+Result: 23 passed, 0 failed, 2 skipped. Only POSIX permission-bit checks are skipped on Windows; both junction tests run and pass.
+
+Full backend command:
+
+```text
+npm.cmd test
+```
+
+Result: 31 passed, 0 failed, 2 skipped.
+
+Build command:
+
+```text
+npm.cmd run build
+```
+
+Result: TypeScript build passed.
+
+Production audit command:
+
+```text
+npm.cmd audit --omit=dev
+```
+
+Result: `found 0 vulnerabilities`.
+
+Whitespace command:
+
+```text
+git diff --check -- <Task 2 paths>
+```
+
+Result: passed with no whitespace errors.
+
+### Fix Commits
+
+- Pending at report-write time; recorded in the report-only follow-up after the path-limited implementation commit.
+
+### Fix-Round Concerns
+
+- Node does not expose an `openat`-style API on Windows. The implementation uses the strongest available checks: component `lstat`, expected `realpath`, descriptor regular-file validation, and pre/post descriptor identity checks. A same-user attacker with precise concurrent filesystem mutation may still present a residual race that cannot be fully closed with current Node filesystem APIs.
+- The local runtime remains Node `22.22.0`; CI and deployment should use the declared minimum Node `22.22.3` or newer.
