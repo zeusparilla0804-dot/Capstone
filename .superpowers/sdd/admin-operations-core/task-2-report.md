@@ -170,7 +170,8 @@ Result: `found 0 vulnerabilities`.
 
 ### Fix Commit
 
-- Pending at report-write time; recorded after the path-limited commit below.
+- `e482b108e1e28a41c304d69c17982e8d5cdd8c8e`
+- Message: `fix: harden private payment proof storage`
 
 ### Fix-Round Concerns
 
