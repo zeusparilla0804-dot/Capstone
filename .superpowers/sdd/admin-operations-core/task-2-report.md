@@ -252,7 +252,9 @@ Result: passed with no whitespace errors.
 
 ### Fix Commits
 
-- Pending at report-write time; recorded in the report-only follow-up after the path-limited implementation commit.
+- Implementation: `161e3556871d4977447565d6d8602a1b5897a43a`
+- Message: `fix: reject payment proof path substitutions`
+- Report finalization: recorded by the report-only child commit containing this line.
 
 ### Fix-Round Concerns
 
