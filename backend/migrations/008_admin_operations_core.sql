@@ -1,3 +1,10 @@
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
 SET XACT_ABORT ON;
 BEGIN TRANSACTION;
 
@@ -44,8 +51,8 @@ BEGIN
   );
 
   CREATE UNIQUE INDEX UX_PAYMENT_PROOF_active_reference
-    ON dbo.PAYMENT_PROOF(method, transaction_reference)
-    WHERE transaction_reference IS NOT NULL AND status IN('SUBMITTED','VERIFIED');
+    ON dbo.PAYMENT_PROOF(transaction_reference)
+    WHERE transaction_reference IS NOT NULL;
   CREATE INDEX IX_PAYMENT_PROOF_status_created
     ON dbo.PAYMENT_PROOF(status, created_at) INCLUDE(reservation_id, customer_id, claimed_amount);
   CREATE INDEX IX_PAYMENT_PROOF_reservation_created

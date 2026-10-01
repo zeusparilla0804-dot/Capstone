@@ -33,8 +33,23 @@ test('admin operations schema defines payment proofs, booking history, and the e
   assert.match(sql, /status\s*=\s*'VERIFIED'[\s\S]*reviewed_by\s+IS\s+NOT\s+NULL[\s\S]*reviewed_at\s+IS\s+NOT\s+NULL[\s\S]*verified_amount\s+IS\s+NOT\s+NULL/i);
   assert.match(sql, /status\s*=\s*'REJECTED'[\s\S]*reviewed_by\s+IS\s+NOT\s+NULL[\s\S]*reviewed_at\s+IS\s+NOT\s+NULL[\s\S]*rejection_reason\s+IS\s+NOT\s+NULL/i);
 
-  assert.match(sql, /CREATE\s+UNIQUE\s+INDEX\s+UX_PAYMENT_PROOF_active_reference/i);
-  assert.match(sql, /WHERE\s+transaction_reference\s+IS\s+NOT\s+NULL\s+AND\s+status\s+IN\s*\(\s*'SUBMITTED'\s*,\s*'VERIFIED'\s*\)/i);
+  const uniqueReferenceIndex = sql.match(
+    /CREATE\s+UNIQUE\s+INDEX\s+UX_PAYMENT_PROOF_active_reference\s+ON\s+dbo\.PAYMENT_PROOF\s*\(([^)]*)\)\s+WHERE\s+([^;]+);/i,
+  );
+  assert.ok(uniqueReferenceIndex, 'transaction-reference unique index must exist');
+  assert.equal(uniqueReferenceIndex[1].trim().toLowerCase(), 'transaction_reference');
+  assert.equal(uniqueReferenceIndex[2].trim().toLowerCase(), 'transaction_reference is not null');
+  for (const option of [
+    'ANSI_NULLS',
+    'ANSI_PADDING',
+    'ANSI_WARNINGS',
+    'ARITHABORT',
+    'CONCAT_NULL_YIELDS_NULL',
+    'QUOTED_IDENTIFIER',
+  ]) {
+    assert.match(sql, new RegExp(`SET\\s+${option}\\s+ON`, 'i'));
+  }
+  assert.match(sql, /SET\s+NUMERIC_ROUNDABORT\s+OFF/i);
   assert.match(sql, /CREATE\s+INDEX\s+IX_PAYMENT_PROOF_status_created/i);
   assert.match(sql, /CREATE\s+INDEX\s+IX_BOOKING_STATUS_HISTORY_reservation_created/i);
   assert.match(sql, /CREATE\s+INDEX\s+IX_EMAIL_OUTBOX_status_next_attempt/i);
