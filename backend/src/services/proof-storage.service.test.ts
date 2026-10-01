@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -107,6 +107,41 @@ test('rejects random bytes and deletes the temporary file', async () => {
   assert.equal(await exists(file.path), false);
 });
 
+test('rejects a declared MIME mismatch and deletes the temporary file', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'proof-mime-'));
+  const file = await temporaryFile(directory, 'photo.jpg', signatures.jpeg, 'image/png');
+
+  await assert.rejects(validateProofFile(file), /does not match/i);
+  assert.equal(await exists(file.path), false);
+});
+
+test('rejects an unsupported extension and deletes the temporary file', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'proof-extension-'));
+  const file = await temporaryFile(directory, 'photo.gif', signatures.png, 'image/png');
+
+  await assert.rejects(validateProofFile(file), /does not match/i);
+  assert.equal(await exists(file.path), false);
+});
+
+test('preserves the primary read error when best-effort cleanup also fails', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'proof-read-failure-'));
+  const unreadablePath = path.join(directory, 'directory.png');
+  await mkdir(unreadablePath);
+  const file: TemporaryProofFile = {
+    path: unreadablePath,
+    originalFilename: 'directory.png',
+    declaredMimeType: 'image/png',
+    byteSize: 0
+  };
+
+  await assert.rejects(validateProofFile(file), (error: NodeJS.ErrnoException) => {
+    assert.notEqual(error.code, 'EPERM');
+    assert.doesNotMatch(error.message, /unlink|cleanup/i);
+    return true;
+  });
+  assert.equal(await exists(unreadablePath), true);
+});
+
 test('stores with a generated key and preserves the original filename only as metadata', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'proof-store-'));
   const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
@@ -123,6 +158,49 @@ test('stores with a generated key and preserves the original filename only as me
   assert.equal(await exists(file.path), false);
 });
 
+test('persists the exact validated bytes even if the temporary pathname changes', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-store-'));
+  const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
+  const file = await temporaryFile(temp, 'proof.png', signatures.png, 'image/png');
+  const validated = await validateProofFile(file);
+  await writeFile(file.path, Buffer.from('substituted after validation'));
+
+  const stored = await new FileSystemProofStorage(root).save(validated);
+
+  assert.deepEqual(await readFile(path.join(root, ...stored.storageKey.split('/'))), signatures.png);
+});
+
+test('preserves the write error even when temporary cleanup also fails', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-store-failure-'));
+  const blockingPath = path.join(root, 'payment-proofs');
+  await writeFile(blockingPath, 'not a directory');
+  const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
+  const file = await temporaryFile(temp, 'proof.png', signatures.png, 'image/png');
+  const validated = await validateProofFile(file);
+  await unlink(file.path);
+  await mkdir(file.path);
+
+  await assert.rejects(new FileSystemProofStorage(root).save(validated), (error: NodeJS.ErrnoException) => {
+    assert.ok(error.code === 'EEXIST' || error.code === 'ENOTDIR');
+    return true;
+  });
+  assert.equal(await exists(file.path), true);
+});
+
+test('creates private directories and final files where POSIX modes are supported', {
+  skip: process.platform === 'win32'
+}, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-permissions-'));
+  const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
+  const file = await temporaryFile(temp, 'proof.png', signatures.png, 'image/png');
+  const stored = await new FileSystemProofStorage(root).save(await validateProofFile(file));
+  const directoryMode = (await stat(path.join(root, 'payment-proofs'))).mode & 0o777;
+  const fileMode = (await stat(path.join(root, ...stored.storageKey.split('/')))).mode & 0o777;
+
+  assert.equal(directoryMode, 0o700);
+  assert.equal(fileMode, 0o600);
+});
+
 test('opens and deletes a stored proof while rejecting traversal keys', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'proof-store-'));
   const temp = await mkdtemp(path.join(tmpdir(), 'proof-temp-'));
@@ -136,5 +214,27 @@ test('opens and deletes a stored proof while rejecting traversal keys', async ()
 
   await storage.delete(stored.storageKey);
   await assert.rejects(storage.open(stored.storageKey));
+});
+
+test('rejects a non-regular stored path', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-non-regular-'));
+  const key = 'payment-proofs/123e4567-e89b-42d3-a456-426614174000.png';
+  await mkdir(path.join(root, ...key.split('/')), { recursive: true });
+
+  await assert.rejects(new FileSystemProofStorage(root).open(key), /regular file/i);
+});
+
+test('rejects symlink substitution and non-regular stored paths where no-follow is supported', {
+  skip: process.platform === 'win32'
+}, async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proof-symlink-'));
+  const proofDirectory = path.join(root, 'payment-proofs');
+  await mkdir(proofDirectory, { mode: 0o700 });
+  const target = path.join(root, 'target.png');
+  await writeFile(target, signatures.png);
+  const key = 'payment-proofs/123e4567-e89b-42d3-a456-426614174000.png';
+  await symlink(target, path.join(root, ...key.split('/')));
+
+  await assert.rejects(new FileSystemProofStorage(root).open(key));
 });
 

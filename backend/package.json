@@ -17,6 +17,9 @@
   "type": "module",
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=22.22.3"
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^18.0.2",

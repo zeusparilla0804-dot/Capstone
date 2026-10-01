@@ -41,9 +41,6 @@ build/Release
 node_modules/
 jspm_packages/
 
-# Workstation-specific editor configuration
-**/.vscode/
-
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 

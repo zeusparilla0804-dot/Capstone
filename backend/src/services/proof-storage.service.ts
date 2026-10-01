@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { createReadStream, type ReadStream } from 'node:fs';
-import { mkdir, rename, stat, unlink } from 'node:fs/promises';
+import { constants, type ReadStream } from 'node:fs';
+import { chmod, mkdir, open, unlink, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
-import { fileTypeFromFile } from 'file-type';
+import { fileTypeFromBuffer } from 'file-type';
 import { AppError } from '../utils/app-error.js';
+import { logger } from '../utils/logger.js';
 
 export const MAX_PAYMENT_PROOF_BYTES = 5_242_880;
 
@@ -26,6 +27,7 @@ export interface TemporaryProofFile {
 export interface ValidatedProofFile extends TemporaryProofFile {
   extension: ProofExtension;
   mimeType: ProofMimeType;
+  bytes: Buffer;
 }
 
 export interface StoredProof {
@@ -41,10 +43,57 @@ export interface ProofStorage {
   delete(storageKey: string): Promise<void>;
 }
 
-async function removeTemporaryFile(filePath: string): Promise<void> {
-  await unlink(filePath).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== 'ENOENT') throw error;
-  });
+export async function removeProofFileBestEffort(filePath: string, context: string): Promise<void> {
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    try {
+      logger.warn('payment_proof.cleanup_failed', `${context}: ${String(error)}`);
+    } catch {
+      // Cleanup and logging must never replace the primary request/storage error.
+    }
+  }
+}
+
+const noFollowFlag = (constants as unknown as Record<string, number>)['O_NOFOLLOW'] ?? 0;
+
+async function closeBestEffort(handle: FileHandle, context: string): Promise<void> {
+  try {
+    await handle.close();
+  } catch (error) {
+    try {
+      logger.warn('payment_proof.close_failed', `${context}: ${String(error)}`);
+    } catch {
+      // Logging must not replace an earlier file operation error.
+    }
+  }
+}
+
+async function readBounded(handle: FileHandle): Promise<Buffer> {
+  const buffer = Buffer.allocUnsafe(MAX_PAYMENT_PROOF_BYTES + 1);
+  let offset = 0;
+  while (offset < buffer.byteLength) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, null);
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  if (offset > MAX_PAYMENT_PROOF_BYTES) {
+    throw new AppError(413, 'Payment proof must not exceed 5 MB.');
+  }
+  return Buffer.from(buffer.subarray(0, offset));
+}
+
+async function openRegularFile(filePath: string) {
+  const handle = await open(filePath, constants.O_RDONLY | noFollowFlag);
+  try {
+    const details = await handle.stat();
+    if (!details.isFile()) throw new AppError(400, 'Payment proof must be a regular file.');
+    return { handle, details };
+  } catch (error) {
+    await closeBestEffort(handle, 'regular-file validation');
+    throw error;
+  }
 }
 
 function filenameExtension(filename: string): ProofExtension | undefined {
@@ -56,12 +105,22 @@ function filenameExtension(filename: string): ProofExtension | undefined {
 
 export async function validateProofFile(file: TemporaryProofFile): Promise<ValidatedProofFile> {
   try {
-    const details = await stat(file.path);
+    const { handle, details } = await openRegularFile(file.path);
     if (details.size > MAX_PAYMENT_PROOF_BYTES) {
+      await closeBestEffort(handle, 'oversized validation');
       throw new AppError(413, 'Payment proof must not exceed 5 MB.');
     }
 
-    const detected = await fileTypeFromFile(file.path);
+    let bytes: Buffer;
+    try {
+      bytes = await readBounded(handle);
+    } catch (error) {
+      await closeBestEffort(handle, 'failed validation read');
+      throw error;
+    }
+    await handle.close();
+
+    const detected = await fileTypeFromBuffer(bytes);
     if (!detected || !(detected.mime in mimeToExtension)) {
       throw new AppError(400, 'Payment proof must be a JPEG, PNG, or WebP image.');
     }
@@ -76,10 +135,11 @@ export async function validateProofFile(file: TemporaryProofFile): Promise<Valid
       ...file,
       byteSize: details.size,
       extension,
-      mimeType
+      mimeType,
+      bytes
     };
   } catch (error) {
-    await removeTemporaryFile(file.path);
+    await removeProofFileBestEffort(file.path, 'validation rejection');
     throw error;
   }
 }
@@ -96,9 +156,26 @@ export class FileSystemProofStorage implements ProofStorage {
     const storageKey = `payment-proofs/${filename}`;
     const destination = path.join(this.#proofDirectory, filename);
 
+    let destinationCreated = false;
     try {
-      await mkdir(this.#proofDirectory, { recursive: true });
-      await rename(tempFile.path, destination);
+      await mkdir(this.#proofDirectory, { recursive: true, mode: 0o700 });
+      await chmod(this.#proofDirectory, 0o700);
+      const destinationHandle = await open(
+        destination,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL,
+        0o600
+      );
+      destinationCreated = true;
+      try {
+        await destinationHandle.writeFile(tempFile.bytes);
+        await destinationHandle.sync();
+        await destinationHandle.chmod(0o600);
+      } catch (error) {
+        await closeBestEffort(destinationHandle, 'failed destination write');
+        throw error;
+      }
+      await destinationHandle.close();
+      await removeProofFileBestEffort(tempFile.path, 'post-save temporary cleanup');
       return {
         storageKey,
         originalFilename: tempFile.originalFilename,
@@ -106,15 +183,18 @@ export class FileSystemProofStorage implements ProofStorage {
         byteSize: tempFile.byteSize
       };
     } catch (error) {
-      await removeTemporaryFile(tempFile.path);
+      if (destinationCreated) {
+        await removeProofFileBestEffort(destination, 'failed destination cleanup');
+      }
+      await removeProofFileBestEffort(tempFile.path, 'failed save temporary cleanup');
       throw error;
     }
   }
 
   async open(storageKey: string): Promise<ReadStream> {
     const filePath = this.#resolveKey(storageKey);
-    await stat(filePath);
-    return createReadStream(filePath);
+    const { handle } = await openRegularFile(filePath);
+    return handle.createReadStream({ autoClose: true });
   }
 
   async delete(storageKey: string): Promise<void> {

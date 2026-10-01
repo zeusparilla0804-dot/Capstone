@@ -1,8 +1,10 @@
 import type { NextFunction, Request, Response } from 'express';
+import { chmod } from 'node:fs/promises';
 import multer from 'multer';
 import {
   MAX_PAYMENT_PROOF_BYTES,
   validateProofFile,
+  removeProofFileBestEffort,
   type ValidatedProofFile
 } from '../services/proof-storage.service.js';
 import {
@@ -30,6 +32,34 @@ const upload = multer({
   }
 }).single('proof');
 
+interface OnceEmitter {
+  once(event: string, listener: () => void): unknown;
+}
+
+export function registerTemporaryProofCleanup(
+  request: OnceEmitter,
+  response: OnceEmitter,
+  filePath: string
+): void {
+  let cleanupStarted = false;
+  const cleanup = (): void => {
+    if (cleanupStarted) return;
+    cleanupStarted = true;
+    void removeProofFileBestEffort(filePath, 'request lifecycle cleanup');
+  };
+  request.once('aborted', cleanup);
+  response.once('finish', cleanup);
+  response.once('error', cleanup);
+  response.once('close', cleanup);
+}
+
+function mapMulterError(error: multer.MulterError): AppError {
+  if (error.code === 'LIMIT_FILE_SIZE') {
+    return new AppError(413, 'Payment proof must not exceed 5 MB.');
+  }
+  return new AppError(400, 'Upload exactly one payment proof using the proof field.');
+}
+
 export async function paymentProofUpload(
   request: Request,
   response: Response,
@@ -38,9 +68,10 @@ export async function paymentProofUpload(
   await ensurePaymentProofUploadDirectories();
   upload(request, response, (error) => {
     if (error) {
-      next(error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
-        ? new AppError(413, 'Payment proof must not exceed 5 MB.')
-        : error);
+      if (request.file?.path) {
+        void removeProofFileBestEffort(request.file.path, 'multipart rejection cleanup');
+      }
+      next(error instanceof multer.MulterError ? mapMulterError(error) : error);
       return;
     }
 
@@ -49,14 +80,19 @@ export async function paymentProofUpload(
       return;
     }
 
-    void validateProofFile({
-      path: request.file.path,
-      originalFilename: request.file.originalname,
-      declaredMimeType: request.file.mimetype,
-      byteSize: request.file.size
-    }).then((validated) => {
+    const uploadedFile = request.file;
+    void chmod(uploadedFile.path, 0o600).then(() => validateProofFile({
+      path: uploadedFile.path,
+      originalFilename: uploadedFile.originalname,
+      declaredMimeType: uploadedFile.mimetype,
+      byteSize: uploadedFile.size
+    })).then((validated) => {
       request.validatedPaymentProof = validated;
+      registerTemporaryProofCleanup(request, response, validated.path);
       next();
-    }, next);
+    }, async (error) => {
+      await removeProofFileBestEffort(uploadedFile.path, 'middleware validation cleanup');
+      next(error);
+    });
   });
 }
