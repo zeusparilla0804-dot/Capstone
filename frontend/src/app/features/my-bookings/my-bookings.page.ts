@@ -1,4 +1,4 @@
-import { Component, computed, HostListener, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Booking, BookingTab } from '../../core/models';
@@ -14,7 +14,13 @@ import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/compon
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './my-bookings.page.scss',
 })
-export class MyBookingsPageComponent {
+export class MyBookingsPageComponent implements AfterViewChecked {
+  @ViewChild('bookingTabs') private bookingTabs?: ElementRef<HTMLElement>;
+  @ViewChild('cancelDialog') private cancellationDialog?: ElementRef<HTMLElement>;
+  @ViewChild('cancelReason') private cancellationReasonField?: ElementRef<HTMLTextAreaElement>;
+  private cancellationTrigger?: HTMLButtonElement;
+  private focusReasonOnOpen = false;
+  private focusCancelledTabOnCheck = false;
   protected readonly bookingService = inject(BookingService);
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
@@ -36,9 +42,34 @@ export class MyBookingsPageComponent {
   ];
   constructor() { this.bookingService.loadMine(); }
 
+  ngAfterViewChecked(): void {
+    if (this.focusReasonOnOpen && this.cancellationReasonField) {
+      this.focusReasonOnOpen = false;
+      this.cancellationReasonField.nativeElement.focus();
+    }
+    if (this.focusCancelledTabOnCheck && this.bookingTabs) {
+      this.focusCancelledTabOnCheck = false;
+      this.bookingTabs.nativeElement.querySelector<HTMLButtonElement>('button[role="tab"][aria-selected="true"]')?.focus();
+    }
+  }
+
   protected setFilter(filter: BookingTab): void { this.activeFilter.set(filter); }
-  protected requestCancellation(booking: Booking): void { this.cancellationReason = ''; this.cancellationError.set(''); this.bookingToCancel.set(booking); }
-  protected closeCancellation(): void { if (this.cancellationPending()) return; this.bookingToCancel.set(null); this.cancellationReason = ''; this.cancellationError.set(''); }
+  protected requestCancellation(booking: Booking, trigger: HTMLButtonElement): void {
+    this.cancellationTrigger = trigger;
+    this.focusReasonOnOpen = true;
+    this.cancellationReason = '';
+    this.cancellationError.set('');
+    this.bookingToCancel.set(booking);
+  }
+  protected closeCancellation(restoreTrigger = true): void {
+    if (this.cancellationPending()) return;
+    this.bookingToCancel.set(null);
+    this.cancellationReason = '';
+    this.cancellationError.set('');
+    this.focusReasonOnOpen = false;
+    if (restoreTrigger && this.cancellationTrigger?.isConnected) this.cancellationTrigger.focus();
+    this.cancellationTrigger = undefined;
+  }
   protected async confirmCancellation(): Promise<void> {
     const booking = this.bookingToCancel();
     const reason = this.cancellationReason.trim();
@@ -46,11 +77,35 @@ export class MyBookingsPageComponent {
     this.cancellationPending.set(true);
     const cancelled = await this.bookingService.cancelBooking(booking.id, reason);
     this.cancellationPending.set(false);
-    if (cancelled) { this.activeFilter.set('cancelled'); this.closeCancellation(); }
+    if (cancelled) { this.activeFilter.set('cancelled'); this.closeCancellation(false); this.focusCancelledTabOnCheck = true; }
     else this.cancellationError.set('Unable to cancel this booking. Refresh and try again.');
   }
   protected async handleNavAction(item: DashboardNavItem): Promise<void> { if (item.label === 'Logout') { await this.auth.logout(); await this.router.navigate([item.route]); } }
 
-  @HostListener('document:keydown.escape')
-  protected closeOnEscape(): void { this.closeCancellation(); }
+  @HostListener('document:keydown', ['$event'])
+  protected onDocumentKeydown(event: KeyboardEvent): void {
+    if (!this.bookingToCancel()) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeCancellation();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const dialog = this.cancellationDialog?.nativeElement;
+    if (!dialog) return;
+    const controls = Array.from(dialog.querySelectorAll<HTMLElement>('textarea:not(:disabled), button:not(:disabled)'));
+    if (!controls.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const active = document.activeElement;
+    if (event.shiftKey && (active === controls[0] || !dialog.contains(active))) {
+      event.preventDefault();
+      controls[controls.length - 1]!.focus();
+    } else if (!event.shiftKey && (active === controls[controls.length - 1] || !dialog.contains(active))) {
+      event.preventDefault();
+      controls[0]!.focus();
+    }
+  }
 }

@@ -50,4 +50,77 @@ describe('MyBookingsPage cancellation', () => {
     await fixture.whenStable();
     expect(calls).toEqual([{ id: '5', reason: 'Plans changed' }]);
   });
+
+  it('moves focus to the reason field when cancellation opens', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const trigger = fixture.nativeElement.querySelector('.booking-card__cancel') as HTMLButtonElement;
+    trigger.focus();
+    trigger.click();
+    fixture.detectChanges();
+
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('#cancel-reason'));
+  });
+
+  it('keeps Tab and Shift+Tab inside the cancellation dialog', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.booking-card__cancel') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const reason = fixture.nativeElement.querySelector('#cancel-reason') as HTMLTextAreaElement;
+    const keep = fixture.nativeElement.querySelector('.cancel-dialog__actions .btn-secondary') as HTMLButtonElement;
+    reason.focus();
+    const backwards = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    reason.dispatchEvent(backwards);
+    expect(backwards.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(keep);
+
+    reason.value = 'Plans changed';
+    reason.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    const confirm = fixture.nativeElement.querySelector('[data-testid="confirm-cancellation"]') as HTMLButtonElement;
+    confirm.focus();
+    const forwards = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    confirm.dispatchEvent(forwards);
+    expect(forwards.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(reason);
+  });
+
+  it('closes on Escape and returns focus to the exact cancel button', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const unrelated = fixture.nativeElement.querySelector('.bookings-header a') as HTMLAnchorElement;
+    const trigger = fixture.nativeElement.querySelector('.booking-card__cancel') as HTMLButtonElement;
+    unrelated.focus();
+    expect(document.activeElement).toBe(unrelated);
+    trigger.click();
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.cancel-dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('moves focus to the cancelled tab after a successful cancellation removes the trigger', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.booking-card__cancel') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    const reason = fixture.nativeElement.querySelector('#cancel-reason') as HTMLTextAreaElement;
+    reason.value = 'Plans changed';
+    reason.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('[data-testid="confirm-cancellation"]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const selected = fixture.nativeElement.querySelector('button[role="tab"][aria-selected="true"]') as HTMLButtonElement;
+    expect(selected.textContent?.trim()).toBe('Cancelled');
+    expect(document.activeElement).toBe(selected);
+  });
 });

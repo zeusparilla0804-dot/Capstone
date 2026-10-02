@@ -1,0 +1,18 @@
+<article class="booking-card">
+  <img class="booking-card__thumb" [src]="booking().thumbnailUrl" [alt]="booking().eventName + ' catering setup'" loading="lazy" />
+  <div class="booking-card__content">
+    <div class="booking-card__heading">
+      <div><p>{{ booking().reference }}</p><h3>{{ booking().eventName }}</h3></div>
+      <app-status-badge [status]="booking().status" />
+    </div>
+    <dl>
+      <div><dt>Date</dt><dd>{{ booking().eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &bull; {{ booking().eventTime }}</dd></div>
+      <div><dt>Venue</dt><dd>{{ booking().venue }}</dd></div>
+      <div><dt>Package</dt><dd>{{ booking().package.packageName }} &bull; {{ booking().guestCount }} guests</dd></div>
+    </dl>
+  </div>
+  <div class="booking-card__actions">
+    @if (booking().invoiceId) { <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', booking().invoiceId]">View Invoice</a> }
+    @if (booking().status === 'pending') { <button class="btn btn-tertiary booking-card__cancel" type="button" (click)="requestCancellation($event)">Cancel Booking</button> }
+  </div>
+</article>
