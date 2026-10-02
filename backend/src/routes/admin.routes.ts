@@ -1,0 +1,5 @@
+import {Router} from 'express';import {adminController as c} from '../controllers/admin.controller.js';import {adminInvoice,issueInvoice} from '../controllers/invoice.controller.js';import {requireAdmin} from '../middleware/auth.middleware.js';
+export default Router().use(requireAdmin)
+ .get('/payment-proofs',c.paymentProofs).get('/payment-proofs/:id',c.paymentProof)
+ .post('/payment-proofs/:id/verify',c.verifyPaymentProof).post('/payment-proofs/:id/reject',c.rejectPaymentProof)
+ .get('/invoices/:id',adminInvoice).post('/bookings/:bookingId/invoice',issueInvoice).get('/dashboard',c.dashboard).get('/bookings',c.bookings).get('/bookings/:id',c.booking).patch('/bookings/:id/status',c.status).get('/customers',c.customers).get('/customers/:id',c.customer).get('/event-types',c.events).get('/packages',c.packages).post('/packages',c.createPackage).put('/packages/:id',c.updatePackage).get('/add-ons',c.addOns).post('/add-ons',c.createAddOn).put('/add-ons/:id',c.updateAddOn).get('/payments',c.payments).post('/payments',c.recordPayment);

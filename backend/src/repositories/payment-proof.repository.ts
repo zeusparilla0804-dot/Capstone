@@ -2,6 +2,7 @@ import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
 import type { StoredProof } from '../services/proof-storage.service.js';
+import type { BookingStatus, PageResult, ProofReviewQuery } from '../types/admin.types.js';
 
 const columns = `payment_proof_id id,reservation_id reservationId,customer_id customerId,
   payment_id paymentId,payment_transaction_id paymentTransactionId,invoice_id invoiceId,
@@ -83,6 +84,106 @@ export async function findProof(proofId: number, request?: sql.Request): Promise
   const result = await runner.replaceInput('proofId', sql.BigInt, proofId)
     .query<PaymentProofRecord>(`SELECT ${columns} FROM dbo.PAYMENT_PROOF WHERE payment_proof_id=@proofId`);
   return result.recordset[0] ? record(result.recordset[0]) : undefined;
+}
+
+// Call only after the reservation and its payment aggregate are locked.
+export async function lockedProof(proofId: number, request: sql.Request): Promise<PaymentProofRecord | undefined> {
+  const result = await request.replaceInput('proofId', sql.BigInt, proofId)
+    .query<PaymentProofRecord>(`SELECT ${columns} FROM dbo.PAYMENT_PROOF WITH(UPDLOCK,HOLDLOCK) WHERE payment_proof_id=@proofId`);
+  return result.recordset[0] ? record(result.recordset[0]) : undefined;
+}
+
+export async function insertProofCredit(adminId: number, paymentId: number, proof: PaymentProofRecord,
+  amount: number, request: sql.Request): Promise<number> {
+  const result = await request.replaceInput('adminId', sql.Int, adminId).replaceInput('paymentId', sql.Int, paymentId)
+    .replaceInput('amount', sql.Decimal(12, 2), amount)
+    .replaceInput('method', sql.NVarChar(50), proof.method === 'E_WALLET' ? 'E-WALLET' : proof.method)
+    .replaceInput('reference', sql.NVarChar(150), proof.transactionReference ?? null)
+    .replaceInput('paymentDate', sql.DateTime2, new Date(`${proof.paymentDate}T00:00:00.000Z`))
+    .query<{ id: number }>(`INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
+      OUTPUT INSERTED.payment_transaction_id id VALUES(@paymentId,@adminId,@amount,@method,@reference,@paymentDate)`);
+  return Number(result.recordset[0]!.id);
+}
+
+export async function creditProofPayment(request: sql.Request): Promise<boolean> {
+  const result = await request.query(`UPDATE dbo.PAYMENT SET amount_paid=amount_paid+@amount,payment_method=@method,
+    transaction_ref=@reference,payment_date=@paymentDate,
+    status=CASE WHEN amount_paid+@amount>=amount_due THEN 'PAID' ELSE 'PARTIALLY_PAID' END
+    WHERE payment_id=@paymentId AND reservation_id=@reservationId`);
+  return result.rowsAffected[0] === 1;
+}
+
+export async function lockedProofInvoice(reservationId: number, request: sql.Request): Promise<{ id: number; totalAmount: number; status: string } | undefined> {
+  const result = await request.replaceInput('reservationId', sql.Int, reservationId)
+    .query<{ id: number; totalAmount: number; status: string }>(`SELECT invoice_id id,total_amount totalAmount,status
+      FROM dbo.INVOICE WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId`);
+  return result.recordset[0];
+}
+
+export async function setProofInvoiceStatus(invoiceId: number, status: 'PAID' | 'PARTIALLY_PAID', request: sql.Request): Promise<boolean> {
+  const result = await request.replaceInput('invoiceId', sql.Int, invoiceId).replaceInput('invoiceStatus', sql.NVarChar(30), status)
+    .query(`UPDATE dbo.INVOICE SET status=@invoiceStatus WHERE invoice_id=@invoiceId AND status<>'CANCELLED'`);
+  return result.rowsAffected[0] === 1;
+}
+
+export async function markProofReviewed(input: { proofId: number; reservationId: number; adminId: number;
+  status: 'VERIFIED' | 'REJECTED'; reason?: string; amount?: number; transactionId?: number; invoiceId?: number }, request: sql.Request): Promise<boolean> {
+  const result = await request.replaceInput('proofId', sql.BigInt, input.proofId)
+    .replaceInput('reservationId', sql.Int, input.reservationId).replaceInput('adminId', sql.Int, input.adminId)
+    .replaceInput('reviewStatus', sql.NVarChar(30), input.status)
+    .replaceInput('rejectionReason', sql.NVarChar(1000), input.status === 'REJECTED' ? input.reason : null)
+    .replaceInput('verifiedAmount', sql.Decimal(12, 2), input.amount ?? null)
+    .replaceInput('paymentTransactionId', sql.BigInt, input.transactionId ?? null)
+    .replaceInput('invoiceId', sql.Int, input.invoiceId ?? null)
+    .query(`UPDATE dbo.PAYMENT_PROOF SET status=@reviewStatus,rejection_reason=@rejectionReason,
+      verified_amount=@verifiedAmount,payment_transaction_id=@paymentTransactionId,invoice_id=@invoiceId,
+      reviewed_by=@adminId,reviewed_at=sysutcdatetime(),updated_at=sysutcdatetime()
+      WHERE payment_proof_id=@proofId AND reservation_id=@reservationId AND status='SUBMITTED'`);
+  return result.rowsAffected[0] === 1;
+}
+
+export async function listReviewProofs(query: ProofReviewQuery, request: sql.Request): Promise<PageResult<PaymentProofRecord>> {
+  const filter = `FROM dbo.PAYMENT_PROOF pp
+    WHERE pp.status=@status AND (@method='' OR pp.method=@method)
+      AND (@date='' OR pp.payment_date=CONVERT(date,NULLIF(@date,'')))
+      AND (@dateFrom='' OR pp.payment_date>=CONVERT(date,NULLIF(@dateFrom,'')))
+      AND (@dateTo='' OR CONVERT(date,pp.payment_date)<=CONVERT(date,NULLIF(@dateTo,'')))
+      AND (@search='' OR pp.transaction_reference LIKE '%'+@search+'%' OR EXISTS(
+        SELECT 1 FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+        WHERE r.reservation_id=pp.reservation_id AND (r.booking_reference LIKE '%'+@search+'%'
+          OR CONCAT(c.first_name,' ',c.last_name) LIKE '%'+@search+'%' OR c.email LIKE '%'+@search+'%')))`;
+  // Oldest first avoids starving pending work; ID breaks ties deterministically.
+  const direction = query.order === 'newest' ? 'DESC' : 'ASC';
+  const result = await request.replaceInput('status', sql.NVarChar(30), query.status)
+    .replaceInput('method', sql.NVarChar(30), query.method).replaceInput('search', sql.NVarChar(200), query.search)
+    .replaceInput('date', sql.VarChar(10), query.date).replaceInput('dateFrom', sql.VarChar(10), query.dateFrom)
+    .replaceInput('dateTo', sql.VarChar(10), query.dateTo).replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
+    .replaceInput('pageSize', sql.Int, query.pageSize)
+    .query(`SELECT COUNT(*) totalItems ${filter};
+      SELECT ${columns} ${filter} ORDER BY pp.created_at ${direction},pp.payment_proof_id ${direction}
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+  if (!Array.isArray(result.recordsets)) throw new Error('Unexpected proof queue result sets.');
+  const totalItems = Number(result.recordsets[0]?.[0]?.totalItems ?? 0);
+  return { items: (result.recordsets[1] ?? []).map(record), page: query.page, pageSize: query.pageSize, totalItems, totalPages: Math.ceil(totalItems / query.pageSize) };
+}
+
+export interface ProofReviewContextRow {
+  reservationId: number; bookingReference: string; bookingStatus: BookingStatus; eventDate: Date | string;
+  customerId: number; customerName: string; customerEmail: string;
+  paymentId: number | null; amountDue: number; amountPaid: number; paymentStatus: string;
+  invoiceId: number | null; invoiceNumber: string; invoiceTotal: number; invoiceStatus: string;
+}
+
+export async function proofReviewContext(reservationId: number, request: sql.Request): Promise<ProofReviewContextRow | undefined> {
+  const result = await request.replaceInput('reservationId', sql.Int, reservationId)
+    .query<ProofReviewContextRow>(`SELECT r.reservation_id reservationId,r.booking_reference bookingReference,r.status bookingStatus,
+      r.event_date eventDate,c.customer_id customerId,CONCAT(c.first_name,' ',c.last_name) customerName,c.email customerEmail,
+      p.payment_id paymentId,p.amount_due amountDue,p.amount_paid amountPaid,p.status paymentStatus,
+      i.invoice_id invoiceId,i.invoice_number invoiceNumber,i.total_amount invoiceTotal,i.status invoiceStatus
+      FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+      LEFT JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
+      WHERE r.reservation_id=@reservationId`);
+  return result.recordset[0];
 }
 
 export async function proofReferencesStorageKey(storageKey: string, request: sql.Request): Promise<boolean> {

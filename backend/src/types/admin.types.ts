@@ -1,4 +1,25 @@
 export type { PaymentProofMethod, PaymentProofStatus } from './payment-proof.types.js';
+import type { PaymentProofMethod, PaymentProofRecord, PaymentProofStatus } from './payment-proof.types.js';
+
+export interface ProofReviewQuery {
+  page: number;
+  pageSize: number;
+  search: string;
+  status: PaymentProofStatus;
+  method: PaymentProofMethod | '';
+  date: string;
+  dateFrom: string;
+  dateTo: string;
+  order: 'oldest' | 'newest';
+}
+export type PublicPaymentProof = Omit<PaymentProofRecord, 'storageKey'> & { fileUrl: string };
+export interface ProofReviewDetail {
+  proof: PublicPaymentProof;
+  booking: { id: number; reference: string; status: BookingStatus; eventDate: string };
+  customer: { id: number; name: string; email: string };
+  payment?: { id: number; amountDue: number; amountPaid: number; status: string; outstandingBalance: number };
+  invoice?: { id: number; number: string; totalAmount: number; status: string };
+}
 
 export interface PageQuery { page:number; pageSize:number; search:string; status:string; eventType:string; date:string; }
 export interface PageResult<T>{items:T[];page:number;pageSize:number;totalItems:number;totalPages:number;}
