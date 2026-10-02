@@ -10,7 +10,7 @@
       @if (filteredBookings().length) {
         <div class="booking-list">@for (booking of filteredBookings(); track booking.id) { <app-booking-card [booking]="booking" (cancelRequested)="requestCancellation($event.booking, $event.trigger)" /> }</div>
       } @else {
-        <section class="booking-empty"><h2>No {{ activeFilter() }} bookings</h2><p>@if (activeFilter() === 'upcoming') { You do not have any upcoming catering bookings. } @else if (activeFilter() === 'past') { Completed events will appear here. } @else { Cancelled bookings will appear here. }</p>@if (activeFilter() === 'upcoming') { <a class="btn btn-primary" routerLink="/book-event">Book an Event</a> }</section>
+        <section class="booking-empty"><h2>No {{ activeFilter() }} bookings</h2><p>@if (activeFilter() === 'upcoming') { You do not have any upcoming catering bookings. } @else if (activeFilter() === 'past') { Completed events will appear here. } @else if (activeFilter() === 'cancelled') { Cancelled bookings will appear here. } @else { Rejected bookings will appear here. }</p>@if (activeFilter() === 'upcoming') { <a class="btn btn-primary" routerLink="/book-event">Book an Event</a> }</section>
       }
     </div>
   </section>

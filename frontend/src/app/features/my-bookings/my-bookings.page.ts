@@ -31,7 +31,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected cancellationReason = '';
   protected readonly filteredBookings = computed(() => this.bookingService.getBookingsByTab(this.activeFilter()));
   protected readonly filters: readonly { value: BookingTab; label: string }[] = [
-    { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' },
+    { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' },
   ];
   protected readonly navItems: readonly DashboardNavItem[] = [
     { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },

@@ -4,7 +4,7 @@ import { firstValueFrom, finalize } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ApiResponse, Booking, BookingDraft, BookingStatus, BookingTab, CateringPackage } from '../models';
 interface ApiBooking extends Omit<Booking,'id'|'customerId'|'thumbnailUrl'|'package'|'addOns'>{readonly id:number;readonly total:number;readonly package:{packageId:number;packageName:string;pricePerGuest:number};readonly addOns:readonly {id:number;name:string;description?:string;price:number}[];}
-const tabByStatus:Record<BookingStatus,BookingTab>={pending:'upcoming',approved:'upcoming',awaiting_payment:'upcoming',payment_submitted:'upcoming',payment_verified:'upcoming',confirmed:'upcoming',completed:'past',rejected:'cancelled',cancelled:'cancelled'};
+const tabByStatus:Record<BookingStatus,BookingTab>={pending:'upcoming',approved:'upcoming',awaiting_payment:'upcoming',payment_submitted:'upcoming',payment_verified:'upcoming',confirmed:'upcoming',completed:'past',rejected:'rejected',cancelled:'cancelled'};
 @Injectable({providedIn:'root'})
 export class BookingService{
  private readonly http=inject(HttpClient);private readonly state=signal<readonly Booking[]>([]);readonly bookings=this.state.asReadonly();readonly loading=signal(false);readonly error=signal('');

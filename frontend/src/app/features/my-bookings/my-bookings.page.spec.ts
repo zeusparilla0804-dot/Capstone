@@ -13,6 +13,7 @@ describe('MyBookingsPage cancellation', () => {
     package: { packageId: '1', packageName: 'Package', pricePerGuest: 200 }, addOns: [],
     discount: 0, status: 'pending', amountPaid: 0, createdAt: '2026-10-01', thumbnailUrl: 'test.png'
   };
+  const rejectedBooking: Booking = { ...booking, id: '6', reference: 'LC-6', status: 'rejected' };
   const calls: { id: string; reason?: string }[] = [];
 
   beforeEach(() => {
@@ -24,7 +25,7 @@ describe('MyBookingsPage cancellation', () => {
         { provide: AuthService, useValue: { user: signal({ fullName: 'Customer' }), logout: async () => {} } },
         { provide: BookingService, useValue: {
           loading: signal(false), error: signal(''), loadMine: () => {},
-          getBookingsByTab: (tab: string) => tab === 'upcoming' ? [booking] : [],
+          getBookingsByTab: (tab: string) => tab === 'upcoming' ? [booking] : tab === 'rejected' ? [rejectedBooking] : [],
           cancelBooking: async (id: string, reason?: string) => { calls.push({ id, reason }); return true; }
         } }
       ]
@@ -122,5 +123,21 @@ describe('MyBookingsPage cancellation', () => {
     const selected = fixture.nativeElement.querySelector('button[role="tab"][aria-selected="true"]') as HTMLButtonElement;
     expect(selected.textContent?.trim()).toBe('Cancelled');
     expect(document.activeElement).toBe(selected);
+  });
+
+  it('shows rejected bookings under a distinct labeled tab with their own count', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const tabs = Array.from(fixture.nativeElement.querySelectorAll('.booking-tabs button')) as HTMLButtonElement[];
+    const rejected = tabs.find(tab => tab.textContent?.trim() === 'Rejected');
+    expect(rejected).toBeTruthy();
+    rejected?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('1 booking');
+    expect(fixture.nativeElement.querySelector('.booking-card .status-badge').textContent?.trim()).toBe('Rejected');
+    tabs.find(tab => tab.textContent?.trim() === 'Cancelled')?.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('0 bookings');
   });
 });

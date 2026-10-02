@@ -29,7 +29,7 @@ describe('BookingService cancellation', () => {
     const expected = {
       pending: 'upcoming', approved: 'upcoming', awaiting_payment: 'upcoming',
       payment_submitted: 'upcoming', payment_verified: 'upcoming', confirmed: 'upcoming',
-      completed: 'past', rejected: 'cancelled', cancelled: 'cancelled'
+      completed: 'past', rejected: 'rejected', cancelled: 'cancelled'
     } as const satisfies Record<BookingStatus, BookingTab>;
     const statuses = Object.keys(expected) as (keyof typeof expected)[];
     service.loadMine();
@@ -40,7 +40,7 @@ describe('BookingService cancellation', () => {
       discount: 0, total: 10000, status, amountPaid: 0, createdAt: '2026-10-01'
     })) });
 
-    const tabs: BookingTab[] = ['upcoming', 'past', 'cancelled'];
+    const tabs: BookingTab[] = ['upcoming', 'past', 'cancelled', 'rejected'];
     for (const status of statuses) {
       const visibleIn = tabs.filter(tab => service.getBookingsByTab(tab).some(booking => booking.status === status));
       expect(visibleIn, status).toEqual([expected[status]]);

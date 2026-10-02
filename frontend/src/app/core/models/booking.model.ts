@@ -60,4 +60,4 @@ export interface Booking {
   readonly thumbnailUrl: string;
 }
 
-export type BookingTab = 'upcoming' | 'past' | 'cancelled';
+export type BookingTab = 'upcoming' | 'past' | 'cancelled' | 'rejected';
