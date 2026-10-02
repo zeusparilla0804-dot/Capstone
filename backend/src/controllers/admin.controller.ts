@@ -8,6 +8,7 @@ function statusInput(body:unknown):{status:BookingStatus;reason?:string}{
  const value=body&&typeof body==='object'?body as Record<string,unknown>:{};
  const status=typeof value['status']==='string'?value['status'].trim().toUpperCase():'';
  if(!bookingStatuses.includes(status as BookingStatus))throw new AppError(400,'Invalid booking status.');
+ if(status==='PAYMENT_SUBMITTED'||status==='PAYMENT_VERIFIED')throw new AppError(409,'Payment status changes require the payment proof workflow.');
  if(value['reason']!==undefined&&typeof value['reason']!=='string')throw new AppError(400,'Invalid booking reason.');
  const reason=(value['reason'] as string|undefined)?.trim();
  if((reason?.length??0)>1000)throw new AppError(400,'Booking reason is too long.');

@@ -18,19 +18,20 @@ export async function runBookingStatusTransaction<T>(work: (request: sql.Request
   return withBookingStatusTransaction(new sql.Transaction(await getDbPool()), work);
 }
 
-export async function lockedBookingStatus(reservationId: number, request: sql.Request): Promise<BookingStatus | undefined> {
+export async function lockedBookingStatus(reservationId: number, request: sql.Request): Promise<{ status: BookingStatus; customerId: number } | undefined> {
   const result = await request
     .replaceInput('reservationId', sql.Int, reservationId)
-    .query<{ status: BookingStatus }>('SELECT status FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
-  return result.recordset[0]?.status;
+    .query<{ status: BookingStatus; customerId: number }>('SELECT status,customer_id customerId FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
+  return result.recordset[0];
 }
 
-export async function setBookingStatusIfCurrent(reservationId: number, previousStatus: BookingStatus, nextStatus: BookingStatus, request: sql.Request): Promise<boolean> {
+export async function setBookingStatusIfCurrent(reservationId: number, previousStatus: BookingStatus, nextStatus: BookingStatus, request: sql.Request, ownerCustomerId?: number): Promise<boolean> {
   const result = await request
     .replaceInput('reservationId', sql.Int, reservationId)
     .replaceInput('previousStatus', sql.NVarChar(40), previousStatus)
     .replaceInput('nextStatus', sql.NVarChar(40), nextStatus)
-    .query('UPDATE dbo.RESERVATION SET status=@nextStatus WHERE reservation_id=@reservationId AND status=@previousStatus');
+    .replaceInput('ownerCustomerId', sql.Int, ownerCustomerId ?? null)
+    .query('UPDATE dbo.RESERVATION SET status=@nextStatus WHERE reservation_id=@reservationId AND status=@previousStatus AND (@ownerCustomerId IS NULL OR customer_id=@ownerCustomerId)');
   return (result.rowsAffected[0] ?? 0) === 1;
 }
 

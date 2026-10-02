@@ -25,6 +25,8 @@ export interface BookingTransitionInput {
   nextStatus: BookingStatus;
   actor: BookingActor;
   reason?: string;
+  expectedStatus?: BookingStatus;
+  mode?: 'GENERIC_ADMIN';
   request?: sql.Request;
 }
 
@@ -36,21 +38,36 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       (input.actor.type === 'SYSTEM' ? input.actor.id !== undefined : !Number.isSafeInteger(input.actor.id) || input.actor.id < 1)) {
     throw new AppError(400, 'Booking actor is invalid.');
   }
-  if (input.reason !== undefined && (typeof input.reason !== 'string' || input.reason.length > 1000)) {
+  if (input.expectedStatus !== undefined && !Object.hasOwn(transitions, input.expectedStatus)) {
+    throw new AppError(400, 'Expected booking status is invalid.');
+  }
+  if (input.mode === 'GENERIC_ADMIN' && input.actor.type !== 'ADMIN') {
+    throw new AppError(400, 'Booking actor is invalid for this action.');
+  }
+  if (input.mode === 'GENERIC_ADMIN' && (input.nextStatus === 'PAYMENT_SUBMITTED' || input.nextStatus === 'PAYMENT_VERIFIED')) {
+    throw new AppError(409, 'Payment status changes require the payment proof workflow.');
+  }
+  if (input.reason !== undefined && typeof input.reason !== 'string') {
     throw new AppError(400, 'Booking reason is invalid.');
   }
   const reason = input.reason?.trim();
+  if (reason && reason.length > 1000) throw new AppError(400, 'Booking reason is too long.');
   if ((input.nextStatus === 'REJECTED' || input.nextStatus === 'CANCELLED') && !reason) {
     throw new AppError(400, 'A reason is required for rejection or cancellation.');
   }
 
   const work = async (request: sql.Request) => {
-    const previousStatus = await lockedBookingStatus(input.reservationId, request);
-    if (!previousStatus) throw new AppError(404, 'Booking not found.');
+    const current = await lockedBookingStatus(input.reservationId, request);
+    if (!current || (input.actor.type === 'CUSTOMER' && current.customerId !== input.actor.id)) throw new AppError(404, 'Booking not found.');
+    const previousStatus = current.status;
+    if (input.expectedStatus && previousStatus !== input.expectedStatus) throw new AppError(409, 'Booking status changed. Refresh and try again.');
+    if (input.mode === 'GENERIC_ADMIN' && previousStatus === 'PAYMENT_SUBMITTED') {
+      throw new AppError(409, 'Payment proof decisions require the payment proof workflow.');
+    }
     if (!allowedBookingTransitions(previousStatus).includes(input.nextStatus)) {
       throw new AppError(409, `Cannot change ${previousStatus} booking to ${input.nextStatus}.`);
     }
-    if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request)) {
+    if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request, input.actor.type === 'CUSTOMER' ? input.actor.id : undefined)) {
       throw new AppError(409, 'Booking status changed. Refresh and try again.');
     }
     await insertBookingStatusHistory({ reservationId: input.reservationId, previousStatus, nextStatus: input.nextStatus, actor: input.actor, reason }, request);
