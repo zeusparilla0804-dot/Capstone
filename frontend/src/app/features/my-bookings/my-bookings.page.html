@@ -5,13 +5,15 @@
       <header class="bookings-header"><div><p class="page-kicker">Customer portal</p><h1>My Bookings</h1><p>View and manage your event bookings.</p></div><a class="btn btn-primary" routerLink="/book-event">Book an Event</a></header>
       @if (bookingService.loading()) { <p class="data-state" role="status">Loading your bookings...</p> }
       @if (bookingService.error()) { <p class="data-state data-state--error" role="alert">{{ bookingService.error() }} <button class="btn btn-tertiary" type="button" (click)="bookingService.loadMine()">Try again</button></p> }
-      <nav #bookingTabs class="booking-tabs" aria-label="Booking filters"><ul role="tablist">@for (filter of filters; track filter.value) { <li><button type="button" role="tab" [class.is-active]="activeFilter() === filter.value" [attr.aria-selected]="activeFilter() === filter.value" (click)="setFilter(filter.value)">{{ filter.label }}</button></li> }</ul></nav>
-      <p class="booking-count" aria-live="polite">{{ filteredBookings().length }} {{ filteredBookings().length === 1 ? 'booking' : 'bookings' }}</p>
-      @if (filteredBookings().length) {
-        <div class="booking-list">@for (booking of filteredBookings(); track booking.id) { <app-booking-card [booking]="booking" (cancelRequested)="requestCancellation($event.booking, $event.trigger)" /> }</div>
-      } @else {
-        <section class="booking-empty"><h2>No {{ activeFilter() }} bookings</h2><p>@if (activeFilter() === 'upcoming') { You do not have any upcoming catering bookings. } @else if (activeFilter() === 'past') { Completed events will appear here. } @else if (activeFilter() === 'cancelled') { Cancelled bookings will appear here. } @else { Rejected bookings will appear here. }</p>@if (activeFilter() === 'upcoming') { <a class="btn btn-primary" routerLink="/book-event">Book an Event</a> }</section>
-      }
+      <nav #bookingTabs class="booking-tabs" aria-label="Booking filters"><ul role="tablist" aria-label="Booking filters">@for (filter of filters; track filter.value) { <li role="presentation"><button type="button" role="tab" [id]="'booking-tab-' + filter.value" aria-controls="booking-panel" [tabIndex]="activeFilter() === filter.value ? 0 : -1" [class.is-active]="activeFilter() === filter.value" [attr.aria-selected]="activeFilter() === filter.value" (click)="setFilter(filter.value)" (keydown)="onTabKeydown($event, filter.value)">{{ filter.label }}</button></li> }</ul></nav>
+      <div id="booking-panel" role="tabpanel" [attr.aria-labelledby]="'booking-tab-' + activeFilter()" tabindex="0">
+        <p class="booking-count" aria-live="polite">{{ filteredBookings().length }} {{ filteredBookings().length === 1 ? 'booking' : 'bookings' }}</p>
+        @if (filteredBookings().length) {
+          <div class="booking-list">@for (booking of filteredBookings(); track booking.id) { <app-booking-card [booking]="booking" (cancelRequested)="requestCancellation($event.booking, $event.trigger)" /> }</div>
+        } @else {
+          <section class="booking-empty"><h2>No {{ activeFilter() }} bookings</h2><p>@if (activeFilter() === 'upcoming') { You do not have any upcoming catering bookings. } @else if (activeFilter() === 'past') { Completed events will appear here. } @else if (activeFilter() === 'cancelled') { Cancelled bookings will appear here. } @else { Rejected bookings will appear here. }</p>@if (activeFilter() === 'upcoming') { <a class="btn btn-primary" routerLink="/book-event">Book an Event</a> }</section>
+        }
+      </div>
     </div>
   </section>
 </main>

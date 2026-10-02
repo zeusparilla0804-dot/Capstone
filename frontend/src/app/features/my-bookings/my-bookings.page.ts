@@ -53,7 +53,23 @@ export class MyBookingsPageComponent implements AfterViewChecked {
     }
   }
 
-  protected setFilter(filter: BookingTab): void { this.activeFilter.set(filter); }
+  protected setFilter(filter: BookingTab): void {
+    this.activeFilter.set(filter);
+    this.bookingTabs?.nativeElement.querySelector<HTMLButtonElement>(`#booking-tab-${filter}`)?.focus();
+  }
+  protected onTabKeydown(event: KeyboardEvent, filter: BookingTab): void {
+    const index = this.filters.findIndex(item => item.value === filter);
+    let nextIndex: number;
+    switch (event.key) {
+      case 'ArrowLeft': nextIndex = (index - 1 + this.filters.length) % this.filters.length; break;
+      case 'ArrowRight': nextIndex = (index + 1) % this.filters.length; break;
+      case 'Home': nextIndex = 0; break;
+      case 'End': nextIndex = this.filters.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    this.setFilter(this.filters[nextIndex]!.value);
+  }
   protected requestCancellation(booking: Booking, trigger: HTMLButtonElement): void {
     this.cancellationTrigger = trigger;
     this.focusReasonOnOpen = true;
