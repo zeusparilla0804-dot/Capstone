@@ -1,0 +1,51 @@
+import type { NextFunction, Request, Response } from 'express';
+import { paymentProofService } from '../services/payment-proof.service.js';
+import { AppError } from '../utils/app-error.js';
+
+function id(request: Request): number {
+  const value = request.params['id'];
+  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) throw new AppError(400, 'Invalid identifier.');
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new AppError(400, 'Invalid identifier.');
+  return parsed;
+}
+
+function publicProof<T extends { storageKey: string }>(proof: T): Omit<T, 'storageKey'> {
+  const { storageKey: _storageKey, ...safe } = proof;
+  return safe;
+}
+
+export function safeProofFilename(original: string): string {
+  const leaf = original.split(/[\\/]/).at(-1) ?? '';
+  const safe = leaf.replace(/[\x00-\x1f\x7f-\x9f"\\]/g, '_').replace(/[^\x20-\x7e]/g, '_').trim();
+  return safe.slice(0, 180) || 'payment-proof';
+}
+
+export async function submitProof(request: Request, response: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!request.validatedPaymentProof) throw new AppError(400, 'One payment proof file is required.');
+    const proof = await paymentProofService.submitCustomerProof(request.customer!.id, id(request), request.body, request.validatedPaymentProof);
+    response.status(201).json({ success: true, data: publicProof(proof) });
+  } catch (error) { next(error); }
+}
+
+export async function listCustomerProofs(request: Request, response: Response, next: NextFunction): Promise<void> {
+  try {
+    const proofs = await paymentProofService.listCustomerProofs(request.customer!.id, id(request));
+    response.json({ success: true, data: proofs.map(publicProof) });
+  } catch (error) { next(error); }
+}
+
+export async function downloadProof(request: Request, response: Response, next: NextFunction): Promise<void> {
+  try {
+    const actor = request.admin ? { type: 'ADMIN' as const, id: request.admin.id } : { type: 'CUSTOMER' as const, id: request.customer!.id };
+    const { proof, stream } = await paymentProofService.openAuthorizedProof(actor, id(request));
+    response.once('close', () => stream.destroy());
+    response.setHeader('Content-Type', proof.mimeType);
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    response.setHeader('Cache-Control', 'private, no-store');
+    response.setHeader('Content-Disposition', `attachment; filename="${safeProofFilename(proof.originalFilename)}"`);
+    stream.on('error', error => { if (response.headersSent) response.destroy(error); else next(error); });
+    stream.pipe(response);
+  } catch (error) { next(error); }
+}
