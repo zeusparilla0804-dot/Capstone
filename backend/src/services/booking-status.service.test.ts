@@ -39,6 +39,8 @@ class BookingDb {
   failOn: 'history' | 'audit' | undefined;
   history: Record<string, unknown>[] = [];
   audit: Record<string, unknown>[] = [];
+  outbox: Record<string, unknown>[] = [];
+  failQueue = false;
   queries: string[] = [];
   request = new FakeRequest(this) as unknown as sql.Request;
 }
@@ -50,6 +52,13 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string): Promise<{ recordset: Record<string, unknown>[]; rowsAffected: number[] }> {
     this.db.queries.push(command);
+    if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+      return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) {
+      if (this.db.failQueue) throw new Error('outbox insert failed');
+      this.db.outbox.push({ ...this.params }); return { recordset: [{ id: '9007199254740993' }], rowsAffected: [1] };
+    }
     if (/SELECT.*FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
       return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.customerId }] : [], rowsAffected: [this.db.exists ? 1 : 0] };
     }
@@ -90,6 +99,27 @@ test('booking status exposes every approved transition and terminal state', () =
   for (const [status, expected] of transitions) {
     assert.deepEqual(allowedBookingTransitions(status), expected, status);
   }
+});
+
+for (const [previous, next] of [['PENDING', 'APPROVED'], ['PENDING', 'REJECTED'], ['PENDING', 'CANCELLED'],
+  ['PAYMENT_VERIFIED', 'CONFIRMED'], ['CONFIRMED', 'COMPLETED']] as const) {
+  test(`email outbox booking ${next} queues once inside the supplied transaction without SMTP`, async () => {
+    const db = new BookingDb(); db.status = previous;
+    await transitionBooking({ reservationId: 5, nextStatus: next, actor: { type: 'ADMIN', id: 3 }, reason: 'Customer request', request: db.request });
+    assert.equal(db.outbox.length, 1); assert.equal(db.outbox[0]!['templateKey'], `BOOKING_${next}`);
+    assert.equal(db.outbox[0]!['relatedEntityId'], '5'); assert.ok(db.queries.some(query => /customerEmail/.test(query)));
+  });
+}
+
+test('email outbox failure rolls back booking status history and audit', async () => {
+  const db = new BookingDb(); db.failQueue = true;
+  const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
+  transaction.begin = async () => transaction; transaction.request = () => db.request;
+  transaction.commit = async () => assert.fail('queue failure must not commit');
+  transaction.rollback = async () => { db.status = 'PENDING'; db.history = []; db.audit = []; db.outbox = []; };
+  await assert.rejects(withBookingStatusTransaction(transaction, request => transitionBooking({ reservationId: 5,
+    nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request })), /outbox insert failed/);
+  assert.equal(db.status, 'PENDING'); assert.equal(db.history.length, 0); assert.equal(db.audit.length, 0); assert.equal(db.outbox.length, 0);
 });
 
 test('booking status accepts every approved transition and records its old and new state', async () => {

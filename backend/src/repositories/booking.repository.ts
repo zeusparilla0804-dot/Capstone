@@ -4,6 +4,7 @@ import { getDbPool } from '../config/database.js';
 import type { BookingRecord, CreateBookingDto } from '../types/domain.types.js';
 import { findAddOns, findPackageById } from './catalog.repository.js';
 import { AppError } from '../utils/app-error.js';
+import { queueBookingNotification } from '../services/notification.service.js';
 
 function dateOnly(value: Date | string): string { return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10); }
 function timeOnly(value: Date | string): string { return value instanceof Date ? value.toISOString().slice(11, 16) : String(value).slice(0, 5); }
@@ -29,6 +30,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
     for (const addOn of addOns) await new sql.Request(transaction).input('reservationId',sql.Int,id).input('addOnId',sql.Int,addOn.id).input('price',sql.Decimal(12,2),addOn.price).query('INSERT dbo.RESERVATION_ADD_ON(reservation_id,add_on_id,unit_price) VALUES(@reservationId,@addOnId,@price)');
     const method=dto.paymentMethod==='bank-transfer'?'BANK_TRANSFER':dto.paymentMethod==='cash'?'CASH':dto.paymentMethod==='e-wallet'?'E-WALLET':null;
     await new sql.Request(transaction).input('reservationId',sql.Int,id).input('due',sql.Decimal(12,2),total).input('method',sql.NVarChar(50),method).query(`INSERT dbo.PAYMENT(reservation_id,amount_due,amount_paid,payment_method,status) VALUES(@reservationId,@due,0,@method,'PENDING')`);
+    await queueBookingNotification(id, 'BOOKING_RECEIVED', new sql.Request(transaction));
     await transaction.commit();
     return { id, reference, eventName: `${pkg.category} Event`, eventType: pkg.category, eventDate:dto.eventDate,eventTime:dto.eventTime,venue:dto.venue,guestCount:dto.guestCount,package:{packageId:pkg.id,packageName:pkg.name,pricePerGuest:pkg.pricePerGuest},addOns,discount:0,total,status:'pending',amountPaid:0,createdAt:new Date(insert.recordset[0].created_at).toISOString() };
   } catch (error) { await transaction.rollback(); throw error; }

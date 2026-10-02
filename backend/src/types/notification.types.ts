@@ -14,13 +14,13 @@ export type EmailTemplateKey =
   | 'BOOKING_COMPLETED';
 
 export interface EmailOutboxRecord {
-  id: number;
+  id: string;
   recipient: string;
   normalizedRecipient: string;
   templateKey: EmailTemplateKey;
   payload: Record<string, unknown>;
   relatedEntityType?: string;
-  relatedEntityId?: number;
+  relatedEntityId?: string;
   status: EmailOutboxStatus;
   attemptCount: number;
   nextAttemptAt?: string;
@@ -28,4 +28,24 @@ export interface EmailOutboxRecord {
   createdAt: string;
   sentAt?: string;
   updatedAt: string;
+}
+
+export interface QueueNotificationInput {
+  recipient: string;
+  templateKey: EmailTemplateKey;
+  payload: Record<string, unknown>;
+  relatedEntityType?: 'BOOKING' | 'INVOICE' | 'PAYMENT_PROOF';
+  relatedEntityId?: string;
+}
+
+export interface RenderedEmail { subject: string; text: string; html: string; }
+export interface BatchResult { disabled: boolean; claimed: number; sent: number; retried: number; failed: number; }
+export interface EmailWorkerSettings {
+  enabled: boolean;
+  pollIntervalMs: number;
+  batchSize: number;
+  maxAttempts: number;
+  retryBaseMs: number;
+  retryCapMs: number;
+  leaseMs: number;
 }

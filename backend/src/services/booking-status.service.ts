@@ -3,6 +3,7 @@ import { writeAdminAudit } from '../repositories/audit.repository.js';
 import { insertBookingStatusHistory, lockedBookingStatus, runBookingStatusTransaction, setBookingStatusIfCurrent } from '../repositories/booking-status.repository.js';
 import type { BookingActor, BookingStatus } from '../types/admin.types.js';
 import { AppError } from '../utils/app-error.js';
+import { queueBookingNotification } from './notification.service.js';
 
 const transitions: Record<BookingStatus, readonly BookingStatus[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -75,6 +76,9 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       await writeAdminAudit({ adminId: input.actor.id, action: 'BOOKING_STATUS_CHANGED', entityType: 'BOOKING', entityId: input.reservationId,
         oldValues: { status: previousStatus }, newValues: { status: input.nextStatus, reason: reason ?? null } }, request);
     }
+    const notification = ({ APPROVED: 'BOOKING_APPROVED', REJECTED: 'BOOKING_REJECTED', CONFIRMED: 'BOOKING_CONFIRMED',
+      CANCELLED: 'BOOKING_CANCELLED', COMPLETED: 'BOOKING_COMPLETED' } as const)[input.nextStatus as 'APPROVED' | 'REJECTED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'];
+    if (notification) await queueBookingNotification(input.reservationId, notification, request);
   };
   if (input.request) await work(input.request);
   else await runBookingStatusTransaction(work);

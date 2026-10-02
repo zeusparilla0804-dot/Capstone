@@ -38,6 +38,7 @@ class ReviewDb {
   credits: Record<string, unknown>[] = [];
   history: Record<string, unknown>[] = [];
   audits: Record<string, unknown>[] = [];
+  outbox: Record<string, unknown>[] = [];
   queries: { command: string; params: Record<string, unknown>; transactional: boolean }[] = [];
   events: string[] = [];
   failOn?: string;
@@ -56,7 +57,7 @@ class ReviewDb {
         await preceding;
         await this.beforeLocks?.(); this.beforeLocks = undefined;
         const snapshot = structuredClone({ booking: this.booking, payment: this.payment, invoice: this.invoice,
-          proofs: this.proofs, credits: this.credits, history: this.history, audits: this.audits });
+          proofs: this.proofs, credits: this.credits, history: this.history, audits: this.audits, outbox: this.outbox });
         this.events.push('begin');
         try {
           const result = await work(this.request(true));
@@ -82,6 +83,13 @@ class ReviewDb {
       query: async (command: string) => {
         const p = { ...params }; this.queries.push({ command, params: p, transactional });
         const result = (recordset: unknown[] = [], affected = 1) => ({ recordset, rowsAffected: [affected] });
+        if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+          assert.ok(transactional); return result([{ customerName: 'Customer', customerEmail: 'customer@example.test', bookingReference: 'BK-5', eventDate: '2026-12-01' }]);
+        }
+        if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) {
+          assert.ok(transactional); if (this.failOn === 'outbox') throw new Error('outbox insert failed');
+          this.outbox.push(p); return result([{ id: '9007199254740993' }]);
+        }
         if (/FROM dbo\.RESERVATION WITH\(UPDLOCK,HOLDLOCK\)/i.test(command)) {
           assert.ok(transactional); return result(this.booking ? [this.booking] : []);
         }
@@ -353,6 +361,23 @@ test('transaction identity above MAX_SAFE_INTEGER remains exact in FK binding, r
     assert.match(query.command, /CONVERT\(varchar\(20\),\s*payment_transaction_id\) paymentTransactionId/i);
   }
 });
+
+for (const action of ['verifyProof', 'rejectProof'] as const) {
+  test(`email outbox ${action} queues safe intent with the credit/review transaction`, async () => {
+    const db = new ReviewDb(); await db.service()[action](2, proof.id, action === 'verifyProof' ? 90 : 'invalid receipt');
+    assert.equal(db.outbox.length, 1); assert.equal(db.outbox[0]!['templateKey'], action === 'verifyProof' ? 'PAYMENT_PROOF_VERIFIED' : 'PAYMENT_PROOF_REJECTED');
+    assert.equal(/private.png|storageKey|TX-1|invalid receipt/.test(String(db.outbox[0]!['payload'])), false);
+    if (action === 'verifyProof') assert.equal(JSON.parse(String(db.outbox[0]!['payload'])).amount, '90.00');
+  });
+  test(`email outbox ${action} queue failure rolls back all review writes`, async () => {
+    const db = new ReviewDb(); db.failOn = 'outbox';
+    await assert.rejects(db.service()[action](2, proof.id, action === 'verifyProof' ? 90 : 'invalid receipt'), /outbox insert failed/);
+    assert.equal(db.outbox.length, 0); assert.equal(db.credits.length, 0); assert.equal(db.payment!.amountPaid, 10);
+    assert.equal(db.proofs[0]!.status, 'SUBMITTED'); assert.equal(db.booking!.status, 'PAYMENT_SUBMITTED');
+    assert.equal(db.invoice!.status, 'ISSUED'); assert.equal(db.history.length, 0); assert.equal(db.audits.length, 0);
+    assert.deepEqual(db.events, ['begin', 'rollback']);
+  });
+}
 
 test('verification permits absent invoice and preserves cancelled invoices', async () => {
   for (const absent of [true, false]) {

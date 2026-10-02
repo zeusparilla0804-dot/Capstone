@@ -9,6 +9,7 @@ import type { PaymentProofRecord } from '../types/payment-proof.types.js';
 import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 import { transitionBooking } from './booking-status.service.js';
+import { queueBookingNotification } from './notification.service.js';
 
 interface Dependencies {
   readRequest: () => sql.Request | Promise<sql.Request>;
@@ -120,6 +121,9 @@ export function createPaymentVerificationService(deps: Dependencies) {
           newValues: { proofId, status, verifiedAmount: amount ?? null, reason: reason ?? null,
             paymentTransactionId: transactionId ?? null, invoiceId: invoiceId ?? null,
             amountPaid: (paidCents + (amount === undefined ? 0 : Math.round(amount * 100))) / 100 } }, request);
+        await queueBookingNotification(proof.reservationId,
+          status === 'VERIFIED' ? 'PAYMENT_PROOF_VERIFIED' : 'PAYMENT_PROOF_REJECTED', request,
+          status === 'VERIFIED' ? { amount: amount!.toFixed(2) } : {}, 'PAYMENT_PROOF', String(proof.id));
         // Read through the already-held proof lock, before commit, for server review timestamps.
         const reviewed = await lockedProof(proofId, request);
         if (!reviewed) throw conflict();

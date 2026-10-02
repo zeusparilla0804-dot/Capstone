@@ -33,6 +33,7 @@ const adminCookie = 'la_chef_admin_session=admin';
 test('mounted proof routes integrate sessions, multipart, private storage and authorized streaming', async t => {
   let bookingStatus = 'AWAITING_PAYMENT';
   let rows: Record<string, unknown>[] = [];
+  let outbox: Record<string, unknown>[] = [];
   let failCommit = false;
   let loseCommitAcknowledgement = false;
   const request = () => {
@@ -49,6 +50,9 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
           if (customerId) recordset = [{ customer_id: customerId, first_name: 'Test', last_name: 'Customer', email: 'customer@example.test' }];
         } else if (/FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
           if (params['reservationId'] === 5) recordset = [{ status: bookingStatus, customerId: 7 }];
+        } else if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+          if (params['notificationReservationId'] === 5) recordset = [{ customerEmail: 'customer@example.test',
+            customerName: 'Test Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }];
         } else if (/FROM dbo\.RESERVATION/is.test(command)) {
           if (params['reservationId'] === 5 && params['customerId'] === 7) recordset = [{ id: 5 }];
         } else if (/FROM dbo\.PAYMENT\b/i.test(command)) {
@@ -62,6 +66,9 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
           bookingStatus = String(params['nextStatus']);
         } else if (/INSERT dbo\.BOOKING_STATUS_HISTORY/i.test(command)) {
           // History semantics are covered by the service suite.
+        } else if (/INSERT dbo\.EMAIL_OUTBOX/i.test(command)) {
+          const row = { ...params, id: String(outbox.length + 1), status: 'PENDING', attemptCount: 0 };
+          outbox.push(row); recordset = [{ id: row.id }];
         } else if (/FROM dbo\.PAYMENT_PROOF/i.test(command)) {
           recordset = params['storageKey'] !== undefined ? rows.filter(row => row.storageKey === params['storageKey']) :
             params['proofId'] !== undefined ? rows.filter(row => row.id === params['proofId']) :
@@ -76,14 +83,14 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   const service = createPaymentProofService({ storage: proofStorage, readRequest: request,
     transaction: async work => {
-      const snapshot = { rows: structuredClone(rows), status: bookingStatus };
+      const snapshot = { rows: structuredClone(rows), outbox: structuredClone(outbox), status: bookingStatus };
       let committed = false;
       try {
         const result = await work(request()); if (failCommit) throw new Error('commit failed');
         committed = true;
         if (loseCommitAcknowledgement) throw new Error('commit acknowledgement lost');
         return result;
-      } catch (error) { if (!committed) { rows = snapshot.rows; bookingStatus = snapshot.status; } throw error; }
+      } catch (error) { if (!committed) { rows = snapshot.rows; outbox = snapshot.outbox; bookingStatus = snapshot.status; } throw error; }
     } });
   for (const method of ['submitCustomerProof', 'listCustomerProofs', 'openAuthorizedProof'] as const) {
     t.mock.method(paymentProofService, method, service[method]);

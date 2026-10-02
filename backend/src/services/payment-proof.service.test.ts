@@ -26,6 +26,8 @@ class FakeDb {
   exists = true;
   payment: { id: number; due: number; paid: number } | null = { id: 3, due: 100, paid: 10 };
   proofs: Record<string, unknown>[] = [];
+  outbox: Record<string, unknown>[] = [];
+  failQueue = false;
   history: Record<string, unknown>[] = [];
   queries: string[] = [];
   failOn: 'insert' | 'history' | 'commit' | 'commitAcknowledgement' | 'begin' | undefined;
@@ -47,7 +49,7 @@ class FakeDb {
       this.timeline.push('begin');
       if (this.failOn === 'begin') throw new Error('begin failed');
       this.events.push('begin');
-      const snapshot = { status: this.status, proofs: structuredClone(this.proofs), history: structuredClone(this.history) };
+      const snapshot = { status: this.status, proofs: structuredClone(this.proofs), history: structuredClone(this.history), outbox: structuredClone(this.outbox) };
       let committed = false;
       try {
         const result = await work(this.request);
@@ -58,7 +60,7 @@ class FakeDb {
         return result;
       } catch (error) {
         if (!committed) {
-          this.status = snapshot.status; this.proofs = snapshot.proofs; this.history = snapshot.history;
+          this.status = snapshot.status; this.proofs = snapshot.proofs; this.history = snapshot.history; this.outbox = snapshot.outbox;
           this.events.push('rollback');
         }
         throw error;
@@ -73,6 +75,14 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string) {
     const p = this.params; this.db.queries.push(command);
+    if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+      assert.equal(this.context, 'transaction');
+      return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) {
+      assert.equal(this.context, 'transaction'); if (this.db.failQueue) throw new Error('outbox insert failed');
+      this.db.outbox.push({ ...p }); return { recordset: [{ id: '9007199254740993' }], rowsAffected: [1] };
+    }
     if (/WHERE storage_key=@storageKey/i.test(command)) {
       assert.equal(this.context, 'read', 'reconciliation must use a fresh non-transaction request');
       this.db.timeline.push('reconcile'); this.db.reconciliations.push(String(p['storageKey']));
@@ -115,6 +125,21 @@ test('eligible owner submits exact bytes and initial transition records customer
   assert.equal(db.history[0]?.['actorType'], 'CUSTOMER'); assert.equal(db.history[0]?.['actorId'], 7);
   assert.deepEqual(db.events, ['begin', 'commit']); assert.deepEqual(db.deleted, []);
   assert.match(db.queries[0]!, /UPDLOCK.*HOLDLOCK/i);
+});
+
+test('email outbox proof submissions and replacements queue safe intent within domain transaction', async () => {
+  const db = new FakeDb(); await db.service.submitCustomerProof(7, 5, input, file);
+  await db.service.submitCustomerProof(7, 5, { ...input, transactionReference: 'TX-2' }, file);
+  assert.equal(db.outbox.length, 2); assert.ok(db.outbox.every(row => row['templateKey'] === 'PAYMENT_PROOF_SUBMITTED'));
+  assert.equal(/storageKey|receipt.png|TX-1|payment-proofs/.test(JSON.stringify(db.outbox.map(row => JSON.parse(String(row['payload']))))), false);
+  assert.equal(db.proofs[0]!['status'], 'SUPERSEDED');
+});
+
+test('email outbox failure rolls back proof and booking and cleans unreferenced stored file', async () => {
+  const db = new FakeDb(); db.failQueue = true;
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /outbox insert failed/);
+  assert.equal(db.proofs.length, 0); assert.equal(db.outbox.length, 0); assert.equal(db.history.length, 0);
+  assert.equal(db.status, 'AWAITING_PAYMENT'); assert.deepEqual(db.deleted, db.saved); assert.deepEqual(db.events, ['begin', 'rollback']);
 });
 
 test('non-owner and missing booking are non-disclosing and reconcile stored files before cleanup', async () => {

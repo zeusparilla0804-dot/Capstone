@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { transitionBooking } from './booking-status.service.js';
 import type { ProofStorage, ValidatedProofFile } from './proof-storage.service.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
+import { queueBookingNotification } from './notification.service.js';
 
 type Actor = { type: 'CUSTOMER' | 'ADMIN'; id: number };
 type Dependencies = {
@@ -100,6 +101,7 @@ export function createPaymentProofService(deps: Dependencies) {
           if (booking.status === 'AWAITING_PAYMENT') {
             await transitionBooking({ reservationId, nextStatus: 'PAYMENT_SUBMITTED', expectedStatus: 'AWAITING_PAYMENT', actor: { type: 'CUSTOMER', id: customerId }, request });
           }
+          await queueBookingNotification(reservationId, 'PAYMENT_PROOF_SUBMITTED', request, {}, 'PAYMENT_PROOF', String(proof.id));
           return proof;
         });
       } catch (error) {
