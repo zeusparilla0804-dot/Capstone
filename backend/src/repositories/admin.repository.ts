@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import {getDbPool} from '../config/database.js';
-import type {AddOnInput,PackageInput,PageQuery,PageResult,PaymentInput} from '../types/admin.types.js';
+import type {AddOnInput,AdminDashboard,AuditLogQuery,CustomerHistoryQuery,EmailOutboxQuery,PackageInput,PageQuery,PageResult,PaymentInput,ReportingPeriod} from '../types/admin.types.js';
 import {writeAdminAudit} from './audit.repository.js';
 import {bookingStatusHistory} from './booking-status.repository.js';
 const pageMeta=<T>(rows:(T&{total_count:number})[],q:PageQuery):PageResult<T>=>{const total=Number(rows[0]?.total_count??0);return{items:rows.map(({total_count:_total,...item})=>item as T),page:q.page,pageSize:q.pageSize,totalItems:total,totalPages:Math.ceil(total/q.pageSize)}};
@@ -21,3 +21,237 @@ export async function createAddOn(v:AddOnInput){const pool=await getDbPool();con
 export async function updateAddOn(id:number,v:AddOnInput){const pool=await getDbPool();const r=await pool.request().input('id',sql.Int,id).input('name',sql.NVarChar(150),v.name).input('description',sql.NVarChar(1000),v.description).input('price',sql.Decimal(12,2),v.price).input('active',sql.Bit,v.isActive).query('UPDATE dbo.ADD_ON SET add_on_name=@name,description=@description,price=@price,is_active=@active WHERE add_on_id=@id');return(r.rowsAffected[0]??0)>0;}
 export async function payments(q:PageQuery){const request=await pageRequest(q);const result=await request.query(`SELECT pay.payment_id id,r.booking_reference bookingReference,CONCAT(c.first_name,' ',c.last_name) customerName,pay.amount_due amountDue,pay.amount_paid amountPaid,pay.payment_method paymentMethod,pay.payment_date paymentDate,pay.transaction_ref reference,pay.status,COUNT(*) OVER() total_count FROM dbo.PAYMENT pay JOIN dbo.RESERVATION r ON r.reservation_id=pay.reservation_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE(@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND(@status='' OR pay.status=@status) ORDER BY pay.payment_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset,q);}
 export async function recordPayment(adminId:number,v:PaymentInput){const pool=await getDbPool();const tx=new sql.Transaction(pool);await tx.begin();try{const current=await new sql.Request(tx).input('reservationId',sql.Int,v.reservationId).query('SELECT payment_id,amount_due,amount_paid FROM dbo.PAYMENT WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');const row=current.recordset[0];if(!row){await tx.rollback();return false;}if(Number(row.amount_paid)+v.amount>Number(row.amount_due))throw new Error('OVERPAYMENT');await new sql.Request(tx).input('paymentId',sql.Int,row.payment_id).input('adminId',sql.Int,adminId).input('amount',sql.Decimal(12,2),v.amount).input('method',sql.NVarChar(50),v.method).input('reference',sql.NVarChar(150),v.reference??null).input('date',sql.DateTime2,new Date(v.paymentDate)).query('INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date) VALUES(@paymentId,@adminId,@amount,@method,@reference,@date)');await new sql.Request(tx).input('paymentId',sql.Int,row.payment_id).input('amount',sql.Decimal(12,2),v.amount).input('method',sql.NVarChar(50),v.method).input('reference',sql.NVarChar(150),v.reference??null).input('date',sql.DateTime2,new Date(v.paymentDate)).query(`UPDATE dbo.PAYMENT SET amount_paid=amount_paid+@amount,payment_method=@method,transaction_ref=@reference,payment_date=@date,status=CASE WHEN amount_paid+@amount>=amount_due THEN 'PAID' ELSE 'PARTIALLY_PAID' END WHERE payment_id=@paymentId`);await new sql.Request(tx).input('reservationId',sql.Int,v.reservationId).query(`UPDATE i SET status=CASE WHEN p.amount_paid>=i.total_amount THEN 'PAID' WHEN p.amount_paid>0 THEN 'PARTIALLY_PAID' ELSE 'ISSUED' END FROM dbo.INVOICE i JOIN dbo.PAYMENT p ON p.reservation_id=i.reservation_id WHERE i.reservation_id=@reservationId AND i.status<>'CANCELLED'`);await writeAdminAudit({adminId,action:'PAYMENT_RECORDED',entityType:'PAYMENT',entityId:Number(row.payment_id),oldValues:{amountPaid:Number(row.amount_paid)},newValues:{amountPaid:Number(row.amount_paid)+v.amount,amount:v.amount,method:v.method,reference:v.reference??null}},new sql.Request(tx));await tx.commit();return true;}catch(e){await tx.rollback();throw e;}}
+
+interface AdminOperationsDependencies {
+  readRequest: () => Promise<sql.Request>;
+  transaction: <T>(work: (request: sql.Request) => Promise<T>) => Promise<T>;
+}
+
+function numberValue(value: unknown): number {
+  return Number(value ?? 0);
+}
+
+function dateValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function paged<T>(rows: (T & { total_count?: unknown })[], query: CustomerHistoryQuery): PageResult<T> {
+  const totalItems = numberValue(rows[0]?.total_count);
+  return {
+    items: rows.map(row => {
+      const { total_count: _total, ...item } = row;
+      return item as T;
+    }),
+    page: query.page,
+    pageSize: query.pageSize,
+    totalItems,
+    totalPages: Math.ceil(totalItems / query.pageSize)
+  };
+}
+
+async function operationsTransaction<T>(work: (request: sql.Request) => Promise<T>): Promise<T> {
+  const transaction = new sql.Transaction(await getDbPool());
+  await transaction.begin();
+  try {
+    const result = await work(new sql.Request(transaction));
+    await transaction.commit();
+    return result;
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* Preserve the original failure. */ }
+    throw error;
+  }
+}
+
+export function createAdminOperationsRepository(deps: AdminOperationsDependencies) {
+  return {
+    async dashboard(period: ReportingPeriod): Promise<AdminDashboard> {
+      const result = await (await deps.readRequest())
+        .replaceInput('periodStart', sql.DateTime2, period.start)
+        .replaceInput('periodEnd', sql.DateTime2, period.end)
+        .query(`
+          DECLARE @today date=CONVERT(date,SYSUTCDATETIME());
+          DECLARE @nextSeven date=DATEADD(day,7,@today);
+
+          SELECT
+            (SELECT COUNT(*) FROM dbo.RESERVATION WHERE status='PENDING') pendingBookingReviews,
+            (SELECT COUNT(*) FROM dbo.PAYMENT_PROOF WHERE status='SUBMITTED') proofsAwaitingVerification,
+            (SELECT COUNT(*) FROM dbo.RESERVATION WHERE status='CONFIRMED' AND event_date>=@today AND event_date<@nextSeven) confirmedEventsNextSevenDays,
+            (SELECT COALESCE(SUM(CASE WHEN amount_due>amount_paid THEN amount_due-amount_paid ELSE 0 END),0) FROM dbo.PAYMENT) outstandingBalanceTotal,
+            (SELECT COUNT(*) FROM dbo.EMAIL_OUTBOX WHERE status='FAILED') failedEmailNotifications,
+            (SELECT COALESCE(SUM(pt.amount),0) FROM dbo.PAYMENT_TRANSACTION pt WHERE pt.payment_date>=@periodStart AND pt.payment_date<@periodEnd) confirmedRevenue,
+            (SELECT COALESCE(SUM(pp.claimed_amount),0) FROM dbo.PAYMENT_PROOF pp WHERE pp.status='SUBMITTED' AND pp.created_at>=@periodStart AND pp.created_at<@periodEnd) submittedProofValue,
+            (SELECT COALESCE(SUM(CASE WHEN p.amount_due>p.amount_paid THEN p.amount_due-p.amount_paid ELSE 0 END),0)
+             FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id
+             WHERE r.event_date<@today AND r.status NOT IN('REJECTED','CANCELLED')) overdueOutstanding,
+            (SELECT COALESCE(AVG(CONVERT(decimal(12,2),r.total_amount)),0)
+             FROM dbo.RESERVATION r WHERE EXISTS(
+               SELECT 1 FROM dbo.BOOKING_STATUS_HISTORY h WHERE h.reservation_id=r.reservation_id
+               AND h.next_status='CONFIRMED' AND h.created_at>=@periodStart AND h.created_at<@periodEnd
+             )) averageConfirmedBookingValue;
+
+          ;WITH attention AS (
+            SELECT 1 urgencyRank,'PAYMENT_PROOF' type,CONVERT(varchar(20),pp.payment_proof_id) stableId,
+              CONCAT('Review proof for ',r.booking_reference) title,CONCAT(c.first_name,' ',c.last_name) detail,
+              CONVERT(varchar(10),r.event_date,23) eventDate
+            FROM dbo.PAYMENT_PROOF pp JOIN dbo.RESERVATION r ON r.reservation_id=pp.reservation_id
+            JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE pp.status='SUBMITTED'
+            UNION ALL
+            SELECT 2,'BOOKING',CONVERT(varchar(20),r.reservation_id),CONCAT('Review ',r.booking_reference),
+              CONCAT(c.first_name,' ',c.last_name),CONVERT(varchar(10),r.event_date,23)
+            FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE r.status='PENDING'
+            UNION ALL
+            SELECT 3,'OVERDUE_BALANCE',CONVERT(varchar(20),r.reservation_id),CONCAT('Outstanding ',r.booking_reference),
+              CONCAT('PHP ',CONVERT(varchar(30),p.amount_due-p.amount_paid)),CONVERT(varchar(10),r.event_date,23)
+            FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id
+            WHERE r.event_date<@today AND p.amount_due>p.amount_paid AND r.status NOT IN('REJECTED','CANCELLED')
+            UNION ALL
+            SELECT 4,'EMAIL_OUTBOX',CONVERT(varchar(20),notification_id),'Retry failed email',recipient,
+              CONVERT(varchar(10),created_at,23) FROM dbo.EMAIL_OUTBOX WHERE status='FAILED'
+          )
+          SELECT TOP (10) urgencyRank,type,stableId id,title,detail,eventDate
+          FROM attention ORDER BY urgencyRank,eventDate,stableId;
+        `);
+      const sets = (result.recordsets ?? []) as unknown as Record<string, unknown>[][];
+      const metrics = sets[0]?.[0] ?? {};
+      const attention = (sets[1] ?? []).map(row => ({
+        type: String(row['type']), id: String(row['id']), title: String(row['title']),
+        detail: String(row['detail'] ?? ''), eventDate: dateValue(row['eventDate']), urgencyRank: numberValue(row['urgencyRank'])
+      }));
+      const priority = {
+        pendingBookingReviews: numberValue(metrics['pendingBookingReviews']),
+        proofsAwaitingVerification: numberValue(metrics['proofsAwaitingVerification']),
+        confirmedEventsNextSevenDays: numberValue(metrics['confirmedEventsNextSevenDays']),
+        outstandingBalanceTotal: numberValue(metrics['outstandingBalanceTotal']),
+        failedEmailNotifications: numberValue(metrics['failedEmailNotifications'])
+      };
+      return {
+        period: period.key,
+        priority,
+        ledger: {
+          confirmedRevenue: numberValue(metrics['confirmedRevenue']),
+          submittedProofValue: numberValue(metrics['submittedProofValue']),
+          overdueOutstanding: numberValue(metrics['overdueOutstanding']),
+          averageConfirmedBookingValue: numberValue(metrics['averageConfirmedBookingValue'])
+        },
+        actionQueues: [
+          { key: 'pendingBookings', count: priority.pendingBookingReviews, href: '/admin/bookings?status=PENDING' },
+          { key: 'submittedProofs', count: priority.proofsAwaitingVerification, href: '/admin/payments?status=SUBMITTED' },
+          { key: 'upcomingEvents', count: priority.confirmedEventsNextSevenDays, href: '/admin/calendar?range=7d' },
+          { key: 'failedEmails', count: priority.failedEmailNotifications, href: '/admin/email-outbox?status=FAILED' }
+        ],
+        attention
+      };
+    },
+
+    async customerBookings(customerId: number, query: CustomerHistoryQuery) {
+      const result = await (await deps.readRequest())
+        .replaceInput('customerId', sql.Int, customerId)
+        .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
+        .replaceInput('pageSize', sql.Int, query.pageSize)
+        .query<Record<string, unknown>>(`SELECT r.reservation_id id,r.booking_reference reference,e.event_type eventType,
+          CONVERT(varchar(10),r.event_date,23) eventDate,r.guest_count guestCount,r.total_amount total,r.status,
+          COALESCE(p.amount_paid,0) amountPaid,COALESCE(p.amount_due-r.total_amount,0) paymentDifference,
+          CASE WHEN p.amount_due IS NULL THEN r.total_amount ELSE CASE WHEN p.amount_due>p.amount_paid THEN p.amount_due-p.amount_paid ELSE 0 END END outstandingBalance,
+          i.invoice_id invoiceId,i.invoice_number invoiceNumber,i.status invoiceStatus,COUNT(*) OVER() total_count
+          FROM dbo.RESERVATION r JOIN dbo.EVENT e ON e.event_id=r.event_id
+          LEFT JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
+          WHERE r.customer_id=@customerId ORDER BY r.created_at DESC,r.reservation_id DESC
+          OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+      return paged(result.recordset, query);
+    },
+
+    async customerPayments(customerId: number, query: CustomerHistoryQuery) {
+      const result = await (await deps.readRequest())
+        .replaceInput('customerId', sql.Int, customerId)
+        .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
+        .replaceInput('pageSize', sql.Int, query.pageSize)
+        .query<Record<string, unknown>>(`SELECT CONVERT(varchar(20),pt.payment_transaction_id) id,r.reservation_id bookingId,
+          r.booking_reference bookingReference,pt.amount,pt.payment_method paymentMethod,pt.transaction_ref reference,
+          pt.payment_date paymentDate,COUNT(*) OVER() total_count
+          FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id
+          JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id
+          WHERE r.customer_id=@customerId ORDER BY pt.payment_date DESC,pt.payment_transaction_id DESC
+          OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+      return paged(result.recordset.map(row => ({ ...row, id: String(row['id']), paymentDate: dateValue(row['paymentDate']) })), query);
+    },
+
+    async emailOutbox(query: EmailOutboxQuery) {
+      const result = await (await deps.readRequest())
+        .replaceInput('search', sql.NVarChar(200), query.search)
+        .replaceInput('status', sql.NVarChar(20), query.status)
+        .replaceInput('templateKey', sql.NVarChar(80), query.templateKey)
+        .replaceInput('relatedEntityType', sql.NVarChar(50), query.relatedEntityType)
+        .replaceInput('relatedEntityId', sql.BigInt, query.relatedEntityId || null)
+        .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
+        .replaceInput('pageSize', sql.Int, query.pageSize)
+        .query<Record<string, unknown>>(`SELECT CONVERT(varchar(20),notification_id) id,recipient,template_key templateKey,payload,
+          related_entity_type relatedEntityType,CONVERT(varchar(20),related_entity_id) relatedEntityId,status,
+          attempt_count attemptCount,next_attempt_at nextAttemptAt,last_error lastError,created_at createdAt,sent_at sentAt,
+          updated_at updatedAt,COUNT(*) OVER() total_count FROM dbo.EMAIL_OUTBOX
+          WHERE (@search='' OR recipient LIKE '%'+@search+'%') AND (@status='' OR status=@status)
+          AND (@templateKey='' OR template_key=@templateKey) AND (@relatedEntityType='' OR related_entity_type=@relatedEntityType)
+          AND (@relatedEntityId IS NULL OR related_entity_id=@relatedEntityId)
+          ORDER BY created_at DESC,notification_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+      return paged(result.recordset.map(row => ({ ...row, id: String(row['id']),
+        relatedEntityId: row['relatedEntityId'] == null ? undefined : String(row['relatedEntityId']),
+        payload: parseJsonObject(row['payload']), createdAt: dateValue(row['createdAt']), updatedAt: dateValue(row['updatedAt']),
+        nextAttemptAt: row['nextAttemptAt'] == null ? undefined : dateValue(row['nextAttemptAt']),
+        sentAt: row['sentAt'] == null ? undefined : dateValue(row['sentAt']) })), query);
+    },
+
+    async retryEmail(adminId: number, outboxId: string): Promise<boolean> {
+      return deps.transaction(async request => {
+        const result = await request
+          .replaceInput('outboxId', sql.BigInt, outboxId)
+          .query(`UPDATE dbo.EMAIL_OUTBOX SET status='PENDING',attempt_count=0,next_attempt_at=SYSUTCDATETIME(),
+            last_error=NULL,sent_at=NULL,updated_at=SYSUTCDATETIME()
+            WHERE notification_id=@outboxId AND status='FAILED'`);
+        if ((result.rowsAffected[0] ?? 0) !== 1) return false;
+        await writeAdminAudit({ adminId, action: 'EMAIL_OUTBOX_RETRIED', entityType: 'EMAIL_OUTBOX', entityId: adminId,
+          newValues: { notificationId: outboxId } }, request);
+        return true;
+      });
+    },
+
+    async auditLog(query: AuditLogQuery) {
+      const result = await (await deps.readRequest())
+        .replaceInput('adminId', sql.Int, query.adminId ?? null)
+        .replaceInput('action', sql.NVarChar(80), query.action)
+        .replaceInput('entityType', sql.NVarChar(50), query.entityType)
+        .replaceInput('entityId', sql.Int, query.entityId ?? null)
+        .replaceInput('dateFrom', sql.VarChar(10), query.dateFrom)
+        .replaceInput('dateTo', sql.VarChar(10), query.dateTo)
+        .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
+        .replaceInput('pageSize', sql.Int, query.pageSize)
+        .query<Record<string, unknown>>(`SELECT CONVERT(varchar(20),a.audit_id) id,a.admin_id adminId,
+          ad.username adminUsername,a.action,a.entity_type entityType,a.entity_id entityId,a.old_values oldValues,
+          a.new_values newValues,a.created_at createdAt,COUNT(*) OVER() total_count
+          FROM dbo.ADMIN_AUDIT_LOG a JOIN dbo.ADMIN ad ON ad.admin_id=a.admin_id
+          WHERE (@adminId IS NULL OR a.admin_id=@adminId) AND (@action='' OR a.action=@action)
+          AND (@entityType='' OR a.entity_type=@entityType) AND (@entityId IS NULL OR a.entity_id=@entityId)
+          AND (@dateFrom='' OR a.created_at>=CONVERT(date,@dateFrom))
+          AND (@dateTo='' OR a.created_at<DATEADD(day,1,CONVERT(date,@dateTo)))
+          ORDER BY a.created_at DESC,a.audit_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
+      return paged(result.recordset.map(row => ({ ...row, id: String(row['id']), oldValues: parseJsonObject(row['oldValues']),
+        newValues: parseJsonObject(row['newValues']), createdAt: dateValue(row['createdAt']) })), query);
+    }
+  };
+}
+
+export const adminOperationsRepository = createAdminOperationsRepository({
+  readRequest: async () => (await getDbPool()).request(),
+  transaction: operationsTransaction
+});

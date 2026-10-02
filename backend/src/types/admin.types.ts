@@ -38,3 +38,61 @@ export interface BookingStatusHistory {
   reason: string | null;
   createdAt: Date;
 }
+
+export interface ReportingPeriod {
+  key: string;
+  start: Date;
+  end: Date;
+}
+
+export interface BoundedPageQuery {
+  page: number;
+  pageSize: number;
+}
+
+export interface CustomerHistoryQuery extends BoundedPageQuery {}
+
+export interface EmailOutboxQuery extends BoundedPageQuery {
+  search: string;
+  status: '' | 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED';
+  templateKey: string;
+  relatedEntityType: string;
+  relatedEntityId: string;
+}
+
+export interface AuditLogQuery extends BoundedPageQuery {
+  adminId?: number;
+  action: string;
+  entityType: string;
+  entityId?: number;
+  dateFrom: string;
+  dateTo: string;
+}
+
+export interface DashboardAttentionItem {
+  type: string;
+  id: string;
+  title: string;
+  detail: string;
+  eventDate: string;
+  urgencyRank: number;
+}
+
+export interface AdminDashboard {
+  period: string;
+  priority: {
+    pendingBookingReviews: number;
+    proofsAwaitingVerification: number;
+    confirmedEventsNextSevenDays: number;
+    outstandingBalanceTotal: number;
+    failedEmailNotifications: number;
+  };
+  ledger: {
+    confirmedRevenue: number;
+    submittedProofValue: number;
+    overdueOutstanding: number;
+    averageConfirmedBookingValue: number;
+  };
+  actionQueues: { key: string; count: number; href: string }[];
+  attention: DashboardAttentionItem[];
+}

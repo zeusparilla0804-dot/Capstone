@@ -2,4 +2,12 @@ import {Router} from 'express';import {adminController as c} from '../controller
 export default Router().use(requireAdmin)
  .get('/payment-proofs',c.paymentProofs).get('/payment-proofs/:id',c.paymentProof)
  .post('/payment-proofs/:id/verify',c.verifyPaymentProof).post('/payment-proofs/:id/reject',c.rejectPaymentProof)
- .get('/invoices/:id',adminInvoice).post('/bookings/:bookingId/invoice',issueInvoice).get('/dashboard',c.dashboard).get('/bookings',c.bookings).get('/bookings/:id',c.booking).patch('/bookings/:id/status',c.status).get('/customers',c.customers).get('/customers/:id',c.customer).get('/event-types',c.events).get('/packages',c.packages).post('/packages',c.createPackage).put('/packages/:id',c.updatePackage).get('/add-ons',c.addOns).post('/add-ons',c.createAddOn).put('/add-ons/:id',c.updateAddOn).get('/payments',c.payments).post('/payments',c.recordPayment);
+ .get('/invoices/:id',adminInvoice).post('/bookings/:bookingId/invoice',issueInvoice)
+ .get('/dashboard',c.dashboard).get('/email-outbox',c.emailOutbox).get('/email-outbox/:id/preview',c.emailPreview)
+ .post('/email-outbox/:id/retry',c.retryEmail).get('/audit-log',c.auditLog)
+ .get('/bookings',c.bookings).get('/bookings/:id',c.booking).patch('/bookings/:id/status',c.status)
+ .get('/customers',c.customers).get('/customers/:id/bookings',c.customerBookings)
+ .get('/customers/:id/payments',c.customerPayments).get('/customers/:id',c.customer)
+ .get('/event-types',c.events).get('/packages',c.packages).post('/packages',c.createPackage).put('/packages/:id',c.updatePackage)
+ .get('/add-ons',c.addOns).post('/add-ons',c.createAddOn).put('/add-ons/:id',c.updateAddOn)
+ .get('/payments',c.payments).post('/payments',c.recordPayment);
