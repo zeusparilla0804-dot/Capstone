@@ -1,0 +1,246 @@
+import assert from 'node:assert/strict';
+import test, { mock } from 'node:test';
+import sql from 'mssql';
+import { AppError } from '../utils/app-error.js';
+import type { BookingStatus } from '../types/admin.types.js';
+
+process.env.FRONTEND_URL ??= 'http://localhost:4200';
+process.env.PAYMENT_PROOF_UPLOAD_ROOT ??= 'test-proofs';
+process.env.DB_SERVER ??= 'localhost';
+process.env.DB_DATABASE ??= 'test';
+process.env.DB_USER ??= 'test';
+process.env.DB_PASSWORD ??= 'test';
+
+const { allowedBookingTransitions, transitionBooking } = await import('./booking-status.service.js');
+const { withBookingStatusTransaction, bookingStatusHistory } = await import('../repositories/booking-status.repository.js');
+const { booking } = await import('../repositories/admin.repository.js');
+const { adminController } = await import('../controllers/admin.controller.js');
+const { adminService } = await import('./admin.service.js');
+
+const transitions: [BookingStatus, readonly BookingStatus[]][] = [
+  ['PENDING', ['APPROVED', 'REJECTED', 'CANCELLED']],
+  ['APPROVED', ['AWAITING_PAYMENT', 'CANCELLED']],
+  ['AWAITING_PAYMENT', ['PAYMENT_SUBMITTED', 'CANCELLED']],
+  ['PAYMENT_SUBMITTED', ['PAYMENT_VERIFIED', 'AWAITING_PAYMENT']],
+  ['PAYMENT_VERIFIED', ['CONFIRMED']],
+  ['CONFIRMED', ['COMPLETED', 'CANCELLED']],
+  ['REJECTED', []],
+  ['CANCELLED', []],
+  ['COMPLETED', []]
+];
+
+class BookingDb {
+  status: BookingStatus = 'PENDING';
+  exists = true;
+  stale = false;
+  failOn: 'history' | 'audit' | undefined;
+  history: Record<string, unknown>[] = [];
+  audit: Record<string, unknown>[] = [];
+  queries: string[] = [];
+  request = new FakeRequest(this) as unknown as sql.Request;
+}
+
+class FakeRequest {
+  private params: Record<string, unknown> = {};
+  constructor(private readonly db: BookingDb) {}
+  input(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
+  replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
+  async query(command: string): Promise<{ recordset: Record<string, unknown>[]; rowsAffected: number[] }> {
+    this.db.queries.push(command);
+    if (/SELECT.*FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
+      return { recordset: this.db.exists ? [{ status: this.db.status }] : [], rowsAffected: [this.db.exists ? 1 : 0] };
+    }
+    if (/UPDATE dbo\.RESERVATION/is.test(command)) {
+      if (this.db.stale || this.params['previousStatus'] !== this.db.status) return { recordset: [], rowsAffected: [0] };
+      this.db.status = this.params['nextStatus'] as BookingStatus;
+      return { recordset: [], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.BOOKING_STATUS_HISTORY/is.test(command)) {
+      if (this.db.failOn === 'history') throw new Error('history insert failed');
+      this.db.history.push({ ...this.params });
+      return { recordset: [], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.ADMIN_AUDIT_LOG/is.test(command)) {
+      if (this.db.failOn === 'audit') throw new Error('audit insert failed');
+      this.db.audit.push({ ...this.params });
+      return { recordset: [], rowsAffected: [1] };
+    }
+    if (/FROM dbo\.BOOKING_STATUS_HISTORY/is.test(command)) {
+      return { recordset: [{ id: 8, previousStatus: 'PENDING', nextStatus: 'APPROVED', actorType: 'ADMIN', actorId: 3, reason: null, createdAt: new Date('2026-10-02T00:00:00Z') }], rowsAffected: [1] };
+    }
+    if (/FROM dbo\.RESERVATION/is.test(command)) {
+      return { recordset: [{ id: 5, status: this.db.status }], rowsAffected: [1] };
+    }
+    if (/FROM dbo\.RESERVATION_ADD_ON/is.test(command)) return { recordset: [], rowsAffected: [0] };
+    throw new Error(`Unexpected query: ${command}`);
+  }
+}
+
+function assertStatus(error: unknown, code: number) {
+  assert.ok(error instanceof AppError);
+  assert.equal(error.statusCode, code);
+  return true;
+}
+
+test('booking status exposes every approved transition and terminal state', () => {
+  for (const [status, expected] of transitions) {
+    assert.deepEqual(allowedBookingTransitions(status), expected, status);
+  }
+});
+
+test('booking status accepts every approved transition and records its old and new state', async () => {
+  for (const [previous, targets] of transitions) {
+    for (const nextStatus of targets) {
+      const db = new BookingDb();
+      db.status = previous;
+      await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 3 }, reason: nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : undefined, request: db.request });
+      assert.equal(db.status, nextStatus, `${previous} -> ${nextStatus}`);
+      assert.equal(db.history.length, 1);
+      assert.equal(db.history[0]?.['previousStatus'], previous);
+      assert.equal(db.history[0]?.['nextStatus'], nextStatus);
+      assert.equal(db.history[0]?.['actorType'], 'ADMIN');
+      assert.equal(db.history[0]?.['actorId'], 3);
+      assert.equal(db.history[0]?.['reason'], nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : null);
+      assert.equal(db.audit.length, 1);
+      assert.equal(db.audit[0]?.['auditAdminId'], 3);
+      assert.equal(db.audit[0]?.['auditAction'], 'BOOKING_STATUS_CHANGED');
+      assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditOldValues'])), { status: previous });
+      assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditNewValues'])), { status: nextStatus, reason: nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : null });
+    }
+  }
+});
+
+test('booking status rejects invalid and terminal transitions with conflict', async () => {
+  for (const [previous, approved] of transitions) {
+    for (const [nextStatus] of transitions) {
+      if (approved.includes(nextStatus)) continue;
+      const db = new BookingDb();
+      db.status = previous;
+      await assert.rejects(transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 3 }, reason: 'Reason', request: db.request }), error => assertStatus(error, 409));
+      assert.equal(db.status, previous);
+      assert.equal(db.history.length, 0);
+      assert.equal(db.audit.length, 0);
+    }
+  }
+});
+
+test('booking status requires a non-empty rejection or cancellation reason', async () => {
+  for (const nextStatus of ['REJECTED', 'CANCELLED'] as BookingStatus[]) {
+    for (const reason of [undefined, '', '   ']) {
+      const db = new BookingDb();
+      await assert.rejects(transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 3 }, reason, request: db.request }), error => assertStatus(error, 400));
+      assert.equal(db.status, 'PENDING');
+      assert.equal(db.history.length, 0);
+    }
+  }
+});
+
+test('booking status treats a stale conditional update as conflict', async () => {
+  const db = new BookingDb();
+  db.stale = true;
+  await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }), error => assertStatus(error, 409));
+  assert.equal(db.history.length, 0);
+  assert.equal(db.audit.length, 0);
+  assert.ok(db.queries.some(query => /UPDLOCK.*HOLDLOCK/is.test(query)));
+  assert.ok(db.queries.some(query => /WHERE.*status\s*=\s*@previousStatus/is.test(query)));
+});
+
+test('booking status returns 404 for a missing booking', async () => {
+  const db = new BookingDb();
+  db.exists = false;
+  await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }), error => assertStatus(error, 404));
+});
+
+test('booking status rejects malformed service inputs before querying', async () => {
+  for (const nextStatus of ['UNKNOWN', 'toString']) {
+    const db = new BookingDb();
+    await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: nextStatus as BookingStatus, actor: { type: 'ADMIN', id: 3 }, request: db.request }), error => assertStatus(error, 400));
+    assert.equal(db.queries.length, 0);
+  }
+});
+
+test('booking status records customer and system actors without admin audit', async () => {
+  for (const actor of [{ type: 'CUSTOMER', id: 7 }, { type: 'SYSTEM' }] as const) {
+    const db = new BookingDb();
+    await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor, request: db.request });
+    assert.equal(db.history[0]?.['actorType'], actor.type);
+    assert.equal(db.history[0]?.['actorId'], actor.type === 'SYSTEM' ? null : 7);
+    assert.equal(db.audit.length, 0);
+  }
+});
+
+test('booking status uses the supplied request and propagates history or audit failures', async () => {
+  for (const failOn of ['history', 'audit'] as const) {
+    const db = new BookingDb();
+    db.failOn = failOn;
+    await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }), /insert failed/);
+  }
+});
+
+test('booking status transaction commits success and rolls back failure', async () => {
+  const events: string[] = [];
+  const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
+  transaction.begin = async () => { events.push('begin'); return transaction; };
+  transaction.commit = async () => { events.push('commit'); };
+  transaction.rollback = async () => { events.push('rollback'); };
+  await withBookingStatusTransaction(transaction, async () => { events.push('work'); });
+  assert.deepEqual(events, ['begin', 'work', 'commit']);
+  events.length = 0;
+  await assert.rejects(withBookingStatusTransaction(transaction, async () => { events.push('work'); throw new Error('failed'); }), /failed/);
+  assert.deepEqual(events, ['begin', 'work', 'rollback']);
+});
+
+test('booking status rolls back the status and history when persistence fails', async () => {
+  for (const failOn of ['history', 'audit'] as const) {
+    const db = new BookingDb();
+    db.failOn = failOn;
+    const events: string[] = [];
+    const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
+    transaction.begin = async () => { events.push('begin'); return transaction; };
+    transaction.request = () => db.request;
+    transaction.commit = async () => { events.push('commit'); };
+    transaction.rollback = async () => { db.status = 'PENDING'; db.history = []; db.audit = []; events.push('rollback'); };
+
+    await assert.rejects(withBookingStatusTransaction(transaction, request => transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request })), /insert failed/);
+    assert.deepEqual(events, ['begin', 'rollback']);
+    assert.equal(db.status, 'PENDING');
+    assert.equal(db.history.length, 0);
+    assert.equal(db.audit.length, 0);
+  }
+});
+
+test('booking status history returns ordered actor and timestamp records', async () => {
+  const db = new BookingDb();
+  const history = await bookingStatusHistory(5, db.request);
+  assert.equal(history.length, 1);
+  assert.equal(history[0]?.nextStatus, 'APPROVED');
+  assert.equal(history[0]?.actorType, 'ADMIN');
+  assert.ok(history[0]?.createdAt instanceof Date);
+  assert.ok(db.queries.some(query => /ORDER BY.*created_at DESC/is.test(query)));
+});
+
+test('booking status history appears in admin booking detail', async () => {
+  const db = new BookingDb();
+  const detail = await booking(5, db.request);
+  assert.equal(detail?.status, 'PENDING');
+  assert.equal(detail?.statusHistory?.[0]?.nextStatus, 'APPROVED');
+});
+
+test('booking status endpoint validates status and reason before dispatch', async () => {
+  const calls: unknown[][] = [];
+  const updateMock = mock.method(adminService, 'updateStatus', async (...args: unknown[]) => { calls.push(args); });
+  try {
+    const errors: unknown[] = [];
+    const response = { json: (_body: unknown) => response };
+    const invoke = async (body: unknown) => adminController.status({ params: { id: '5' }, admin: { id: 3 }, body } as never, response as never, (error: unknown) => { errors.push(error); });
+    await invoke({ status: 'NOT_A_STATUS' });
+    await invoke({ status: 'CANCELLED', reason: '   ' });
+    assert.equal(calls.length, 0);
+    assert.equal(errors.length, 2);
+    errors.forEach(error => assertStatus(error, 400));
+    await invoke({ status: 'CANCELLED', reason: ' Customer request ' });
+    assert.deepEqual(calls, [[3, 5, 'CANCELLED', 'Customer request']]);
+  } finally {
+    updateMock.mock.restore();
+  }
+});
