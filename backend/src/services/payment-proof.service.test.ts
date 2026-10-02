@@ -185,6 +185,25 @@ test('owner and admin may open proof, other customer and missing proof get 404',
   await assert.rejects(db.service.openAuthorizedProof({ type: 'ADMIN', id: 3 }, 99), status(404));
 });
 
+test('customer proof list and authorized open preserve the exact bigint transaction identity', async () => {
+  const db = new FakeDb(); db.proofs.push({ ...proofRow, status: 'VERIFIED', paymentTransactionId: '9007199254740993' });
+  const list = await db.service.listCustomerProofs(7, 5);
+  assert.equal(list[0]!.paymentTransactionId, '9007199254740993');
+  const opened = await db.service.openAuthorizedProof({ type: 'ADMIN', id: 3 }, 1);
+  assert.equal(opened.proof.paymentTransactionId, '9007199254740993');
+  assert.equal(JSON.parse(JSON.stringify(opened.proof)).paymentTransactionId, '9007199254740993');
+  for (const command of db.queries.filter(command => /FROM dbo\.PAYMENT_PROOF/.test(command))) {
+    assert.match(command, /CONVERT\(varchar\(20\),\s*payment_transaction_id\) paymentTransactionId/i);
+  }
+});
+
+test('submission projects its nullable transaction identity as text in SQL OUTPUT', async () => {
+  const db = new FakeDb(); const submitted = await db.service.submitCustomerProof(7, 5, input, file);
+  assert.equal(submitted.paymentTransactionId, undefined);
+  const command = db.queries.find(command => /INSERT dbo\.PAYMENT_PROOF/.test(command)); assert.ok(command);
+  assert.match(command, /CONVERT\(varchar\(20\),\s*INSERTED\.payment_transaction_id\) paymentTransactionId/i);
+});
+
 const proofRow = { id: 1, reservationId: 5, customerId: 7, paymentId: 3,
   method: 'BANK_TRANSFER', claimedAmount: 50.25, transactionReference: 'OLD',
   paymentDate: new Date('2026-10-02'), createdAt: new Date('2026-10-02'), updatedAt: new Date('2026-10-02'),

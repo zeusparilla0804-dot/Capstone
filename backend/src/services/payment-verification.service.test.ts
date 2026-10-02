@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import test from 'node:test';
+import test, { type TestContext } from 'node:test';
 import sql from 'mssql';
 import express from 'express';
 import { AppError } from '../utils/app-error.js';
@@ -42,7 +42,8 @@ class ReviewDb {
   events: string[] = [];
   failOn?: string;
   duplicate?: unknown;
-  beforeLocks?: () => void;
+  transactionId = '6000000001';
+  beforeLocks?: () => void | Promise<void>;
   private queue = Promise.resolve();
   service() {
     assert.equal(typeof implementation?.createPaymentVerificationService, 'function', 'Task 5 verification service must exist');
@@ -53,7 +54,7 @@ class ReviewDb {
         let release!: () => void;
         this.queue = new Promise<void>(resolve => { release = resolve; });
         await preceding;
-        this.beforeLocks?.(); this.beforeLocks = undefined;
+        await this.beforeLocks?.(); this.beforeLocks = undefined;
         const snapshot = structuredClone({ booking: this.booking, payment: this.payment, invoice: this.invoice,
           proofs: this.proofs, credits: this.credits, history: this.history, audits: this.audits });
         this.events.push('begin');
@@ -74,7 +75,10 @@ class ReviewDb {
         assert.equal(name in params, false, `mssql rejects duplicate parameter ${name}`);
         params[name] = value; return runner;
       },
-      replaceInput(name: string, _type: unknown, value: unknown) { params[name] = value; return runner; },
+      replaceInput(name: string, type: unknown, value: unknown) {
+        if (name === 'paymentTransactionId') assert.equal(type, sql.BigInt, 'proof FK must use SQL bigint');
+        params[name] = value; return runner;
+      },
       query: async (command: string) => {
         const p = { ...params }; this.queries.push({ command, params: p, transactional });
         const result = (recordset: unknown[] = [], affected = 1) => ({ recordset, rowsAffected: [affected] });
@@ -90,7 +94,7 @@ class ReviewDb {
         if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
           if (this.duplicate) throw this.duplicate;
           if (this.failOn === 'transaction') throw new Error('transaction failed');
-          this.credits.push(p); return result([{ id: 6_000_000_001 }]);
+          this.credits.push(p); return result([{ id: this.transactionId }]);
         }
         if (/UPDATE dbo\.PAYMENT\s/i.test(command)) {
           if (this.failOn === 'payment') throw new Error('payment failed');
@@ -195,7 +199,7 @@ for (const [amount, wantPaid, wantStatus] of [[90, 100, 'PAID'], [40.25, 50.25, 
     assert.equal(db.invoice!.status, wantStatus); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
     assert.equal(db.credits.length, 1); assert.equal(db.credits[0]!['method'], 'E-WALLET');
     assert.equal(db.credits[0]!['reference'], 'TX-1'); assert.equal((db.credits[0]!['paymentDate'] as Date).toISOString(), '2026-10-02T00:00:00.000Z');
-    assert.equal(db.proofs[0]!.paymentTransactionId, 6_000_000_001); assert.equal(db.proofs[0]!.invoiceId, 8);
+    assert.equal(db.proofs[0]!.paymentTransactionId, '6000000001'); assert.equal(db.proofs[0]!.invoiceId, 8);
     assert.equal(db.proofs[0]!.reviewedBy, 2); assert.ok(db.proofs[0]!.reviewedAt); assert.equal(db.proofs[0]!.verifiedAmount, amount);
     assert.equal(reviewed.status, 'VERIFIED'); assert.equal('storageKey' in reviewed, false);
     assert.equal(db.history[0]!['previousStatus'], 'PAYMENT_SUBMITTED'); assert.equal(db.history[0]!['nextStatus'], 'PAYMENT_VERIFIED');
@@ -252,6 +256,102 @@ test('rejection requires trimmed reason, returns awaiting payment and never cred
   assert.equal(db.credits.length, 0); assert.equal(db.proofs[0]!.verifiedAmount, undefined); assert.equal(db.proofs[0]!.reviewedBy, 2);
   assert.equal(db.history[0]!['nextStatus'], 'AWAITING_PAYMENT'); assert.equal(db.audits.at(-1)!['auditAction'], 'PAYMENT_PROOF_REJECTED');
   assert.equal('storageKey' in reviewed, false); lockOrder(db);
+});
+
+async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void> {
+  const { recordPayment } = await import('../repositories/admin.repository.js');
+  const { closeDatabase } = await import('../config/database.js');
+  const events: string[] = [];
+  const pool = { connected: true, close: async () => {} };
+  t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
+  t.mock.method(sql.Transaction.prototype, 'begin', async () => { events.push('begin'); });
+  t.mock.method(sql.Transaction.prototype, 'commit', async () => { events.push('commit'); });
+  t.mock.method(sql.Transaction.prototype, 'rollback', async () => { events.push('rollback'); });
+  // Exercise the existing manual-payment repository; replace only SQL execution.
+  t.mock.method(sql.Request.prototype, 'query', async function (this: sql.Request, command: string) {
+    const values = Object.fromEntries(Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]));
+    if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) {
+      assert.match(command, /UPDLOCK,HOLDLOCK/);
+      return { recordset: [{ payment_id: 3, amount_due: 100, amount_paid: 10 }], rowsAffected: [] };
+    }
+    if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
+      db.credits.push({ ...values, source: 'MANUAL' });
+    } else if (/UPDATE dbo\.PAYMENT SET/i.test(command)) {
+      assert.equal(values['paymentId'], 3); assert.equal(values['amount'], 90);
+      db.payment!.amountPaid = 100; db.payment!.status = 'PAID';
+    } else if (/UPDATE i SET status/i.test(command)) {
+      db.invoice!.status = 'PAID';
+    } else if (/INSERT dbo\.ADMIN_AUDIT_LOG/i.test(command)) {
+      db.audits.push(values);
+    } else { throw new Error(`Unexpected manual payment SQL: ${command}`); }
+    return { recordset: [], rowsAffected: [1] };
+  });
+  try {
+    assert.equal(await recordPayment(2, { reservationId: 5, amount: 90, method: 'CASH', paymentDate: '2026-10-02' }), true);
+    assert.deepEqual(events, ['begin', 'commit']); assert.equal(db.booking!.status, 'PAYMENT_SUBMITTED');
+    assert.equal(db.proofs[0]!.status, 'SUBMITTED'); assert.equal(db.credits.length, 1);
+    assert.equal(db.audits[0]!['auditAction'], 'PAYMENT_RECORDED');
+  } finally { await closeDatabase(); }
+}
+
+test('rejection remains possible when manual payment clears the balance between discovery and locks', async t => {
+  const db = new ReviewDb(); db.beforeLocks = () => completeManualPayment(db, t);
+  const result = await db.service().rejectProof(2, proof.id, ' Already paid manually ');
+  assert.equal(result.status, 'REJECTED'); assert.equal(result.rejectionReason, 'Already paid manually');
+  assert.equal(result.paymentTransactionId, undefined); assert.equal(result.verifiedAmount, undefined);
+  assert.equal(db.booking!.status, 'AWAITING_PAYMENT'); assert.equal(db.payment!.amountPaid, 100);
+  assert.equal(db.payment!.status, 'PAID'); assert.equal(db.invoice!.status, 'PAID');
+  assert.equal(db.credits.length, 1); assert.equal(db.credits[0]!['source'], 'MANUAL');
+  assert.equal(db.history.length, 1); assert.equal(db.history[0]!['nextStatus'], 'AWAITING_PAYMENT');
+  assert.equal(db.audits.length, 3); assert.equal(db.audits.at(-1)!['auditAction'], 'PAYMENT_PROOF_REJECTED');
+  const audit = JSON.parse(String(db.audits.at(-1)!['auditNewValues']));
+  assert.equal(audit.amountPaid, 100); assert.equal(audit.verifiedAmount, null); assert.equal(audit.paymentTransactionId, null);
+  assert.deepEqual(db.events, ['begin', 'commit']); lockOrder(db);
+  await assert.rejects(db.service().rejectProof(2, proof.id, 'stale retry'), status(409));
+  assert.equal(db.credits.length, 1); assert.equal(db.history.length, 1);
+});
+
+for (const other of ['verifyProof', 'rejectProof'] as const) {
+  test(`zero-balance rejection has one winner against concurrent ${other} after manual completion`, async t => {
+    const db = new ReviewDb(); await completeManualPayment(db, t); const service = db.service();
+    const results = await Promise.allSettled([
+      service[other](2, proof.id, other === 'verifyProof' ? 90 : 'duplicate receipt'),
+      service.rejectProof(2, proof.id, 'already paid manually')
+    ]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    const loser = results.find(result => result.status === 'rejected'); assert.ok(loser && loser.status === 'rejected'); status(409)(loser.reason);
+    assert.equal(db.proofs[0]!.status, 'REJECTED'); assert.equal(db.booking!.status, 'AWAITING_PAYMENT');
+    assert.equal(db.payment!.amountPaid, 100); assert.equal(db.invoice!.status, 'PAID'); assert.equal(db.credits.length, 1);
+    assert.equal(db.history.length, 1); assert.equal(db.audits.length, 3);
+    const committingLocks = db.queries.filter(query => /UPDLOCK/.test(query.command) && /dbo\.PAYMENT_PROOF/.test(query.command));
+    assert.ok(committingLocks.length >= 1); lockOrder(db);
+  });
+}
+
+test('zero-balance rejection rolls back review writes on audit failure and preserves manual credit', async t => {
+  const db = new ReviewDb(); await completeManualPayment(db, t); db.failOn = 'PAYMENT_PROOF_REJECTED';
+  await assert.rejects(db.service().rejectProof(2, proof.id, 'already paid manually'), /audit failed/);
+  assert.equal(db.proofs[0]!.status, 'SUBMITTED'); assert.equal(db.booking!.status, 'PAYMENT_SUBMITTED');
+  assert.equal(db.payment!.amountPaid, 100); assert.equal(db.invoice!.status, 'PAID'); assert.equal(db.credits.length, 1);
+  assert.equal(db.history.length, 0); assert.equal(db.audits.length, 1); assert.deepEqual(db.events, ['begin', 'rollback']);
+});
+
+test('transaction identity above MAX_SAFE_INTEGER remains exact in FK binding, response, audit and admin reads', async () => {
+  const db = new ReviewDb(); db.transactionId = '9007199254740993';
+  const reviewed = await db.service().verifyProof(2, proof.id, 90);
+  const update = db.queries.find(query => /UPDATE dbo\.PAYMENT_PROOF/.test(query.command)); assert.ok(update);
+  assert.equal(update.params['paymentTransactionId'], '9007199254740993');
+  assert.equal(db.proofs[0]!.paymentTransactionId, '9007199254740993');
+  assert.equal(reviewed.paymentTransactionId, '9007199254740993');
+  assert.equal(JSON.parse(JSON.stringify(reviewed)).paymentTransactionId, '9007199254740993');
+  assert.equal(JSON.parse(String(db.audits.at(-1)!['auditNewValues'])).paymentTransactionId, '9007199254740993');
+  const detail = await db.service().getProofForReview(proof.id); assert.equal(detail.proof.paymentTransactionId, '9007199254740993');
+  const page = await db.service().listPendingProofs({ status: 'VERIFIED' }); assert.equal(page.items[0].paymentTransactionId, '9007199254740993');
+  const insert = db.queries.find(query => /INSERT dbo\.PAYMENT_TRANSACTION/.test(query.command)); assert.ok(insert);
+  assert.match(insert.command, /OUTPUT CONVERT\(varchar\(20\),\s*INSERTED\.payment_transaction_id\) id/i);
+  for (const query of db.queries.filter(query => /FROM dbo\.PAYMENT_PROOF/.test(query.command))) {
+    assert.match(query.command, /CONVERT\(varchar\(20\),\s*payment_transaction_id\) paymentTransactionId/i);
+  }
 });
 
 test('verification permits absent invoice and preserves cancelled invoices', async () => {
@@ -426,8 +526,14 @@ test('admin routes require real admin authentication, validate HTTP inputs and r
     assert.equal((await request('/99')).status, 404);
     const listing = await request(); assert.equal(listing.status, 200); assert.equal(JSON.stringify(await listing.json()).includes('storageKey'), false);
     const detail = await request(`/${proof.id}`); assert.equal(detail.status, 200); assert.equal(JSON.stringify(await detail.json()).includes('private.png'), false);
+    db.transactionId = '9007199254740993';
     const accepted = await request(`/${proof.id}/verify`, { verifiedAmount: 90 }); assert.equal(accepted.status, 200);
+    assert.equal((await accepted.json() as { data: PaymentProofRecord }).data.paymentTransactionId, '9007199254740993');
     assert.equal(db.payment!.amountPaid, 100); assert.equal(db.proofs[0]!.reviewedBy, 2);
+    const reviewedDetail = await request(`/${proof.id}`);
+    assert.equal((await reviewedDetail.json() as { data: { proof: PaymentProofRecord } }).data.proof.paymentTransactionId, '9007199254740993');
+    const reviewedList = await request('?status=VERIFIED');
+    assert.equal((await reviewedList.json() as { data: { items: PaymentProofRecord[] } }).data.items[0]!.paymentTransactionId, '9007199254740993');
     assert.equal((await request(`/${proof.id}/verify`, { verifiedAmount: 90 })).status, 409);
     db = new ReviewDb(); const rejected = await request(`/${proof.id}/reject`, { reason: ' Invalid receipt ' });
     assert.equal(rejected.status, 200); assert.equal(db.booking!.status, 'AWAITING_PAYMENT'); assert.equal(db.payment!.amountPaid, 10);

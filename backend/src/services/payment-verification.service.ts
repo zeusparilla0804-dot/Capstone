@@ -95,9 +95,9 @@ export function createPaymentVerificationService(deps: Dependencies) {
           proof.customerId !== booking.customerId || proof.paymentId !== Number(payment.paymentId) || proof.status !== 'SUBMITTED') throw conflict();
         const dueCents = Math.round(Number(payment.amountDue) * 100), paidCents = Math.round(Number(payment.amountPaid) * 100);
         const outstanding = dueCents - paidCents;
-        if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance. Refresh the booking.');
-        let transactionId: number | undefined, invoiceId: number | undefined;
+        let transactionId: string | undefined, invoiceId: number | undefined;
         if (amount !== undefined) {
+          if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance. Refresh the booking.');
           const cents = Math.round(amount * 100);
           if (cents > outstanding) throw new AppError(409, 'Verified amount exceeds the current outstanding balance. Refresh and correct the amount.');
           if (cents !== Math.round(proof.claimedAmount * 100) && !reason) throw new AppError(400, 'A correction reason is required when the verified amount differs from the claim.');

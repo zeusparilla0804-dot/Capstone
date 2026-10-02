@@ -14,7 +14,7 @@ export interface PaymentProofRecord extends PaymentProofSubmission {
   reservationId: number;
   customerId: number;
   paymentId?: number;
-  paymentTransactionId?: number;
+  paymentTransactionId?: string;
   invoiceId?: number;
   storageKey: string;
   originalFilename: string;

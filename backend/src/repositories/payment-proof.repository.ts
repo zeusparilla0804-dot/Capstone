@@ -5,7 +5,7 @@ import type { StoredProof } from '../services/proof-storage.service.js';
 import type { BookingStatus, PageResult, ProofReviewQuery } from '../types/admin.types.js';
 
 const columns = `payment_proof_id id,reservation_id reservationId,customer_id customerId,
-  payment_id paymentId,payment_transaction_id paymentTransactionId,invoice_id invoiceId,
+  payment_id paymentId,CONVERT(varchar(20),payment_transaction_id) paymentTransactionId,invoice_id invoiceId,
   method,claimed_amount claimedAmount,transaction_reference transactionReference,
   payment_date paymentDate,storage_key storageKey,original_filename originalFilename,
   mime_type mimeType,byte_size byteSize,status,rejection_reason rejectionReason,
@@ -17,7 +17,7 @@ function record(row: PaymentProofRecord): PaymentProofRecord {
     ...row,
     id: Number(row.id), reservationId: Number(row.reservationId), customerId: Number(row.customerId),
     paymentId: row.paymentId == null ? undefined : Number(row.paymentId),
-    paymentTransactionId: row.paymentTransactionId == null ? undefined : Number(row.paymentTransactionId),
+    paymentTransactionId: row.paymentTransactionId ?? undefined,
     invoiceId: row.invoiceId == null ? undefined : Number(row.invoiceId),
     claimedAmount: Number(row.claimedAmount), byteSize: Number(row.byteSize),
     transactionReference: row.transactionReference ?? undefined,
@@ -60,7 +60,7 @@ export async function insertPaymentProof(customerId: number, reservationId: numb
     .query<PaymentProofRecord>(`INSERT dbo.PAYMENT_PROOF(reservation_id,customer_id,payment_id,method,claimed_amount,
       transaction_reference,payment_date,storage_key,original_filename,mime_type,byte_size,status)
       OUTPUT INSERTED.payment_proof_id id,INSERTED.reservation_id reservationId,INSERTED.customer_id customerId,
-      INSERTED.payment_id paymentId,INSERTED.payment_transaction_id paymentTransactionId,INSERTED.invoice_id invoiceId,
+      INSERTED.payment_id paymentId,CONVERT(varchar(20),INSERTED.payment_transaction_id) paymentTransactionId,INSERTED.invoice_id invoiceId,
       INSERTED.method,INSERTED.claimed_amount claimedAmount,INSERTED.transaction_reference transactionReference,
       INSERTED.payment_date paymentDate,INSERTED.storage_key storageKey,INSERTED.original_filename originalFilename,
       INSERTED.mime_type mimeType,INSERTED.byte_size byteSize,INSERTED.status,INSERTED.rejection_reason rejectionReason,
@@ -94,15 +94,15 @@ export async function lockedProof(proofId: number, request: sql.Request): Promis
 }
 
 export async function insertProofCredit(adminId: number, paymentId: number, proof: PaymentProofRecord,
-  amount: number, request: sql.Request): Promise<number> {
+  amount: number, request: sql.Request): Promise<string> {
   const result = await request.replaceInput('adminId', sql.Int, adminId).replaceInput('paymentId', sql.Int, paymentId)
     .replaceInput('amount', sql.Decimal(12, 2), amount)
     .replaceInput('method', sql.NVarChar(50), proof.method === 'E_WALLET' ? 'E-WALLET' : proof.method)
     .replaceInput('reference', sql.NVarChar(150), proof.transactionReference ?? null)
     .replaceInput('paymentDate', sql.DateTime2, new Date(`${proof.paymentDate}T00:00:00.000Z`))
-    .query<{ id: number }>(`INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
-      OUTPUT INSERTED.payment_transaction_id id VALUES(@paymentId,@adminId,@amount,@method,@reference,@paymentDate)`);
-  return Number(result.recordset[0]!.id);
+    .query<{ id: string }>(`INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
+      OUTPUT CONVERT(varchar(20),INSERTED.payment_transaction_id) id VALUES(@paymentId,@adminId,@amount,@method,@reference,@paymentDate)`);
+  return result.recordset[0]!.id;
 }
 
 export async function creditProofPayment(request: sql.Request): Promise<boolean> {
@@ -127,7 +127,7 @@ export async function setProofInvoiceStatus(invoiceId: number, status: 'PAID' | 
 }
 
 export async function markProofReviewed(input: { proofId: number; reservationId: number; adminId: number;
-  status: 'VERIFIED' | 'REJECTED'; reason?: string; amount?: number; transactionId?: number; invoiceId?: number }, request: sql.Request): Promise<boolean> {
+  status: 'VERIFIED' | 'REJECTED'; reason?: string; amount?: number; transactionId?: string; invoiceId?: number }, request: sql.Request): Promise<boolean> {
   const result = await request.replaceInput('proofId', sql.BigInt, input.proofId)
     .replaceInput('reservationId', sql.Int, input.reservationId).replaceInput('adminId', sql.Int, input.adminId)
     .replaceInput('reviewStatus', sql.NVarChar(30), input.status)
