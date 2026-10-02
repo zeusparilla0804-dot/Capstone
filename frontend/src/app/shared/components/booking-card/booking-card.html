@@ -13,6 +13,7 @@
   </div>
   <div class="booking-card__actions">
     @if (booking().invoiceId) { <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', booking().invoiceId]">View Invoice</a> }
+    @if (booking().status === 'awaiting_payment' || booking().status === 'payment_submitted') { <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', booking().id, 'payment']">{{ booking().status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}</a> }
     @if (booking().status === 'pending') { <button class="btn btn-tertiary booking-card__cancel" type="button" (click)="requestCancellation($event)">Cancel Booking</button> }
   </div>
 </article>

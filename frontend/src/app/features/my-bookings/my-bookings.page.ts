@@ -36,7 +36,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected readonly navItems: readonly DashboardNavItem[] = [
     { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
     { label: 'My Bookings', route: '/my-bookings', icon: 'calendar' },
-    { label: 'Billing & Payments', route: '/invoice/booking-001', icon: 'wallet' },
+    { label: 'Billing & Payments', route: '/my-bookings', icon: 'wallet', showActiveState: false },
     { label: 'Profile', route: '/dashboard', icon: 'profile', showActiveState: false },
     { label: 'Logout', route: '/', icon: 'logout', isAction: true },
   ];

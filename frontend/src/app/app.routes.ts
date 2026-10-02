@@ -1,0 +1,147 @@
+import { Routes } from '@angular/router';
+import { authGuard } from './core/guards/auth.guard';
+import { adminGuard } from './core/guards/admin.guard';
+
+export const routes: Routes = [
+  {
+    path: '',
+    loadComponent: () => import('./features/home/home.page').then((m) => m.HomePageComponent),
+    title: 'LA Chef | Catering Services',
+  },
+  {
+    path: 'packages',
+    loadComponent: () =>
+      import('./features/packages/packages.page').then((m) => m.PackagesPageComponent),
+    title: 'Packages | LA Chef',
+  },
+  {
+    path: 'book-event',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/booking/booking.page').then((m) => m.BookingPageComponent),
+    title: 'Book an Event | LA Chef',
+  },
+  {
+    path: 'events',
+    loadComponent: () => import('./features/events/events.page').then((m) => m.EventsPageComponent),
+    title: 'Events | LA Chef',
+  },
+  {
+    path: 'checkout',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/checkout/checkout.page').then((m) => m.CheckoutPageComponent),
+    title: 'Checkout | LA Chef',
+  },
+  {
+    path: 'login',
+    loadComponent: () => import('./features/auth/auth.page').then((m) => m.AuthPageComponent),
+    title: 'Sign In | LA Chef',
+  },
+  {
+    path: 'my-bookings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/my-bookings/my-bookings.page').then((m) => m.MyBookingsPageComponent),
+    title: 'My Bookings | LA Chef',
+  },
+  {
+    path: 'my-bookings/:id/payment',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/payment-proof/payment-proof.page').then((m) => m.PaymentProofPageComponent),
+    title: 'Payment Proof | LA Chef',
+  },
+  {
+    path: 'dashboard',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/customer-dashboard/customer-dashboard.page').then(
+        (m) => m.CustomerDashboardPageComponent,
+      ),
+    title: 'Dashboard | LA Chef',
+  },
+  {
+    path: 'admin/login',
+    loadComponent: () =>
+      import('./features/admin-login/admin-login.page').then((m) => m.AdminLoginPage),
+    title: 'Admin Sign In | LA Chef',
+  },
+  {
+    path: 'admin/dashboard',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-dashboard/admin-dashboard.page').then(
+        (m) => m.AdminDashboardPageComponent,
+      ),
+    title: 'Admin Dashboard | LA Chef',
+  },
+  {
+    path: 'admin/bookings',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-bookings/admin-bookings.page').then((m) => m.AdminBookingsPage),
+    title: 'Bookings | LA Chef Admin',
+  },
+  {
+    path: 'admin/customers',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-customers/admin-customers.page').then((m) => m.AdminCustomersPage),
+    title: 'Customers | LA Chef Admin',
+  },
+  {
+    path: 'admin/packages',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-packages/admin-packages.page').then((m) => m.AdminPackagesPage),
+    title: 'Packages | LA Chef Admin',
+  },
+  {
+    path: 'admin/add-ons',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-addons/admin-addons.page').then((m) => m.AdminAddOnsPage),
+    title: 'Add-ons | LA Chef Admin',
+  },
+  {
+    path: 'admin/payments',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-payments/admin-payments.page').then((m) => m.AdminPaymentsPage),
+    title: 'Payments | LA Chef Admin',
+  },
+  {
+    path: 'admin/invoices/:id',
+    canActivate: [adminGuard],
+    data: { admin: true },
+    loadComponent: () =>
+      import('./features/invoice/invoice.page').then((m) => m.InvoicePageComponent),
+    title: 'Invoice | LA Chef Admin',
+  },
+  {
+    path: 'invoice/:id',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/invoice/invoice.page').then((m) => m.InvoicePageComponent),
+    title: 'Invoice | LA Chef',
+  },
+  {
+    path: 'about',
+    loadComponent: () =>
+      import('./features/home/simple-info.page').then((m) => m.SimpleInfoPageComponent),
+    title: 'About | LA Chef',
+  },
+  {
+    path: 'contact',
+    loadComponent: () =>
+      import('./features/home/simple-info.page').then((m) => m.SimpleInfoPageComponent),
+    title: 'Contact | LA Chef',
+  },
+  {
+    path: '**',
+    loadComponent: () =>
+      import('./features/not-found/not-found.page').then((m) => m.NotFoundPageComponent),
+    title: 'Page Not Found | LA Chef',
+  },
+];

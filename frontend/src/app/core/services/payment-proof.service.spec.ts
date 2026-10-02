@@ -1,0 +1,65 @@
+import { HttpEventType } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+import { environment } from '../../../environments/environment';
+import { PaymentProofService } from './payment-proof.service';
+
+describe('PaymentProofService', () => {
+  let service: PaymentProofService;
+  let http: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    service = TestBed.inject(PaymentProofService);
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => http.verify());
+
+  it('sends the exact multipart fields and enables upload progress', () => {
+    const file = new File(['proof'], 'gcash.png', { type: 'image/png' });
+    const events: number[] = [];
+    service.submitProof('42', {
+      method: 'E_WALLET', claimedAmount: 1250.5, transactionReference: 'GCASH-42', paymentDate: '2026-10-02'
+    }, file).subscribe(event => events.push(event.type));
+
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings/42/payment-proofs`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.reportProgress).toBe(true);
+    const body = request.request.body as FormData;
+    expect(body.get('method')).toBe('E_WALLET');
+    expect(body.get('claimedAmount')).toBe('1250.5');
+    expect(body.get('transactionReference')).toBe('GCASH-42');
+    expect(body.get('paymentDate')).toBe('2026-10-02');
+    const uploaded = body.get('proof') as File;
+    expect(uploaded).toBeInstanceOf(File);
+    expect(uploaded.name).toBe('gcash.png');
+    expect(uploaded.type).toBe('image/png');
+    expect(uploaded.size).toBe(file.size);
+    request.event({ type: HttpEventType.UploadProgress, loaded: 3, total: 5 });
+    request.flush({ success: true, data: { id: 1, reservationId: 42, customerId: 7, method: 'E_WALLET',
+      claimedAmount: 1250.5, transactionReference: 'GCASH-42', paymentDate: '2026-10-02', originalFilename: 'gcash.png',
+      mimeType: 'image/png', byteSize: 5, status: 'SUBMITTED', createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z' } });
+    expect(events).toContain(HttpEventType.UploadProgress);
+    expect(events).toContain(HttpEventType.Response);
+  });
+
+  it('omits the optional reference for cash and maps proof history safely', () => {
+    const file = new File(['proof'], 'cash.webp', { type: 'image/webp' });
+    service.submitProof('8', { method: 'CASH', claimedAmount: 500, paymentDate: '2026-10-02' }, file).subscribe();
+    const submission = http.expectOne(`${environment.apiBaseUrl}/bookings/8/payment-proofs`);
+    expect((submission.request.body as FormData).has('transactionReference')).toBe(false);
+    submission.flush({ success: true, data: { id: 2, reservationId: 8, customerId: 7, method: 'CASH', claimedAmount: 500,
+      paymentDate: '2026-10-02', originalFilename: 'cash.webp', mimeType: 'image/webp', byteSize: 5, status: 'SUBMITTED',
+      createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z' } });
+
+    let status = '';
+    service.listProofs('8').subscribe(proofs => { status = proofs[0]!.status; });
+    http.expectOne(`${environment.apiBaseUrl}/bookings/8/payment-proofs`).flush({ success: true, data: [{ id: 2,
+      reservationId: 8, customerId: 7, method: 'CASH', claimedAmount: 500, paymentDate: '2026-10-02',
+      originalFilename: 'cash.webp', mimeType: 'image/webp', byteSize: 5, status: 'SUBMITTED',
+      createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z' }] });
+    expect(status).toBe('submitted');
+  });
+});
