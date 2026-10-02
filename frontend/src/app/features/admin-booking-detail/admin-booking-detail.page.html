@@ -1,0 +1,73 @@
+<app-admin-shell title="Booking detail" description="Review the event record, payment position, and complete the next valid action.">
+  <a admin-actions class="admin-back-link" routerLink="/admin/bookings">&larr; All bookings</a>
+
+  @if (loading()) {
+    <p class="data-state" role="status">Loading booking...</p>
+  } @else if (error()) {
+    <section class="detail-state" role="alert">
+      <h2>Booking unavailable</h2><p>{{ error() }}</p>
+      <button class="btn btn-secondary" type="button" (click)="load()">Try again</button>
+    </section>
+  } @else if (booking(); as item) {
+    <section class="booking-lead" aria-labelledby="booking-reference">
+      <div><p class="section-label">Booking record</p><h2 id="booking-reference">{{ item.reference }}</h2><p>{{ item.eventType }} for {{ item.customerName }}</p></div>
+      <app-status-badge [status]="item.status" />
+    </section>
+
+    @if (feedback()) { <p class="admin-feedback" role="status">{{ feedback() }}</p> }
+    @if (actionError()) { <p class="admin-action-error" role="alert">{{ actionError() }}</p> }
+
+    <section class="financial-strip" aria-label="Booking financial summary">
+      <dl>
+        <div><dt>Booking total</dt><dd>{{ item.total | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div><dt>Verified payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div class="balance"><dt>Outstanding</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div><dt>Invoice</dt><dd>{{ item.invoiceNumber || 'Not issued' }}</dd><span>{{ item.invoiceStatus || 'No invoice status' }}</span></div>
+      </dl>
+      @if (!item.invoiceId && item.status === 'APPROVED') { <button class="btn btn-secondary" type="button" (click)="issueInvoice()" [disabled]="mutationPending()">Issue invoice</button> }
+      @if (item.invoiceId) { <a class="btn btn-secondary" [routerLink]="['/admin/invoices', item.invoiceId]">View invoice</a> }
+    </section>
+
+    <div class="detail-grid">
+      <section class="detail-section" aria-labelledby="event-details-title">
+        <div class="section-heading"><span>01</span><div><h2 id="event-details-title">Event details</h2><p>The confirmed information supplied with this booking.</p></div></div>
+        <dl class="fact-list">
+          <div><dt>Date</dt><dd>{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div>
+          <div><dt>Time</dt><dd>{{ item.eventTime || 'Not provided' }}</dd></div>
+          <div><dt>Venue</dt><dd>{{ item.venue || 'Not provided' }}</dd></div>
+          <div><dt>Guests</dt><dd>{{ item.guestCount }}</dd></div>
+          <div><dt>Package</dt><dd>{{ item.packageName || 'Not assigned' }}</dd></div>
+          @for (addOn of item.addOns; track addOn.name) { <div><dt>Add-on</dt><dd>{{ addOn.name }} · {{ addOn.price | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div> }
+        </dl>
+      </section>
+      <section class="detail-section" aria-labelledby="customer-details-title">
+        <div class="section-heading"><span>02</span><div><h2 id="customer-details-title">Customer</h2><p>Contact details for event coordination.</p></div></div>
+        <dl class="fact-list"><div><dt>Name</dt><dd>{{ item.customerName }}</dd></div><div><dt>Email</dt><dd><a [href]="'mailto:' + item.email">{{ item.email || 'Not provided' }}</a></dd></div><div><dt>Phone</dt><dd><a [href]="'tel:' + item.phone">{{ item.phone || 'Not provided' }}</a></dd></div></dl>
+      </section>
+    </div>
+
+    <section class="operations" aria-labelledby="booking-actions-title">
+      <div><p class="section-label">Next action</p><h2 id="booking-actions-title">Move this booking forward</h2><p>Only actions allowed from the current status are available.</p></div>
+      <div class="action-list">
+        @for (action of availableActions(); track action.status) { <button type="button" class="btn" [class.btn-primary]="action.tone === 'primary'" [class.btn-secondary]="action.tone !== 'primary'" [class.danger-action]="action.tone === 'danger'" (click)="chooseAction(action.status)" [disabled]="mutationPending()">{{ action.label }}</button> }
+        @empty { <p>No manual actions are available for this status.</p> }
+      </div>
+    </section>
+
+    @if (pendingAction(); as action) {
+      <section class="action-confirmation" aria-labelledby="confirm-action-title">
+        <div><p class="section-label">Confirmation</p><h2 id="confirm-action-title">{{ action.label }}</h2><p>{{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }}</p></div>
+        @if (action.reasonRequired) { <label for="action-reason">Reason<textarea id="action-reason" [(ngModel)]="actionReason" maxlength="1000" rows="4"></textarea></label> }
+        <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()">{{ mutationPending() ? 'Updating...' : 'Confirm action' }}</button></div>
+      </section>
+    }
+
+    <section class="history-section" aria-labelledby="history-title">
+      <div class="section-heading"><span>03</span><div><h2 id="history-title">Status history</h2><p>An auditable timeline of booking decisions.</p></div></div>
+      <ol class="history-list">
+        @for (entry of item.statusHistory; track entry.id) { <li><div class="history-marker" aria-hidden="true"></div><div><div class="history-row"><strong>{{ entry.nextStatus.replaceAll('_', ' ') }}</strong><time>{{ entry.createdAt | date:'medium':'UTC' }}</time></div><p>{{ historyTitle(entry) }}</p>@if (entry.reason) { <blockquote>{{ entry.reason }}</blockquote> }</div></li> }
+        @empty { <li class="empty-history">No history entries are available.</li> }
+      </ol>
+    </section>
+  }
+</app-admin-shell>

@@ -21,7 +21,7 @@
       @if (result.items.length) {
         <div class="table-scroll">
           <table class="admin-table">
-            <thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Package</th><th>Total</th><th>Status</th><th>Update</th><th>Invoice</th></tr></thead>
+            <thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Package</th><th>Total</th><th>Status</th><th>Review</th><th>Update</th><th>Invoice</th></tr></thead>
             <tbody>
               @for (item of result.items; track item.id) {
                 <tr>
@@ -30,6 +30,7 @@
                   <td>{{ item.guestCount }}</td><td>{{ item.packageName || 'Not assigned' }}</td>
                   <td class="is-number">{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
                   <td><app-status-badge [status]="item.status" /></td>
+                  <td><a class="btn btn-tertiary" [routerLink]="['/admin/bookings', item.id]">View details</a></td>
                   <td>
                     @if (actionsFor(item.status).length) {
                       <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
@@ -45,7 +46,7 @@
                 </tr>
                 @if (pendingAction(); as action) {
                   @if (action.booking.id === item.id) {
-                    <tr class="admin-status-reason-row"><td colspan="10">
+                    <tr class="admin-status-reason-row"><td colspan="11">
                       <div class="admin-status-reason">
                         <label [for]="'status-reason-' + item.id">Reason for {{ action.status.toLowerCase() }} {{ item.reference }}</label>
                         <textarea [id]="'status-reason-' + item.id" [(ngModel)]="actionReason" maxlength="1000" rows="3" required></textarea>

@@ -1,0 +1,42 @@
+<app-admin-shell title="Payment proof review" description="Compare the submitted receipt with the booking balance before recording a verified payment.">
+  <a admin-actions class="admin-back-link" routerLink="/admin/payments">&larr; Payment queue</a>
+
+  @if (loading()) {
+    <p class="data-state" role="status">Loading payment proof...</p>
+  } @else if (error()) {
+    <section class="review-state" role="alert"><h2>Proof unavailable</h2><p>{{ error() }}</p><button class="btn btn-secondary" type="button" (click)="load()">Try again</button></section>
+  } @else if (detail(); as record) {
+    <section class="review-lead">
+      <div><p class="section-label">{{ record.booking.reference }}</p><h2>{{ record.customer.name }}</h2><p>{{ record.customer.email }} · Event {{ record.booking.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</p></div>
+      <app-status-badge [status]="record.proof.status" />
+    </section>
+    @if (feedback()) { <p class="admin-feedback" role="status">{{ feedback() }}</p> }
+    @if (reviewError()) { <p class="admin-action-error" role="alert">{{ reviewError() }}</p> }
+
+    <div class="review-grid">
+      <section class="proof-viewer" aria-labelledby="proof-image-title">
+        <div class="section-heading"><span>01</span><div><h2 id="proof-image-title">Submitted receipt</h2><p>Private customer upload. Inspect the image and transaction details together.</p></div></div>
+        <div class="image-stage">@if (!imageUnavailable()) { <img [src]="record.proof.fileUrl" alt="Customer payment receipt" (error)="imageUnavailable.set(true)" /> } @else { <div class="image-fallback" role="status"><strong>Preview unavailable</strong><p>Open the original file to inspect it.</p></div> }</div>
+        <a class="original-link" [href]="record.proof.fileUrl" target="_blank" rel="noopener">Open original image <span aria-hidden="true">↗</span></a>
+      </section>
+      <section class="proof-facts" aria-labelledby="proof-details-title">
+        <div class="section-heading"><span>02</span><div><h2 id="proof-details-title">Submission details</h2><p>Values declared by the customer.</p></div></div>
+        <dl><div><dt>Claimed amount</dt><dd>{{ record.proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Method</dt><dd>{{ methodLabel(record.proof.method) }}</dd></div><div><dt>Payment date</dt><dd>{{ record.proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Reference</dt><dd>{{ record.proof.transactionReference || 'Not provided' }}</dd></div><div><dt>File</dt><dd>{{ record.proof.originalFilename }}</dd></div><div><dt>File size</dt><dd>{{ fileSize(record.proof.byteSize) }}</dd></div></dl>
+      </section>
+    </div>
+
+    <section class="balance-strip" aria-label="Payment and invoice position"><dl><div><dt>Invoice total</dt><dd>{{ (record.invoice?.totalAmount ?? record.payment?.amountDue ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.invoice?.number || 'No invoice' }}</span></div><div><dt>Already verified</dt><dd>{{ (record.payment?.amountPaid ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.payment?.status || 'No payments' }}</span></div><div class="balance"><dt>Outstanding balance</dt><dd>{{ (record.payment?.outstandingBalance ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Before this review</span></div></dl></section>
+
+    @if (canReview()) {
+      <section class="review-actions" aria-labelledby="review-actions-title">
+        <div class="review-copy"><p class="section-label">Decision</p><h2 id="review-actions-title">Complete the review</h2><p>Verification credits the booking balance. Rejection returns the booking to awaiting payment.</p></div>
+        <div class="decision-tools">
+          <div class="decision-column verify-column"><h3>Verify payment</h3><label for="verified-amount">Verified amount<input id="verified-amount" type="number" min="0.01" step="0.01" inputmode="decimal" [ngModel]="verifiedAmount()" (ngModelChange)="verifiedAmount.set(+$event)" /></label>@if (amountCorrected()) { <label for="correction-reason">Correction reason<textarea id="correction-reason" [(ngModel)]="correctionReason" maxlength="1000" rows="3" placeholder="Why does the verified amount differ?"></textarea></label> }<button data-testid="verify-proof" class="btn btn-primary" type="button" (click)="verify()" [disabled]="mutationPending()">{{ mutationPending() ? 'Processing...' : 'Verify and record payment' }}</button></div>
+          <div class="decision-column reject-column"><h3>Reject proof</h3><label for="rejection-reason">Reason<textarea id="rejection-reason" [(ngModel)]="rejectionReason" maxlength="1000" rows="3" placeholder="Tell the customer what needs correction"></textarea></label><button class="btn btn-secondary danger-action" type="button" (click)="reject()" [disabled]="mutationPending()">Reject proof</button></div>
+        </div>
+      </section>
+    } @else {
+      <section class="review-complete"><p class="section-label">Review complete</p><h2>This proof is {{ record.proof.status.toLowerCase() }}.</h2>@if (record.proof.verifiedAmount) { <p>{{ record.proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }} was recorded after review.</p> }@if (record.proof.rejectionReason) { <blockquote>{{ record.proof.rejectionReason }}</blockquote> }</section>
+    }
+  }
+</app-admin-shell>

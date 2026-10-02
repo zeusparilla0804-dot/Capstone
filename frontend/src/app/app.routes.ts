@@ -84,6 +84,15 @@ export const routes: Routes = [
     title: 'Bookings | LA Chef Admin',
   },
   {
+    path: 'admin/bookings/:id',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-booking-detail/admin-booking-detail.page').then(
+        (m) => m.AdminBookingDetailPage,
+      ),
+    title: 'Booking Detail | LA Chef Admin',
+  },
+  {
     path: 'admin/customers',
     canActivate: [adminGuard],
     loadComponent: () =>
@@ -110,6 +119,15 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/admin-payments/admin-payments.page').then((m) => m.AdminPaymentsPage),
     title: 'Payments | LA Chef Admin',
+  },
+  {
+    path: 'admin/payments/proofs/:id',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-payment-review/admin-payment-review.page').then(
+        (m) => m.AdminPaymentReviewPage,
+      ),
+    title: 'Payment Proof Review | LA Chef Admin',
   },
   {
     path: 'admin/invoices/:id',

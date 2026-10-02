@@ -1,7 +1,8 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
+import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AdminAddOn, AdminBooking, AdminCustomer, AdminDashboard, AdminPackage, AdminPayment, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
+import { AdminAddOn, AdminBooking, AdminBookingDetail, AdminCustomer, AdminDashboard, AdminPackage, AdminPayment, AdminPaymentProof, AdminPaymentProofDetail, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
@@ -11,6 +12,7 @@ export class AdminService {
 
   dashboard() { return this.http.get<ApiResponse<AdminDashboard>>(`${this.base}/dashboard`, this.options); }
   bookings(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminBooking>>>(`${this.base}/bookings`, { ...this.options, params: this.params(filters) }); }
+  booking(id: number) { return this.http.get<ApiResponse<AdminBookingDetail>>(`${this.base}/bookings/${id}`, this.options); }
   updateBookingStatus(id: number, status: string, reason?: string) {
     return this.http.patch<ApiResponse<never>>(`${this.base}/bookings/${id}/status`, reason === undefined ? { status } : { status, reason }, this.options);
   }
@@ -22,6 +24,11 @@ export class AdminService {
   addOns() { return this.http.get<ApiResponse<readonly AdminAddOn[]>>(`${this.base}/add-ons`, this.options); }
   saveAddOn(value: Omit<AdminAddOn, 'id'>, id?: number) { return id ? this.http.put(`${this.base}/add-ons/${id}`, value, this.options) : this.http.post(`${this.base}/add-ons`, value, this.options); }
   payments(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminPayment>>>(`${this.base}/payments`, { ...this.options, params: this.params(filters) }); }
+  paymentProofs(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminPaymentProof>>>(`${this.base}/payment-proofs`, { ...this.options, params: this.params(filters) }); }
+  paymentProof(id: string) { return this.http.get<ApiResponse<AdminPaymentProofDetail>>(`${this.base}/payment-proofs/${id}`, this.options).pipe(map(response => ({ ...response, data: { ...response.data, proof: { ...response.data.proof, fileUrl: this.proofFileUrl(response.data.proof.fileUrl) } } }))); }
+  verifyPaymentProof(id: string, verifiedAmount: number, reason?: string) { return this.http.post<ApiResponse<AdminPaymentProof>>(`${this.base}/payment-proofs/${id}/verify`, reason ? { verifiedAmount, reason } : { verifiedAmount }, this.options); }
+  rejectPaymentProof(id: string, reason: string) { return this.http.post<ApiResponse<AdminPaymentProof>>(`${this.base}/payment-proofs/${id}/reject`, { reason }, this.options); }
   recordPayment(value: object) { return this.http.post(`${this.base}/payments`, value, this.options); }
+  private proofFileUrl(value: string) { if (/^https?:\/\//i.test(value)) return value; if (/^https?:\/\//i.test(environment.apiBaseUrl)) return `${new URL(environment.apiBaseUrl).origin}${value.startsWith('/') ? '' : '/'}${value}`; return value; }
   private params(values: Record<string, string | number>) { let params = new HttpParams(); Object.entries(values).forEach(([key, value]) => { if (value !== '' && value !== undefined) params = params.set(key, String(value)); }); return params; }
 }
