@@ -1,0 +1,54 @@
+<header class="dashboard-mobile-header">
+  <a class="dashboard-mobile-header__brand" routerLink="/" aria-label="LA Chef home"><span>LA</span> Chef</a>
+  <button type="button" [attr.aria-expanded]="isOpen()" aria-controls="dashboard-navigation" aria-label="Toggle dashboard navigation" (click)="toggleMenu()">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<button class="dashboard-sidebar__backdrop" [class.is-open]="isOpen()" type="button" aria-label="Close dashboard navigation" (click)="closeMenu()"></button>
+
+<aside id="dashboard-navigation" class="dashboard-sidebar" [class.is-open]="isOpen()">
+  <div class="dashboard-sidebar__top"><a class="dashboard-sidebar__brand" routerLink="/" (click)="closeMenu()"><span>LA</span> Chef</a><button class="dashboard-sidebar__close" type="button" aria-label="Close dashboard navigation" (click)="closeMenu()"><span aria-hidden="true">&times;</span></button></div>
+
+  <div class="dashboard-sidebar__profile">
+    <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ title().charAt(0) }}</div>
+    <div><strong>{{ title() }}</strong><span>{{ subtitle() }}</span></div>
+  </div>
+
+  <nav aria-label="Dashboard navigation">
+    <div class="dashboard-sidebar__primary-nav">
+      @for (item of navItems(); track item.label) {
+        @if (!item.isAction) {
+          <a [routerLink]="item.route" [routerLinkActive]="item.showActiveState === false ? [] : ['is-active']" [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' || item.route === '/admin/dashboard' }" [class.has-icon]="item.icon" (click)="closeMenu()">
+            @if (item.icon) { <ng-container [ngTemplateOutlet]="navIcon" [ngTemplateOutletContext]="{ icon: item.icon }" /> }
+            <span>{{ item.label }}</span>
+          </a>
+        }
+      }
+    </div>
+
+    @for (item of navItems(); track item.label) {
+      @if (item.isAction) {
+        <button class="dashboard-sidebar__action" type="button" [class.has-icon]="item.icon" (click)="runAction(item)">
+          @if (item.icon) { <ng-container [ngTemplateOutlet]="navIcon" [ngTemplateOutletContext]="{ icon: item.icon }" /> }
+          <span>{{ item.label }}</span>
+        </button>
+      }
+    }
+  </nav>
+</aside>
+
+<ng-template #navIcon let-icon="icon">
+  <svg class="dashboard-sidebar__icon" viewBox="0 0 24 24" aria-hidden="true">
+    @switch (icon) {
+      @case ('dashboard') { <path d="M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z" /> }
+      @case ('calendar') { <path d="M7 3v3m10-3v3M4.5 9h15M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" /> }
+      @case ('wallet') { <path d="M4 6.5h14a2 2 0 0 1 2 2V19H4V6.5Zm0 0V5a1 1 0 0 1 1-1h12v2.5m0 5.5h3m-3 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z" /> }
+      @case ('profile') { <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0" /> }
+      @case ('mail') { <path d="M4 6h16v12H4V6Zm0 1 8 6 8-6" /> }
+      @case ('audit') { <path d="M7 4h10v16H7V4Zm3-2h4v4h-4V2Zm0 8h4m-4 4h4" /> }
+      @case ('catalog') { <path d="M5 4h6v7H5V4Zm8 0h6v7h-6V4ZM5 13h6v7H5v-7Zm8 0h6v7h-6v-7Z" /> }
+      @case ('logout') { <path d="M10 5H5v14h5m5-4 4-3-4-3m4 3H9" /> }
+    }
+  </svg>
+</ng-template>

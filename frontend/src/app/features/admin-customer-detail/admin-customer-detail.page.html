@@ -1,0 +1,24 @@
+<app-admin-shell title="Customer record" description="Profile, booking history, invoices, and verified payment transactions.">
+  <a admin-actions class="admin-back-link" routerLink="/admin/customers">&larr; All customers</a>
+  @if (error()) { <p class="admin-action-error" role="alert">{{ error() }}</p> }
+  @if (profileLoading()) { <p class="data-state" role="status">Loading customer...</p> }
+  @else if (profile(); as customer) {
+    <section class="customer-lead"><div><p class="section-label">Customer #{{ customer.id }}</p><h2>{{ customer.firstName }} {{ customer.lastName }}</h2><p>Customer since {{ customer.createdAt | date:'MMMM y':'UTC' }}</p></div><address><a [href]="'mailto:' + customer.email">{{ customer.email }}</a><a [href]="'tel:' + customer.phone">{{ customer.phone }}</a><span>{{ customer.address || 'No address recorded' }}</span></address></section>
+
+    <section class="history-section" aria-labelledby="booking-history-title"><header class="section-header"><div><span>01</span><div><h2 id="booking-history-title">Booking history</h2><p>Direct customer-scoped records, newest first.</p></div></div>@if(bookings();as page){<strong>{{ page.totalItems }} total</strong>}</header>
+      @if (bookingsLoading()) { <p class="history-state" role="status">Loading bookings...</p> }
+      @else if (bookings(); as page) {
+        <div class="record-list">@for (item of page.items; track item.id) { <article><div class="record-main"><p class="record-reference">{{ item.reference }}</p><h3>{{ item.eventType }}</h3><p>{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} · {{ item.guestCount }} guests</p></div><div class="record-money"><span>Total</span><strong>{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong><small>{{ item.outstandingBalance | currency:'PHP':'symbol-narrow':'1.0-0' }} outstanding</small></div><app-status-badge [status]="item.status"/><div class="record-actions"><a [routerLink]="['/admin/bookings', item.id]">View booking</a>@if(item.invoiceId){<a [routerLink]="['/admin/invoices', item.invoiceId]">View invoice</a>}</div></article> } @empty { <p class="history-state">No bookings found.</p> }</div>
+        @if(page.totalPages > 1){<footer class="admin-pagination"><span>Page {{ page.page }} of {{ page.totalPages }}</span><div><button class="btn btn-secondary btn-sm" type="button" [disabled]="page.page <= 1" (click)="loadBookings(page.page - 1)">Previous</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="page.page >= page.totalPages" (click)="loadBookings(page.page + 1)">Next</button></div></footer>}
+      }
+    </section>
+
+    <section class="history-section" aria-labelledby="payment-history-title"><header class="section-header"><div><span>02</span><div><h2 id="payment-history-title">Verified payments</h2><p>Exact recorded transactions; submitted proofs are not shown here.</p></div></div>@if(payments();as page){<strong>{{ page.totalItems }} total</strong>}</header>
+      @if (paymentsLoading()) { <p class="history-state" role="status">Loading payments...</p> }
+      @else if (payments(); as page) {
+        <div class="payment-list">@for (item of page.items; track item.id) { <article><div><span>Transaction {{ item.id }}</span><strong>{{ item.bookingReference }}</strong></div><div><span>Method</span><strong>{{ item.paymentMethod.replaceAll('_', ' ') }}</strong></div><div><span>Payment date</span><strong>{{ item.paymentDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</strong></div><div class="payment-amount"><span>Amount</span><strong>{{ item.amount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong></div></article> } @empty { <p class="history-state">No verified payments found.</p> }</div>
+        @if(page.totalPages > 1){<footer class="admin-pagination"><span>Page {{ page.page }} of {{ page.totalPages }}</span><div><button class="btn btn-secondary btn-sm" type="button" [disabled]="page.page <= 1" (click)="loadPayments(page.page - 1)">Previous</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="page.page >= page.totalPages" (click)="loadPayments(page.page + 1)">Next</button></div></footer>}
+      }
+    </section>
+  }
+</app-admin-shell>

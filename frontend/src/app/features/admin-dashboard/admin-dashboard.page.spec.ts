@@ -1,0 +1,51 @@
+import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { of } from 'rxjs';
+import type { AdminDashboard } from '../../core/models';
+import { AdminAuthService } from '../../core/services/admin-auth.service';
+import { AdminService } from '../../core/services/admin.service';
+import { AdminDashboardPageComponent } from './admin-dashboard.page';
+
+const dashboard: AdminDashboard = {
+  period: '2026-10',
+  priority: { pendingBookingReviews: 4, proofsAwaitingVerification: 3, confirmedEventsNextSevenDays: 2, outstandingBalanceTotal: 125000, failedEmailNotifications: 1 },
+  ledger: { confirmedRevenue: 285000, submittedProofValue: 45000, overdueOutstanding: 12000, averageConfirmedBookingValue: 95000 },
+  actionQueues: [
+    { key: 'pendingBookings', count: 4, href: '/admin/bookings?status=PENDING' },
+    { key: 'submittedProofs', count: 3, href: '/admin/payments?status=SUBMITTED' },
+    { key: 'failedEmails', count: 1, href: '/admin/email-outbox?status=FAILED' }
+  ],
+  attention: [{ type: 'PAYMENT_PROOF', id: '91', title: 'Review proof for LC-0042', detail: 'Klint Charles', eventDate: '2026-12-10', urgencyRank: 1 }]
+};
+
+describe('AdminDashboardPageComponent', () => {
+  let fixture: ComponentFixture<AdminDashboardPageComponent>;
+  let api: { dashboard: ReturnType<typeof vi.fn> };
+  beforeEach(async () => {
+    api = { dashboard: vi.fn(() => of({ success: true, data: dashboard })) };
+    await TestBed.configureTestingModule({ imports: [AdminDashboardPageComponent], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
+    fixture = TestBed.createComponent(AdminDashboardPageComponent);
+    fixture.detectChanges();
+  });
+
+  it('renders priority queues with actionable links and failed-email work', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('4');
+    expect(text).toContain('Booking reviews');
+    expect(text).toContain('Failed notifications');
+    expect(fixture.nativeElement.querySelector('a[href*="email-outbox"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href*="payments"]')).not.toBeNull();
+  });
+
+  it('renders the editorial revenue ledger with distinct verified and submitted values and no generic chart', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Confirmed revenue');
+    expect(text).toContain('Submitted proof value');
+    expect(text).toContain('₱285,000');
+    expect(text).toContain('₱45,000');
+    expect(fixture.nativeElement.querySelector('canvas')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-chart]')).toBeNull();
+  });
+});
+

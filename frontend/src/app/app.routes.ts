@@ -100,6 +100,12 @@ export const routes: Routes = [
     title: 'Customers | LA Chef Admin',
   },
   {
+    path: 'admin/customers/:id',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-customer-detail/admin-customer-detail.page').then((m) => m.AdminCustomerDetailPage),
+    title: 'Customer Record | LA Chef Admin',
+  },
+  {
     path: 'admin/packages',
     canActivate: [adminGuard],
     loadComponent: () =>
@@ -128,6 +134,18 @@ export const routes: Routes = [
         (m) => m.AdminPaymentReviewPage,
       ),
     title: 'Payment Proof Review | LA Chef Admin',
+  },
+  {
+    path: 'admin/email-outbox',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-email-outbox/admin-email-outbox.page').then((m) => m.AdminEmailOutboxPage),
+    title: 'Email Operations | LA Chef Admin',
+  },
+  {
+    path: 'admin/audit-log',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-audit-log/admin-audit-log.page').then((m) => m.AdminAuditLogPage),
+    title: 'Audit Log | LA Chef Admin',
   },
   {
     path: 'admin/invoices/:id',
