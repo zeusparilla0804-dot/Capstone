@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import type { Readable } from 'node:stream';
 import { paymentProofService } from '../services/payment-proof.service.js';
 import { AppError } from '../utils/app-error.js';
 
@@ -37,15 +38,34 @@ export async function listCustomerProofs(request: Request, response: Response, n
 }
 
 export async function downloadProof(request: Request, response: Response, next: NextFunction): Promise<void> {
+  let stream: Readable | undefined;
+  let terminal = false;
+  const closed = () => response.destroyed || response.closed || response.writableEnded;
+  const stop = () => {
+    terminal = true;
+    stream?.unpipe(response);
+    stream?.destroy();
+  };
+  const fail = (error: unknown) => {
+    if (terminal || closed()) { stop(); return; }
+    stop();
+    if (response.headersSent) response.destroy(error instanceof Error ? error : undefined);
+    else next(error);
+  };
+  response.once('close', stop);
+  response.once('finish', stop);
   try {
     const actor = request.admin ? { type: 'ADMIN' as const, id: request.admin.id } : { type: 'CUSTOMER' as const, id: request.customer!.id };
-    const { proof, stream } = await paymentProofService.openAuthorizedProof(actor, id(request));
-    response.once('close', () => stream.destroy());
+    const opened = await paymentProofService.openAuthorizedProof(actor, id(request));
+    const { proof } = opened;
+    stream = opened.stream;
+    // Keep the guarded handler attached to absorb repeated or late stream errors.
+    stream.on('error', fail);
+    if (terminal || closed()) { stop(); return; }
     response.setHeader('Content-Type', proof.mimeType);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('Content-Disposition', `attachment; filename="${safeProofFilename(proof.originalFilename)}"`);
-    stream.on('error', error => { if (response.headersSent) response.destroy(error); else next(error); });
     stream.pipe(response);
-  } catch (error) { next(error); }
+  } catch (error) { fail(error); }
 }

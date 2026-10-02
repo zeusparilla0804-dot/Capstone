@@ -2,9 +2,10 @@ import type sql from 'mssql';
 import { proofStorage } from '../config/uploads.js';
 import { getDbPool } from '../config/database.js';
 import { lockedBookingStatus, runBookingStatusTransaction } from '../repositories/booking-status.repository.js';
-import { customerOwnsReservation, findProof, insertPaymentProof, listProofs, lockedPayment, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
+import { customerOwnsReservation, findProof, insertPaymentProof, listProofs, lockedPayment, proofReferencesStorageKey, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
+import { logger } from '../utils/logger.js';
 import { transitionBooking } from './booking-status.service.js';
 import type { ProofStorage, ValidatedProofFile } from './proof-storage.service.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
@@ -40,6 +41,7 @@ function validateInput(value: unknown): PaymentProofSubmission {
   }
   if (typeof raw.paymentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.paymentDate)) throw new AppError(400, 'Payment date is invalid.');
   const paymentDate = isoDate(raw.paymentDate, 'Payment date');
+  if (paymentDate.startsWith('0000-')) throw new AppError(400, 'Payment date is invalid.');
   if (raw.transactionReference !== undefined && typeof raw.transactionReference !== 'string') throw new AppError(400, 'Transaction reference is invalid.');
   const reference = raw.transactionReference?.trim();
   if (reference && reference.length > 150) throw new AppError(400, 'Transaction reference is too long.');
@@ -53,13 +55,36 @@ function duplicateReference(error: unknown): boolean {
 }
 
 export function createPaymentProofService(deps: Dependencies) {
+  function warn(event: string, message: string): void {
+    try { logger.warn(event, message); } catch { /* Preserve the primary submission error. */ }
+  }
+
+  async function reconcileStoredProof(storageKey: string): Promise<void> {
+    let referenced: boolean;
+    try {
+      referenced = await proofReferencesStorageKey(storageKey, await deps.readRequest());
+    } catch {
+      warn('payment_proof.reconciliation_failed', 'Stored proof preserved because persistence could not be confirmed.');
+      return;
+    }
+    if (referenced) {
+      warn('payment_proof.persistence_reconciled', 'Stored proof preserved because persisted metadata references it after a failed submission.');
+      return;
+    }
+    try {
+      await deps.storage.delete(storageKey);
+    } catch {
+      warn('payment_proof.cleanup_failed', 'Stored proof cleanup failed after confirmed database absence.');
+    }
+  }
+
   return {
     async submitCustomerProof(customerId: number, reservationId: number, raw: unknown, file: ValidatedProofFile): Promise<PaymentProofRecord> {
       positiveId(customerId); positiveId(reservationId);
       const input = validateInput(raw);
       if (!file?.bytes || !Buffer.isBuffer(file.bytes)) throw new AppError(400, 'One payment proof file is required.');
       requirePossibleBooking(customerId, reservationId);
-      let storedKey: string | undefined;
+      const stored = await deps.storage.save(file);
       try {
         return await deps.transaction(async request => {
           const booking = await lockedBookingStatus(reservationId, request);
@@ -70,8 +95,6 @@ export function createPaymentProofService(deps: Dependencies) {
           const outstanding = Math.round(Number(payment.amountDue) * 100) - Math.round(Number(payment.amountPaid) * 100);
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance.');
           if (Math.round(input.claimedAmount * 100) > outstanding) throw new AppError(409, 'Claimed amount exceeds the outstanding balance.');
-          const stored = await deps.storage.save(file);
-          storedKey = stored.storageKey;
           if (booking.status === 'PAYMENT_SUBMITTED') await supersedeSubmittedProofs(reservationId, customerId, request);
           const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId, input, stored, request);
           if (booking.status === 'AWAITING_PAYMENT') {
@@ -80,9 +103,7 @@ export function createPaymentProofService(deps: Dependencies) {
           return proof;
         });
       } catch (error) {
-        if (storedKey) {
-          try { await deps.storage.delete(storedKey); } catch { /* Keep the database failure as the response. */ }
-        }
+        await reconcileStoredProof(stored.storageKey);
         if (duplicateReference(error)) throw new AppError(409, 'Transaction reference has already been used.');
         throw error;
       }

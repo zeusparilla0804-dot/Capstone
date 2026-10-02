@@ -4,7 +4,7 @@ import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Readable } from 'node:stream';
 import test from 'node:test';
 import type { Request, Response } from 'express';
 import sql from 'mssql';
@@ -34,6 +34,7 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
   let bookingStatus = 'AWAITING_PAYMENT';
   let rows: Record<string, unknown>[] = [];
   let failCommit = false;
+  let loseCommitAcknowledgement = false;
   const request = () => {
     const params: Record<string, unknown> = {};
     const runner = {
@@ -62,7 +63,8 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
         } else if (/INSERT dbo\.BOOKING_STATUS_HISTORY/i.test(command)) {
           // History semantics are covered by the service suite.
         } else if (/FROM dbo\.PAYMENT_PROOF/i.test(command)) {
-          recordset = params['proofId'] !== undefined ? rows.filter(row => row.id === params['proofId']) :
+          recordset = params['storageKey'] !== undefined ? rows.filter(row => row.storageKey === params['storageKey']) :
+            params['proofId'] !== undefined ? rows.filter(row => row.id === params['proofId']) :
             rows.filter(row => row.customerId === params['customerId'] && row.reservationId === params['reservationId']).toReversed();
         } else { throw new Error(`Unexpected SQL: ${command}`); }
         return { recordset, rowsAffected: [recordset.length || 1] };
@@ -75,8 +77,13 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
   const service = createPaymentProofService({ storage: proofStorage, readRequest: request,
     transaction: async work => {
       const snapshot = { rows: structuredClone(rows), status: bookingStatus };
-      try { const result = await work(request()); if (failCommit) throw new Error('commit failed'); return result; }
-      catch (error) { rows = snapshot.rows; bookingStatus = snapshot.status; throw error; }
+      let committed = false;
+      try {
+        const result = await work(request()); if (failCommit) throw new Error('commit failed');
+        committed = true;
+        if (loseCommitAcknowledgement) throw new Error('commit acknowledgement lost');
+        return result;
+      } catch (error) { if (!committed) { rows = snapshot.rows; bookingStatus = snapshot.status; } throw error; }
     } });
   for (const method of ['submitCustomerProof', 'listCustomerProofs', 'openAuthorizedProof'] as const) {
     t.mock.method(paymentProofService, method, service[method]);
@@ -160,6 +167,17 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
       assert.equal((await readdir(path.join(uploadRoot, 'payment-proofs'))).length, 1);
       assert.equal((await fetch(`${base}/${String(rows[0]!['storageKey'])}`)).status, 404);
     });
+    await t.test('lost commit acknowledgement keeps the committed replacement readable from real disk', async () => {
+      loseCommitAcknowledgement = true;
+      const response = await post(ownerCookie);
+      assert.equal(response.status, 500); assert.equal(rows.length, 2);
+      assert.equal(rows[0]!['status'], 'SUPERSEDED'); assert.equal(rows[1]!['status'], 'SUBMITTED');
+      const download = await fetch(`${base}/api/payment-proofs/2/file`, { headers: { cookie: ownerCookie } });
+      assert.equal(download.status, 200);
+      assert.deepEqual(Buffer.from(await download.arrayBuffer()), png);
+      assert.equal((await readdir(path.join(uploadRoot, 'payment-proofs'))).length, 2);
+      loseCommitAcknowledgement = false;
+    });
   } finally {
     server.close(); await once(server, 'close'); await closeDatabase();
   }
@@ -186,4 +204,55 @@ test('download destroys the source stream when the response closes early', async
   response.emit('close');
   assert.equal(stream.destroyed, true);
   assert.deepEqual(errors, []);
+});
+
+test('disconnect during awaited open destroys the returned readable without headers, pipe or next', async t => {
+  for (const state of ['destroyed', 'closed', 'writableEnded'] as const) {
+    const stream = Readable.from(['private proof']);
+    let resolveOpen!: (value: unknown) => void;
+    const opening = new Promise(resolve => { resolveOpen = resolve; });
+    const mocked = t.mock.method(paymentProofService, 'openAuthorizedProof', () => opening);
+    const response = new PassThrough() as PassThrough & { setHeader: () => void };
+    let headers = 0; let pipes = 0; const errors: unknown[] = [];
+    response.setHeader = () => { headers++; }; response.on('pipe', () => { pipes++; });
+    const downloading = downloadProof({ params: { id: '1' }, admin: { id: 3 } } as unknown as Request,
+      response as unknown as Response, error => errors.push(error));
+    if (state === 'writableEnded') response.end();
+    else { response.destroy(); if (state === 'closed') await once(response, 'close'); }
+    resolveOpen({ proof: { mimeType: 'image/png', originalFilename: 'receipt.png' }, stream });
+    await downloading;
+    assert.equal(stream.destroyed, true); assert.equal(headers, 0); assert.equal(pipes, 0); assert.deepEqual(errors, []);
+    mocked.mock.restore();
+  }
+});
+
+test('readable errors complete at most once and late errors after close do not reach next', async t => {
+  for (const closeFirst of [false, true]) {
+    const stream = new Readable({ read() {} });
+    const mocked = t.mock.method(paymentProofService, 'openAuthorizedProof', async () => ({
+      proof: { mimeType: 'image/png', originalFilename: 'receipt.png' }, stream
+    }));
+    const response = new PassThrough() as PassThrough & { setHeader: () => void };
+    response.setHeader = () => {};
+    const errors: unknown[] = [];
+    await downloadProof({ params: { id: '1' }, admin: { id: 3 } } as unknown as Request,
+      response as unknown as Response, error => errors.push(error));
+    if (closeFirst) { response.destroy(); await once(response, 'close'); }
+    const primary = new Error('read failed');
+    stream.emit('error', primary); stream.emit('error', new Error('second read error'));
+    response.emit('close'); stream.emit('error', new Error('late error'));
+    assert.deepEqual(errors, closeFirst ? [] : [primary]); assert.equal(stream.destroyed, true);
+    response.destroy(); mocked.mock.restore();
+  }
+});
+
+test('open rejection after client disconnect never calls next', async t => {
+  let rejectOpen!: (error: Error) => void;
+  const opening = new Promise((_resolve, reject) => { rejectOpen = reject; });
+  t.mock.method(paymentProofService, 'openAuthorizedProof', () => opening);
+  const response = new PassThrough(); const errors: unknown[] = [];
+  const downloading = downloadProof({ params: { id: '1' }, admin: { id: 3 } } as unknown as Request,
+    response as unknown as Response, error => errors.push(error));
+  response.destroy(); await once(response, 'close'); rejectOpen(new Error('open failed'));
+  await downloading; assert.deepEqual(errors, []);
 });

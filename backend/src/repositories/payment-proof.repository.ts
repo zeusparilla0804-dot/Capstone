@@ -85,6 +85,13 @@ export async function findProof(proofId: number, request?: sql.Request): Promise
   return result.recordset[0] ? record(result.recordset[0]) : undefined;
 }
 
+export async function proofReferencesStorageKey(storageKey: string, request: sql.Request): Promise<boolean> {
+  // A locking read must wait for pending writes even when the database uses RCSI.
+  const result = await request.replaceInput('storageKey', sql.NVarChar(500), storageKey)
+    .query('SELECT TOP(1) payment_proof_id id FROM dbo.PAYMENT_PROOF WITH(READCOMMITTEDLOCK) WHERE storage_key=@storageKey');
+  return result.recordset.length > 0;
+}
+
 export async function customerOwnsReservation(customerId: number, reservationId: number, request?: sql.Request): Promise<boolean> {
   const runner = request ?? (await getDbPool()).request();
   const result = await runner.replaceInput('customerId', sql.Int, customerId).replaceInput('reservationId', sql.Int, reservationId)

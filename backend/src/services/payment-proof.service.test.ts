@@ -14,6 +14,7 @@ process.env.DB_PASSWORD ??= 'test';
 
 const { createPaymentProofService } = await import('./payment-proof.service.js');
 const { paymentProofRoutes, proofFileRoutes } = await import('../routes/payment-proof.routes.js');
+const { logger } = await import('../utils/logger.js');
 
 const file = { path: 'temp', originalFilename: 'receipt.png', declaredMimeType: 'image/png', byteSize: 4,
   extension: 'png', mimeType: 'image/png', bytes: Buffer.from('data'), privateRoot: 'root' } as ValidatedProofFile;
@@ -27,29 +28,39 @@ class FakeDb {
   proofs: Record<string, unknown>[] = [];
   history: Record<string, unknown>[] = [];
   queries: string[] = [];
-  failOn: 'insert' | 'history' | 'commit' | undefined;
+  failOn: 'insert' | 'history' | 'commit' | 'commitAcknowledgement' | 'begin' | undefined;
+  failReconciliation = false;
+  reconciliations: string[] = [];
+  timeline: string[] = [];
   duplicateError: unknown;
   events: string[] = [];
   saved: string[] = [];
   deleted: string[] = [];
-  request = new FakeRequest(this) as unknown as sql.Request;
+  request = new FakeRequest(this, 'transaction') as unknown as sql.Request;
   storage: ProofStorage = {
-    save: async proof => { assert.equal(proof.bytes.toString(), 'data'); this.saved.push('payment-proofs/file.png'); return { storageKey: 'payment-proofs/file.png', originalFilename: proof.originalFilename, mimeType: proof.mimeType, byteSize: proof.byteSize }; },
+    save: async proof => { assert.equal(proof.bytes.toString(), 'data'); this.timeline.push('save'); const key = `payment-proofs/${crypto.randomUUID()}.png`; this.saved.push(key); return { storageKey: key, originalFilename: proof.originalFilename, mimeType: proof.mimeType, byteSize: proof.byteSize }; },
     open: async () => Readable.from(['data']) as never,
-    delete: async key => { this.deleted.push(key); }
+    delete: async key => { this.timeline.push('delete'); this.deleted.push(key); }
   };
-  service = createPaymentProofService({ storage: this.storage, readRequest: () => this.request,
+  service = createPaymentProofService({ storage: this.storage, readRequest: () => new FakeRequest(this, 'read') as unknown as sql.Request,
     transaction: async <T>(work: (request: sql.Request) => Promise<T>) => {
+      this.timeline.push('begin');
+      if (this.failOn === 'begin') throw new Error('begin failed');
       this.events.push('begin');
       const snapshot = { status: this.status, proofs: structuredClone(this.proofs), history: structuredClone(this.history) };
+      let committed = false;
       try {
         const result = await work(this.request);
         if (this.failOn === 'commit') throw new Error('commit failed');
+        committed = true;
         this.events.push('commit');
+        if (this.failOn === 'commitAcknowledgement') throw new Error('commit acknowledgement lost');
         return result;
       } catch (error) {
-        this.status = snapshot.status; this.proofs = snapshot.proofs; this.history = snapshot.history;
-        this.events.push('rollback');
+        if (!committed) {
+          this.status = snapshot.status; this.proofs = snapshot.proofs; this.history = snapshot.history;
+          this.events.push('rollback');
+        }
         throw error;
       }
     } });
@@ -57,11 +68,17 @@ class FakeDb {
 
 class FakeRequest {
   params: Record<string, unknown> = {};
-  constructor(private db: FakeDb) {}
+  constructor(private db: FakeDb, private context: 'transaction' | 'read') {}
   input(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string) {
     const p = this.params; this.db.queries.push(command);
+    if (/WHERE storage_key=@storageKey/i.test(command)) {
+      assert.equal(this.context, 'read', 'reconciliation must use a fresh non-transaction request');
+      this.db.timeline.push('reconcile'); this.db.reconciliations.push(String(p['storageKey']));
+      if (this.db.failReconciliation) throw new Error('query failed: private path and database details');
+      return { recordset: this.db.proofs.filter(proof => proof.storageKey === p['storageKey']), rowsAffected: [1] };
+    }
     if (/FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.owner }] : [], rowsAffected: [1] };
     if (/FROM dbo\.PAYMENT\b/is.test(command)) return { recordset: this.db.payment ? [{ paymentId: this.db.payment.id, amountDue: this.db.payment.due, amountPaid: this.db.payment.paid }] : [], rowsAffected: [1] };
     if (/UPDATE dbo\.PAYMENT_PROOF/is.test(command)) { for (const proof of this.db.proofs) if (proof.status === 'SUBMITTED' && proof.reservationId === p['reservationId'] && proof.customerId === p['customerId']) proof.status = 'SUPERSEDED'; return { recordset: [], rowsAffected: [1] }; }
@@ -100,15 +117,17 @@ test('eligible owner submits exact bytes and initial transition records customer
   assert.match(db.queries[0]!, /UPDLOCK.*HOLDLOCK/i);
 });
 
-test('non-owner and missing booking are non-disclosing and never save', async () => {
+test('non-owner and missing booking are non-disclosing and reconcile stored files before cleanup', async () => {
   for (const missing of [false, true]) { const db = new FakeDb(); db.exists = !missing;
-    await assert.rejects(db.service.submitCustomerProof(8, 5, input, file), status(404)); assert.equal(db.saved.length, 0); }
+    await assert.rejects(db.service.submitCustomerProof(8, 5, input, file), status(404));
+    assert.equal(db.saved.length, 1); assert.deepEqual(db.reconciliations, db.saved); assert.deepEqual(db.deleted, db.saved); }
 });
 
 test('ineligible status and payment balance conflicts reject submission', async () => {
   for (const setup of [(db: FakeDb) => { db.status = 'PENDING'; }, (db: FakeDb) => { db.payment = null; },
     (db: FakeDb) => { db.payment!.paid = 100; }, (db: FakeDb) => { db.payment!.due = 50; }]) {
-    const db = new FakeDb(); setup(db); await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409)); assert.equal(db.saved.length, 0);
+    const db = new FakeDb(); setup(db); await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
+    assert.equal(db.saved.length, 1); assert.deepEqual(db.reconciliations, db.saved); assert.deepEqual(db.deleted, db.saved);
   }
 });
 
@@ -131,7 +150,7 @@ test('cash may omit reference but transfer may not', async () => {
 test('global duplicate reference maps to conflict and deletes new stored file', async () => {
   const db = new FakeDb(); db.proofs.push({ id: 99, transactionReference: 'TX-1', status: 'REJECTED' });
   await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
-  assert.deepEqual(db.events, ['begin', 'rollback']); assert.deepEqual(db.deleted, ['payment-proofs/file.png']);
+  assert.deepEqual(db.events, ['begin', 'rollback']); assert.deepEqual(db.deleted, db.saved);
 });
 
 test('replacement supersedes submitted proofs without a self-transition', async () => {
@@ -145,7 +164,7 @@ test('database failure rolls back status and proofs and removes stored file', as
   for (const failOn of ['insert', 'history', 'commit'] as const) { const db = new FakeDb(); db.failOn = failOn;
     await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /failed/);
     assert.equal(db.status, 'AWAITING_PAYMENT'); assert.equal(db.proofs.length, 0);
-    assert.deepEqual(db.events, ['begin', 'rollback']); assert.deepEqual(db.deleted, ['payment-proofs/file.png']);
+    assert.deepEqual(db.events, ['begin', 'rollback']); assert.deepEqual(db.deleted, db.saved);
   }
 });
 
@@ -203,7 +222,7 @@ test('boundary validation rejects invalid methods, references, calendars and IDs
   }
 });
 
-test('replacement preserves reviewed and unrelated proofs and locks the balance before storage', async () => {
+test('replacement preserves reviewed and unrelated proofs and locks the balance before proof writes', async () => {
   const db = new FakeDb(); db.status = 'PAYMENT_SUBMITTED';
   db.proofs.push({ ...proofRow }, { ...proofRow, id: 2 }, { ...proofRow, id: 3, status: 'REJECTED' },
     { ...proofRow, id: 4, reservationId: 6 }, { ...proofRow, id: 5, customerId: 8 });
@@ -222,7 +241,7 @@ test('failed replacement restores prior submitted proof even when commit fails',
     await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /failed/);
     assert.deepEqual(db.proofs, [{ ...proofRow }]);
     assert.equal(db.status, 'PAYMENT_SUBMITTED'); assert.deepEqual(db.history, []);
-    assert.deepEqual(db.deleted, ['payment-proofs/file.png']);
+    assert.deepEqual(db.deleted, db.saved);
   }
 });
 
@@ -232,14 +251,19 @@ test('both SQL duplicate codes and nested driver errors become clear conflicts a
     await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), error => {
       status(409)(error); assert.match((error as AppError).message, /reference.*already.*used/i); return true;
     });
-    assert.deepEqual(db.deleted, ['payment-proofs/file.png']);
+    assert.deepEqual(db.deleted, db.saved);
   }
 });
 
-test('cleanup failure preserves the original database failure', async () => {
+test('cleanup failure logs safely and preserves the original database failure', async t => {
   const db = new FakeDb(); db.failOn = 'insert';
-  db.storage.delete = async () => { throw new Error('cleanup failed'); };
+  const warnings: string[] = [];
+  t.mock.method(logger, 'warn', (event: string, message: string) => { warnings.push(`${event}: ${message}`); });
+  db.storage.delete = async () => { throw new Error('cleanup failed: private path and database details'); };
   await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /insert failed/);
+  assert.equal(warnings.length, 1); assert.match(warnings[0]!, /cleanup/i);
+  assert.equal(warnings.join('').includes('private path'), false);
+  assert.equal(warnings.join('').includes(db.saved[0]!), false);
 });
 
 test('missing file and storage failure do not leave database writes', async () => {
@@ -272,7 +296,66 @@ test('finite whole amounts above the balance are domain conflicts, including lar
   for (const claimedAmount of [100_000_000, '100000000', 1e308]) {
     const db = new FakeDb();
     await assert.rejects(db.service.submitCustomerProof(7, 5, { ...input, claimedAmount } as never, file), status(409));
-    assert.deepEqual(db.saved, []);
+    assert.equal(db.saved.length, 1); assert.deepEqual(db.reconciliations, db.saved); assert.deepEqual(db.deleted, db.saved);
+  }
+});
+
+test('storage completes before transaction acquisition and all locked eligibility checks run afterward', async () => {
+  for (const { mutate, code } of [{ mutate: (db: FakeDb) => { db.owner = 8; }, code: 404 },
+    { mutate: (db: FakeDb) => { db.status = 'CONFIRMED'; }, code: 409 },
+    { mutate: (db: FakeDb) => { db.payment = null; }, code: 409 },
+    { mutate: (db: FakeDb) => { db.payment!.paid = 100; }, code: 409 }]) {
+    const db = new FakeDb(); const save = db.storage.save;
+    db.storage.save = async validated => { const stored = await save(validated); mutate(db); return stored; };
+    await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(code));
+    assert.deepEqual(db.timeline, ['save', 'begin', 'reconcile', 'delete']);
+    assert.deepEqual(db.proofs, []);
+    assert.match(db.queries[0]!, /RESERVATION WITH\(UPDLOCK,HOLDLOCK\)/);
+  }
+});
+
+test('pre-commit rollback reconciles exact generated key and deletes only its unreferenced file', async () => {
+  const db = new FakeDb(); db.failOn = 'insert'; db.proofs.push({ ...proofRow });
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /insert failed/);
+  assert.deepEqual(db.reconciliations, db.saved); assert.deepEqual(db.deleted, db.saved);
+  assert.deepEqual(db.proofs, [{ ...proofRow }]);
+  assert.deepEqual(db.timeline, ['save', 'begin', 'reconcile', 'delete']);
+  assert.match(db.queries.at(-1)!, /WITH\(READCOMMITTEDLOCK\)/);
+});
+
+test('commit applied but acknowledgement lost preserves the referenced file and committed state', async t => {
+  const db = new FakeDb(); db.failOn = 'commitAcknowledgement';
+  t.mock.method(logger, 'warn', () => {});
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /acknowledgement lost/);
+  assert.deepEqual(db.events, ['begin', 'commit']); assert.equal(db.status, 'PAYMENT_SUBMITTED');
+  assert.equal(db.history.length, 1); assert.equal(db.proofs[0]?.storageKey, db.saved[0]);
+  assert.deepEqual(db.deleted, []); assert.deepEqual(db.reconciliations, db.saved);
+});
+
+test('failed reconciliation preserves file and primary failure with a safe warning', async t => {
+  const db = new FakeDb(); db.failOn = 'commit'; db.failReconciliation = true;
+  const warnings: string[] = [];
+  t.mock.method(logger, 'warn', (event: string, message: string) => { warnings.push(`${event}: ${message}`); });
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /commit failed/);
+  assert.deepEqual(db.deleted, []); assert.deepEqual(db.reconciliations, db.saved);
+  assert.equal(warnings.length, 1); assert.match(warnings[0]!, /preserv|retain/i);
+  assert.equal(warnings.join('').includes('private path'), false); assert.equal(warnings.join('').includes(db.saved[0]!), false);
+});
+
+test('failed transaction acquisition also reconciles and deletes a definitively absent proof', async () => {
+  const db = new FakeDb(); db.failOn = 'begin';
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), /begin failed/);
+  assert.deepEqual(db.timeline, ['save', 'begin', 'reconcile', 'delete']);
+  assert.deepEqual(db.deleted, db.saved);
+});
+
+test('year zero is rejected before storage or SQL while DateTime2 boundary years remain valid', async () => {
+  const invalid = new FakeDb();
+  await assert.rejects(invalid.service.submitCustomerProof(7, 5, { ...input, paymentDate: '0000-01-01' }, file), status(400));
+  assert.deepEqual(invalid.saved, []); assert.deepEqual(invalid.queries, []);
+  for (const paymentDate of ['0001-01-01', '9999-12-31']) {
+    const db = new FakeDb();
+    assert.equal((await db.service.submitCustomerProof(7, 5, { ...input, paymentDate }, file)).paymentDate, paymentDate);
   }
 });
 
