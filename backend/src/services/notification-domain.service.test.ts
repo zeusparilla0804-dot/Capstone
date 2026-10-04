@@ -36,11 +36,15 @@ for (const kind of ['booking', 'invoice'] as const) {
         if (/SELECT event_id/.test(command)) return result([{ event_id: 1 }]);
         if (/INSERT dbo.RESERVATION/.test(command)) { domain.push('booking'); return result([{ reservation_id: 5, created_at: new Date() }]); }
         if (/INSERT dbo.PAYMENT/.test(command)) { domain.push('payment'); return result(); }
-        if (/SELECT r.reservation_id/.test(command)) return result([{ reservation_id: 5, status: 'APPROVED', guest_count: 10,
-          package_unit_price: 100, subtotal: 1000, discount_amount: 0, total_amount: 1000, package_name: 'Wedding' }]);
+        if (/SELECT r.reservation_id/.test(command)) {
+          if (kind === 'invoice') assert.match(command, /WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
+          return result([{ reservation_id: 5, status: 'APPROVED', guest_count: 10,
+            package_unit_price: 100, subtotal: 1000, discount_amount: 0, total_amount: 1000, package_name: 'Wedding' }]);
+        }
         if (/SELECT invoice_id/.test(command)) return result();
         if (/INSERT dbo.INVOICE\(/.test(command)) { domain.push('invoice'); return result([{ invoice_id: 8 }]); }
         if (/INSERT dbo.INVOICE_ITEM/.test(command)) { domain.push('item'); return result(); }
+        if (/INSERT dbo.ADMIN_AUDIT_LOG/.test(command)) { domain.push('audit'); return result(); }
         throw new Error(`Unexpected query: ${command}`);
       });
       const operation = () => kind === 'booking' ? createBooking(7, { packageId: 1, eventType: 'Wedding', guestCount: 10,
@@ -52,6 +56,7 @@ for (const kind of ['booking', 'invoice'] as const) {
         } else {
           await operation(); assert.equal(outbox.length, 1); assert.equal(outbox[0].templateKey, kind === 'booking' ? 'BOOKING_RECEIVED' : 'INVOICE_ISSUED');
           assert.equal(outbox[0].status, 'PENDING'); assert.equal(outbox[0].attempts, 0); assert.ok(domain.length >= 2);
+          if (kind === 'invoice') assert.ok(domain.includes('audit'));
           assert.deepEqual(events, ['begin', 'commit']);
         }
       } finally { await closeDatabase(); }

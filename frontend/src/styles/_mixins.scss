@@ -1,0 +1,11 @@
+@use 'tokens' as *;
+
+@mixin container {
+  width: min(100% - 32px, $content-width);
+  margin-inline: auto;
+}
+
+@mixin focus-ring {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 34%, transparent);
+  outline-offset: 3px;
+}

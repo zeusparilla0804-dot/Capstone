@@ -10,6 +10,7 @@ const templates: Record<EmailTemplateKey, { subject: string; message: string; ex
   PAYMENT_PROOF_SUBMITTED: { subject: 'Payment proof received', message: 'Your payment proof was received for manual verification. Your recorded balance will change only after verification.' },
   PAYMENT_PROOF_VERIFIED: { subject: 'Payment proof verified', message: 'Your payment proof has been manually verified and the verified amount recorded against your booking.', extra: 'amount' },
   PAYMENT_PROOF_REJECTED: { subject: 'Payment proof rejected', message: 'Your payment proof was rejected. Please check your booking for details and submit a replacement when required.' },
+  PAYMENT_RECORDED: { subject: 'Payment recorded', message: 'A manually received payment was recorded against your booking.', extra: 'amount' },
   BOOKING_CONFIRMED: { subject: 'Booking confirmed', message: 'Your booking is confirmed. We look forward to catering your event.' },
   BOOKING_CANCELLED: { subject: 'Booking cancelled', message: 'Your booking has been cancelled. Please check your booking or contact LA Chef for details.' },
   BOOKING_RESCHEDULED: { subject: 'Booking rescheduled', message: 'Your booking has been rescheduled. Please review your event details.' },
@@ -48,6 +49,7 @@ export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail 
     `Event date: ${payload.eventDate}`];
   if (key === 'INVOICE_ISSUED') lines.push(`Invoice: ${payload.invoiceNumber}`);
   if (key === 'PAYMENT_PROOF_VERIFIED') lines.push(`Verified amount: PHP ${payload.amount}`);
+  if (key === 'PAYMENT_RECORDED') lines.push(`Recorded amount: PHP ${payload.amount}`);
   lines.push(brand);
   return { subject: `${definition.subject} | LA Chef`, text: lines.join('\n\n'),
     html: lines.map(line => `<p>${escapeHtml(line)}</p>`).join('') };

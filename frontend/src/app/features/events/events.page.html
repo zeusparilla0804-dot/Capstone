@@ -1,0 +1,39 @@
+<app-public-header />
+<main class="events-page">
+  <header class="events-hero">
+    <div class="page-container">
+      <p class="page-kicker">Gather around something good</p>
+      <h1>Events made warmer with thoughtful food.</h1>
+      <p>Menus and service shaped for the way you want to celebrate.</p>
+    </div>
+  </header>
+  <section class="page-section">
+    <div class="page-container events-grid">
+      @for (event of events; track event.name) {
+        <article>
+          <img [src]="event.image" [alt]="event.name + ' catering setup'" />
+          <div>
+            <p class="page-kicker">Celebration</p>
+            <h2>{{ event.name }}</h2>
+            <p>{{ event.copy }}</p>
+            <a
+              class="btn btn-tertiary"
+              routerLink="/packages"
+              [queryParams]="{ category: event.category }"
+              >View packages &rarr;</a
+            >
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+  <section class="events-cta">
+    <div class="page-container">
+      <div>
+        <h2>Not sure which package fits?</h2>
+        <p>Tell us about your date, venue, and guests. We will help you begin.</p>
+      </div>
+      <a class="btn btn-primary" routerLink="/book-event">Plan your event</a>
+    </div>
+  </section>
+</main>

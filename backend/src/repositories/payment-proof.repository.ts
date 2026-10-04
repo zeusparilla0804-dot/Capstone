@@ -6,7 +6,7 @@ import type { BookingStatus, PageResult, ProofReviewQuery } from '../types/admin
 
 const columns = `payment_proof_id id,reservation_id reservationId,customer_id customerId,
   payment_id paymentId,CONVERT(varchar(20),payment_transaction_id) paymentTransactionId,invoice_id invoiceId,
-  method,claimed_amount claimedAmount,transaction_reference transactionReference,
+  method,claimed_amount claimedAmount,COALESCE(transaction_reference,archived_transaction_reference) transactionReference,
   payment_date paymentDate,storage_key storageKey,original_filename originalFilename,
   mime_type mimeType,byte_size byteSize,status,rejection_reason rejectionReason,
   reviewed_by reviewedBy,reviewed_at reviewedAt,verified_amount verifiedAmount,
@@ -39,7 +39,8 @@ export async function lockedPayment(reservationId: number, request: sql.Request)
 
 export async function supersedeSubmittedProofs(reservationId: number, customerId: number, request: sql.Request): Promise<void> {
   await request.replaceInput('reservationId', sql.Int, reservationId).replaceInput('customerId', sql.Int, customerId)
-    .query(`UPDATE dbo.PAYMENT_PROOF SET status='SUPERSEDED',updated_at=sysutcdatetime()
+    .query(`UPDATE dbo.PAYMENT_PROOF SET status='SUPERSEDED',archived_transaction_reference=transaction_reference,
+      transaction_reference=NULL,updated_at=sysutcdatetime()
       WHERE reservation_id=@reservationId AND customer_id=@customerId AND status='SUBMITTED'`);
 }
 
@@ -137,6 +138,8 @@ export async function markProofReviewed(input: { proofId: number; reservationId:
     .replaceInput('invoiceId', sql.Int, input.invoiceId ?? null)
     .query(`UPDATE dbo.PAYMENT_PROOF SET status=@reviewStatus,rejection_reason=@rejectionReason,
       verified_amount=@verifiedAmount,payment_transaction_id=@paymentTransactionId,invoice_id=@invoiceId,
+      archived_transaction_reference=CASE WHEN @reviewStatus='REJECTED' THEN transaction_reference ELSE archived_transaction_reference END,
+      transaction_reference=CASE WHEN @reviewStatus='REJECTED' THEN NULL ELSE transaction_reference END,
       reviewed_by=@adminId,reviewed_at=sysutcdatetime(),updated_at=sysutcdatetime()
       WHERE payment_proof_id=@proofId AND reservation_id=@reservationId AND status='SUBMITTED'`);
   return result.rowsAffected[0] === 1;
@@ -148,7 +151,7 @@ export async function listReviewProofs(query: ProofReviewQuery, request: sql.Req
       AND (@date='' OR pp.payment_date=CONVERT(date,NULLIF(@date,'')))
       AND (@dateFrom='' OR pp.payment_date>=CONVERT(date,NULLIF(@dateFrom,'')))
       AND (@dateTo='' OR CONVERT(date,pp.payment_date)<=CONVERT(date,NULLIF(@dateTo,'')))
-      AND (@search='' OR pp.transaction_reference LIKE '%'+@search+'%' OR EXISTS(
+      AND (@search='' OR COALESCE(pp.transaction_reference,pp.archived_transaction_reference) LIKE '%'+@search+'%' OR EXISTS(
         SELECT 1 FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
         WHERE r.reservation_id=pp.reservation_id AND (r.booking_reference LIKE '%'+@search+'%'
           OR CONCAT(c.first_name,' ',c.last_name) LIKE '%'+@search+'%' OR c.email LIKE '%'+@search+'%')))`;

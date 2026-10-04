@@ -1,0 +1,1 @@
+import {Router} from 'express';import {bookingInvoice,customerInvoice} from '../controllers/invoice.controller.js';import {requireCustomer} from '../middleware/auth.middleware.js';export default Router().use(requireCustomer).get('/booking/:bookingId',bookingInvoice).get('/:id',customerInvoice);

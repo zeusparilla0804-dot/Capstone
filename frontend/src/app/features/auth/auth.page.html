@@ -1,0 +1,97 @@
+<app-public-header />
+<main class="auth-page">
+  <section class="auth-shell">
+    <aside class="auth-brand">
+      <img src="assets/brand/la-chef-logo.jpg" alt="LA Chef Event Catering Services" />
+      <div>
+        <p>Thoughtful food. Warm celebrations.</p>
+        <h2>Let us take care of the table.</h2>
+        <span
+          >Plan your event, follow your reservation, and keep every detail in one calm place.</span
+        >
+      </div>
+      <ul aria-label="Account benefits">
+        <li>Manage reservations</li>
+        <li>Track approval and payment</li>
+        <li>Keep event details together</li>
+      </ul>
+    </aside>
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <div class="auth-panel__mark"><img src="assets/brand/la-chef-logo.jpg" alt="" /></div>
+      <p class="page-kicker">Customer account</p>
+      <h1 id="auth-title">{{ registerMode() ? 'Create your account' : 'Welcome back' }}</h1>
+      <p>
+        {{
+          registerMode()
+            ? 'Register to save and manage your catering bookings.'
+            : 'Sign in to continue to your LA Chef account.'
+        }}
+      </p>
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        @if (registerMode()) {
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="firstName">First name</label
+              ><input id="firstName" formControlName="firstName" />
+              @if (form.controls.firstName.touched && form.controls.firstName.invalid) {
+                <small>First name is required.</small>
+              }
+            </div>
+            <div class="form-field">
+              <label for="lastName">Last name</label
+              ><input id="lastName" formControlName="lastName" />
+              @if (form.controls.lastName.touched && form.controls.lastName.invalid) {
+                <small>Last name is required.</small>
+              }
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="phone">Phone</label><input id="phone" type="tel" formControlName="phone" />
+            @if (form.controls.phone.touched && form.controls.phone.invalid) {
+              <small>Enter a valid phone number.</small>
+            }
+          </div>
+        }
+        <div class="form-field">
+          <label for="email">Email</label
+          ><input id="email" type="email" formControlName="email" autocomplete="email" />
+          @if (form.controls.email.touched && form.controls.email.invalid) {
+            <small>Enter a valid email address.</small>
+          }
+        </div>
+        <div class="form-field">
+          <label for="password">Password</label>
+          <div class="password-field">
+            <input
+              id="password"
+              [type]="showPassword() ? 'text' : 'password'"
+              formControlName="password"
+              [attr.autocomplete]="registerMode() ? 'new-password' : 'current-password'"
+            /><button type="button" (click)="showPassword.set(!showPassword())">
+              {{ showPassword() ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+          @if (registerMode()) {
+            <small class="field-hint">Use at least 12 characters.</small>
+          }
+          @if (form.controls.password.touched && form.controls.password.invalid) {
+            <small>Password must contain at least 12 characters.</small>
+          }
+        </div>
+        @if (error()) {
+          <p class="auth-error" role="alert">{{ error() }}</p>
+        }
+        <button class="btn btn-primary" type="submit" [disabled]="submitting()">
+          {{ submitting() ? 'Please wait...' : registerMode() ? 'Create account' : 'Sign in' }}
+        </button>
+      </form>
+      <div class="auth-switch">
+        <span>{{ registerMode() ? 'Already have an account?' : 'New to LA Chef?' }}</span
+        ><button class="btn btn-tertiary" type="button" (click)="toggle()">
+          {{ registerMode() ? 'Sign in' : 'Create an account' }}
+        </button>
+      </div>
+      <a class="admin-entry" href="/admin/login">Administrator access</a>
+    </section>
+  </section>
+</main>

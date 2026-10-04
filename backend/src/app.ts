@@ -13,6 +13,7 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 import adminRoutes from './routes/admin.routes.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import { environment } from './config/environment.js';
+import { isAllowedFrontendOrigin } from './config/cors.js';
 import { paymentProofRoutes, proofFileRoutes } from './routes/payment-proof.routes.js';
 
 const app = express();
@@ -23,7 +24,14 @@ app.use(helmet());
 
 app.use(
   cors({
-    origin: environment.frontendOrigin,
+    origin: (origin, callback) => {
+      if (!origin || isAllowedFrontendOrigin(origin, environment.frontendOrigin, environment.isProduction)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Origin is not allowed by CORS.'));
+    },
     credentials: true
   })
 );

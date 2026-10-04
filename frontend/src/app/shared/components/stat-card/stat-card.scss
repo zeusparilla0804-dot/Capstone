@@ -1,0 +1,47 @@
+.stat-card {
+  min-height: 136px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 22px;
+  box-shadow: 0 5px 16px rgba(16, 25, 27, 0.035);
+
+  p {
+    color: var(--color-text-muted);
+    font-size: 0.88rem;
+    font-weight: 800;
+  }
+
+  strong {
+    display: block;
+    margin-top: 14px;
+    color: var(--color-text);
+    font-family: var(--font-serif);
+    font-family: var(--font-sans);
+    font-size: 1.75rem;
+    line-height: 1;
+  }
+
+  span {
+    display: block;
+    margin-top: 12px;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+  }
+}
+
+.stat-card--gold {
+  border-left: 3px solid var(--color-primary);
+}
+
+.stat-card--green {
+  border-left: 3px solid var(--color-success);
+}
+
+.stat-card--red {
+  border-left: 3px solid var(--color-danger);
+}
+
+.stat-card--dark {
+  border-left: 3px solid var(--color-dark);
+}

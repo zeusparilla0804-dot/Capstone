@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "test": "tsx --test src/**/*.test.ts",
-    "test:e2e": "tsx e2e/phase81.e2e.ts",
+    "test:e2e": "tsx e2e/phase81.e2e.ts && tsx e2e/admin-operations.e2e.ts",
+    "test:browser:fixture": "tsx e2e/browser-fixture.ts",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:migrate:prod": "node dist/scripts/migrate.js",
     "admin:create": "tsx src/scripts/create-admin.ts"

@@ -1,0 +1,177 @@
+import 'dotenv/config';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import sql from 'mssql';
+
+const uploadRoot = await mkdtemp(join(tmpdir(), 'la-chef-phase81-e2e-'));
+process.env['PAYMENT_PROOF_UPLOAD_ROOT'] = uploadRoot;
+process.env['EMAIL_WORKER_ENABLED'] = 'false';
+
+const [{ default: app }, { closeDatabase, getDbPool }, { environment }, { hashPassword }] = await Promise.all([
+  import('../src/app.js'),
+  import('../src/config/database.js'),
+  import('../src/config/environment.js'),
+  import('../src/utils/password.js')
+]);
+
+if (environment.isProduction) throw new Error('E2E verification is disabled in production.');
+
+const marker = `E2E-${randomUUID().slice(0, 8)}`;
+const password = `E2E-${randomUUID()}!aA1`;
+const customerAEmail = `${marker.toLowerCase()}-a@example.test`;
+const customerBEmail = `${marker.toLowerCase()}-b@example.test`;
+const adminEmail = `${marker.toLowerCase()}-admin@example.test`;
+const created: Record<string, number> = {};
+let server: ReturnType<typeof app.listen> | undefined;
+
+function cookie(response: Response): string {
+  const value = response.headers.get('set-cookie');
+  assert.ok(value, 'Expected a session cookie.');
+  return value.split(';', 1)[0]!;
+}
+
+async function request(base: string, path: string, init: RequestInit = {}, expected = 200) {
+  const response = await fetch(`${base}${path}`, {
+    ...init,
+    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) }
+  });
+  const body = response.status === 204 ? undefined : await response.json();
+  assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path}: ${JSON.stringify(body)}`);
+  return { response, body };
+}
+
+async function cleanup(): Promise<void> {
+  const pool = await getDbPool();
+  if (created.booking) {
+    await pool.request().input('id', sql.Int, created.booking)
+      .input('emailA', sql.NVarChar(320), customerAEmail)
+      .input('emailB', sql.NVarChar(320), customerBEmail).query(`
+      DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient IN(@emailA,@emailB)
+        OR (related_entity_type='BOOKING' AND related_entity_id=@id);
+      DELETE FROM dbo.PAYMENT_PROOF WHERE reservation_id=@id;
+      DELETE FROM dbo.BOOKING_STATUS_HISTORY WHERE reservation_id=@id;
+      DELETE ail FROM dbo.ADMIN_AUDIT_LOG ail WHERE (ail.entity_type='BOOKING' AND ail.entity_id=@id)
+        OR (ail.entity_type='PAYMENT' AND ail.entity_id IN(SELECT payment_id FROM dbo.PAYMENT WHERE reservation_id=@id))
+        OR (ail.entity_type='INVOICE' AND ail.entity_id IN(SELECT invoice_id FROM dbo.INVOICE WHERE reservation_id=@id));
+      DELETE ii FROM dbo.INVOICE_ITEM ii JOIN dbo.INVOICE i ON i.invoice_id=ii.invoice_id WHERE i.reservation_id=@id;
+      DELETE FROM dbo.INVOICE WHERE reservation_id=@id;
+      DELETE pt FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id WHERE p.reservation_id=@id;
+      DELETE FROM dbo.PAYMENT WHERE reservation_id=@id;
+      DELETE FROM dbo.RESERVATION_ADD_ON WHERE reservation_id=@id;
+      DELETE FROM dbo.RESERVATION WHERE reservation_id=@id;
+    `);
+  }
+  for (const [type, table, key, id] of [
+    ['PACKAGE', 'PACKAGE', 'package_id', created.package],
+    ['ADD_ON', 'ADD_ON', 'add_on_id', created.addOn]
+  ] as const) {
+    if (!id) continue;
+    await pool.request().input('id', sql.Int, id).input('type', sql.NVarChar(50), type)
+      .query(`DELETE FROM dbo.ADMIN_AUDIT_LOG WHERE entity_type=@type AND entity_id=@id; DELETE FROM dbo.${table} WHERE ${key}=@id;`);
+  }
+  for (const email of [customerAEmail, customerBEmail]) {
+    await pool.request().input('email', sql.NVarChar(255), email).query(`
+      DELETE s FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE c.email=@email;
+      DELETE FROM dbo.CUSTOMER WHERE email=@email;
+    `);
+  }
+  await pool.request().input('email', sql.NVarChar(255), adminEmail).query(`
+    DELETE s FROM dbo.ADMIN_SESSION s JOIN dbo.ADMIN a ON a.admin_id=s.admin_id WHERE a.email=@email;
+    DELETE l FROM dbo.ADMIN_AUDIT_LOG l JOIN dbo.ADMIN a ON a.admin_id=l.admin_id WHERE a.email=@email;
+    DELETE FROM dbo.ADMIN WHERE email=@email;
+  `);
+}
+
+try {
+  const pool = await getDbPool();
+  const event = (await pool.request().query('SELECT TOP 1 event_id,event_type FROM dbo.EVENT ORDER BY event_id')).recordset[0];
+  assert.ok(event, 'At least one real EVENT reference record is required for E2E verification.');
+  const admin = await pool.request()
+    .input('username', sql.NVarChar(100), `${marker}-admin`)
+    .input('email', sql.NVarChar(255), adminEmail)
+    .input('name', sql.NVarChar(200), `${marker} Administrator`)
+    .input('password', sql.NVarChar(255), await hashPassword(password))
+    .query(`INSERT dbo.ADMIN(username,email,full_name,password,role,status) OUTPUT INSERTED.admin_id
+            VALUES(@username,@email,@name,@password,'ADMIN','ACTIVE')`);
+  created.admin = Number(admin.recordset[0].admin_id);
+
+  server = app.listen(0, '127.0.0.1');
+  await new Promise<void>((resolve) => server!.once('listening', resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const base = `http://127.0.0.1:${address.port}/api`;
+
+  await request(base, '/bookings/my', {}, 401);
+  const adminLogin = await request(base, '/auth/admin/login', { method: 'POST', body: JSON.stringify({ identity: adminEmail, password }) });
+  const adminCookie = cookie(adminLogin.response);
+
+  const register = async (email: string) => request(base, '/auth/register', { method: 'POST', body: JSON.stringify({ firstName: marker, lastName: 'Customer', email, phone: '09171234567', password }) }, 201);
+  const customerA = await register(customerAEmail);
+  const customerB = await register(customerBEmail);
+  const customerACookie = cookie(customerA.response);
+  const customerBCookie = cookie(customerB.response);
+
+  await request(base, '/admin/dashboard', { headers: { cookie: customerACookie } }, 401);
+  const packageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable E2E package', pricePerGuest: 123.45, minGuests: 10, maxGuests: 50, isActive: true }) }, 201);
+  created.package = Number(packageCreate.body.data.id);
+  const addOnCreate = await request(base, '/admin/add-ons', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ name: `${marker} Add-on`, description: 'Disposable E2E add-on', price: 45.67, isActive: true }) }, 201);
+  created.addOn = Number(addOnCreate.body.data.id);
+
+  const packages = await request(base, '/packages');
+  assert.ok(packages.body.data.some((item: { id: number }) => Number(item.id) === created.package));
+  const addOns = await request(base, '/add-ons');
+  assert.ok(addOns.body.data.some((item: { id: number }) => Number(item.id) === created.addOn));
+
+  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const bookingCreate = await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: `${marker} Venue`, guestCount: 10, packageId: created.package, addOnIds: [created.addOn], paymentMethod: 'cash', total: 0 }) }, 201);
+  created.booking = Number(bookingCreate.body.data.id);
+  assert.equal(bookingCreate.body.data.total, 1280.17, 'Server must ignore the manipulated client total.');
+
+  const mine = await request(base, '/bookings/my', { headers: { cookie: customerACookie } });
+  assert.ok(mine.body.data.some((item: { id: number }) => Number(item.id) === created.booking));
+  const dashboard = await request(base, '/bookings/dashboard', { headers: { cookie: customerACookie } });
+  assert.ok(dashboard.body.data.totalBookings >= 1);
+  await request(base, `/bookings/${created.booking}`, { headers: { cookie: customerBCookie } }, 404);
+  await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: marker, guestCount: -1, packageId: created.package, addOnIds: [] }) }, 400);
+  await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: marker, guestCount: 10, packageId: 2147483647, addOnIds: [] }) }, 400);
+  await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: marker, guestCount: 10, packageId: created.package, addOnIds: [2147483647] }) }, 400);
+
+  await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'COMPLETED' }) }, 409);
+  await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' }) });
+  const search = await request(base, `/admin/bookings?search=${encodeURIComponent("%' OR 1=1;--")}`, { headers: { cookie: adminCookie } });
+  assert.equal(search.body.data.totalItems, 0);
+  const invoiceIssue = await request(base, `/admin/bookings/${created.booking}/invoice`, { method: 'POST', headers: { cookie: adminCookie }, body: '{}' }, 201);
+  const invoiceId = Number(invoiceIssue.body.data.invoiceId);
+  await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'AWAITING_PAYMENT' }) });
+  await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerACookie } });
+  await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerBCookie } }, 404);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: -1, method: 'CASH', paymentDate: tomorrow }) }, 400);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 999999, method: 'CASH', paymentDate: tomorrow }) }, 409);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 100, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 201);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 1, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 409);
+  const invoice = await request(base, `/admin/invoices/${invoiceId}`, { headers: { cookie: adminCookie } });
+  assert.equal(invoice.body.data.amountPaid, 100);
+  const auditCount = await pool.request().input('adminId', sql.Int, created.admin).query('SELECT COUNT(*) count FROM dbo.ADMIN_AUDIT_LOG WHERE admin_id=@adminId');
+  assert.ok(Number(auditCount.recordset[0].count) >= 5, 'Expected audit records for admin mutations.');
+
+  await request(base, '/auth/logout', { method: 'POST', headers: { cookie: customerACookie }, body: '{}' }, 204);
+  await request(base, '/bookings/my', { headers: { cookie: customerACookie } }, 401);
+
+  await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
+  server = undefined;
+  await closeDatabase();
+  const reconnected = await getDbPool();
+  const persisted = await reconnected.request().input('id', sql.Int, created.booking).query('SELECT status FROM dbo.RESERVATION WHERE reservation_id=@id');
+  assert.equal(persisted.recordset[0]?.status, 'PAYMENT_VERIFIED');
+  console.log('Phase 8.1 SQL-backed E2E verification passed.');
+} finally {
+  if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
+  try { await cleanup(); }
+  finally {
+    await closeDatabase();
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+}

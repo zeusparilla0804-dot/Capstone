@@ -1,0 +1,5 @@
+import type {NextFunction,Request,Response} from 'express';import {invoiceService} from '../services/invoice.service.js';import {AppError} from '../utils/app-error.js';const id=(req:Request,key='id')=>{const n=Number(req.params[key]);if(!Number.isInteger(n)||n<1)throw new AppError(400,'Invalid identifier.');return n;};
+export async function customerInvoice(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await invoiceService.customerInvoice(id(req),req.customer!.id)});}catch(e){next(e);}}
+export async function bookingInvoice(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await invoiceService.customerBookingInvoice(id(req,'bookingId'),req.customer!.id)});}catch(e){next(e);}}
+export async function adminInvoice(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await invoiceService.adminInvoice(id(req))});}catch(e){next(e);}}
+export async function issueInvoice(req:Request,res:Response,next:NextFunction){try{res.status(201).json({success:true,data:await invoiceService.issue(id(req,'bookingId'),req.admin!.id)});}catch(e){next(e);}}

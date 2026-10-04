@@ -1,0 +1,173 @@
+<app-public-header />
+<main class="home-page">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="page-container hero__content">
+      <p class="hero__eyebrow">Modern Filipino catering</p>
+      <h1 id="hero-title">Exceptional catering for <em>every celebration.</em></h1>
+      <p>
+        Thoughtfully prepared menus and warm, professional service for life's most important
+        occasions.
+      </p>
+      <div class="hero__actions">
+        <a class="btn btn-primary" routerLink="/packages">Explore packages</a
+        ><a class="btn hero__outline" routerLink="/book-event">Book an event</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="promise page-section" aria-labelledby="promise-title">
+    <div class="page-container promise__layout">
+      <div>
+        <p class="page-kicker">The LA Chef promise</p>
+        <h2 id="promise-title">Hospitality you can feel at every table.</h2>
+      </div>
+      <div class="promise__grid">
+        @for (item of benefits; track item.title) {
+          <article>
+            <span>{{ item.number }}</span>
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.copy }}</p>
+          </article>
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="process page-section" aria-labelledby="process-title">
+    <div class="page-container">
+      <div class="section-heading">
+        <p class="page-kicker">A calmer way to plan</p>
+        <h2 id="process-title">From menu to memorable day</h2>
+      </div>
+      <ol>
+        @for (step of bookingSteps; track step.title) {
+          <li>
+            <span>{{ step.number }}</span>
+            <div>
+              <h3>{{ step.title }}</h3>
+              <p>{{ step.copy }}</p>
+            </div>
+          </li>
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="gallery page-section" aria-labelledby="gallery-title">
+    <div class="page-container">
+      <div class="gallery__heading">
+        <div>
+          <p class="page-kicker">Gathered beautifully</p>
+          <h2 id="gallery-title">Celebrations we love to serve</h2>
+        </div>
+        <p>
+          From intimate family tables to milestone receptions, we bring the same care to every
+          occasion.
+        </p>
+      </div>
+      <div class="gallery__grid">
+        <figure class="gallery__large">
+          <img
+            src="assets/images/hero/la-chef-hero.webp"
+            alt="Elegant catered celebration table"
+            loading="lazy"
+          />
+        </figure>
+        <figure>
+          <img
+            src="assets/images/packages/premium-package.webp"
+            alt="Premium Filipino catering spread"
+            loading="lazy"
+          />
+        </figure>
+        <figure>
+          <img
+            src="assets/images/packages/deluxe-package.webp"
+            alt="Warm buffet setting for an event"
+            loading="lazy"
+          />
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="services page-section" aria-labelledby="services-title">
+    <div class="page-container">
+      <div class="section-heading">
+        <p class="page-kicker">Made for every celebration</p>
+        <h2 id="services-title">Our Catering Services</h2>
+        <p>
+          From intimate gatherings to grand occasions, every menu is prepared to make the moment
+          feel yours.
+        </p>
+      </div>
+      <div class="services__grid">
+        @for (service of cateringServices; track service.title) {
+          <button class="service" type="button" (click)="browseCategory(service.category)">
+            <span class="service__image"
+              ><img [src]="service.imageUrl" [alt]="service.title + ' catering'" loading="lazy"
+            /></span>
+            <strong>{{ service.title }}</strong>
+            <span>{{ service.subtitle }}</span>
+          </button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="popular page-section" aria-labelledby="popular-title">
+    <div class="page-container">
+      <div class="popular__heading">
+        <div>
+          <p class="page-kicker">Guest favorites</p>
+          <h2 id="popular-title">Popular Packages</h2>
+        </div>
+        <a class="btn btn-tertiary" routerLink="/packages"
+          >View all packages <span aria-hidden="true">&rarr;</span></a
+        >
+      </div>
+      <div class="popular__grid">
+        @for (cateringPackage of popularPackages(); track cateringPackage.id) {
+          <app-package-card
+            variant="featured"
+            [cateringPackage]="cateringPackage"
+            (viewDetails)="viewPackage(cateringPackage)"
+          />
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="home-cta" aria-labelledby="cta-title">
+    <div class="page-container home-cta__inner">
+      <div>
+        <p class="page-kicker">Plan something memorable</p>
+        <h2 id="cta-title">Planning your next celebration?</h2>
+        <p>Let LA Chef take care of the food while you enjoy the occasion.</p>
+      </div>
+      <a class="btn btn-primary" routerLink="/book-event"
+        >Book your event <span aria-hidden="true">&rarr;</span></a
+      >
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="page-container site-footer__inner">
+    <div>
+      <a class="site-footer__brand" routerLink="/"><span>LA</span> Chef</a>
+      <p>Modern Filipino catering for meaningful celebrations.</p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <a routerLink="/packages">Packages</a><a routerLink="/about">About</a
+      ><a routerLink="/contact">Contact</a><a routerLink="/login">Customer login</a>
+    </nav>
+    <div class="site-footer__contact">
+      <strong>Plan with us</strong><a href="mailto:hello@lachef.ph">hello@lachef.ph</a
+      ><span>Philippines</span>
+    </div>
+  </div>
+  <div class="page-container site-footer__bottom">
+    <span>&copy; 2026 LA Chef Catering Services</span
+    ><span>Made for celebrations worth remembering.</span>
+  </div>
+</footer>

@@ -45,10 +45,26 @@ describe('AdminPaymentReviewPage', () => {
 
   it('renders protected proof metadata, image, and review controls', () => {
     const image = fixture.nativeElement.querySelector('img[alt="Customer payment receipt"]') as HTMLImageElement;
-    expect(image.src).toContain('/api/payment-proofs/1/file');
+    const original = fixture.nativeElement.querySelector('a.original-link') as HTMLAnchorElement;
+    expect(image.src).toContain('/api/payment-proofs/1/file?view=inline');
+    expect(original.href).toContain('/api/payment-proofs/1/file');
+    expect(original.href).not.toContain('view=inline');
     expect(fixture.nativeElement.textContent).toContain('GCASH-42');
     expect(fixture.nativeElement.textContent).toContain('Verify payment');
     expect(fixture.nativeElement.textContent).toContain('Reject proof');
+    expect(fixture.nativeElement.querySelector('[aria-label="Zoom in"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Zoom out"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[aria-label="Reset zoom"]')).toBeTruthy();
+  });
+
+  it('provides bounded keyboard-accessible proof zoom controls', () => {
+    const image = fixture.nativeElement.querySelector('img[alt="Customer payment receipt"]') as HTMLImageElement;
+    (fixture.nativeElement.querySelector('[aria-label="Zoom in"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(image.style.transform).toContain('1.25');
+    (fixture.nativeElement.querySelector('[aria-label="Reset zoom"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(image.style.transform).toContain('1');
   });
 
   it('requires an explanation when the verified amount is corrected', () => {

@@ -13,8 +13,12 @@ function proofBody(body: unknown): Record<string, unknown> {
 }
 const id=(req:Request)=>{const raw=req.params['id'];if(typeof raw!=='string'||!/^[1-9]\d*$/.test(raw))throw new AppError(400,'Invalid identifier.');const value=Number(raw);if(!Number.isSafeInteger(value)||value>2_147_483_647)throw new AppError(400,'Invalid identifier.');return value;};
 const query=(req:Request):PageQuery=>({page:Math.max(Number(req.query['page'])||1,1),pageSize:Math.min(Math.max(Number(req.query['pageSize'])||20,1),100),search:String(req.query['search']??'').trim(),status:String(req.query['status']??'').toUpperCase(),eventType:String(req.query['eventType']??''),date:String(req.query['date']??'')});
-const packageInput=(b:Record<string,unknown>):PackageInput=>({eventId:Number(b['eventId']),name:String(b['name']??'').trim(),description:String(b['description']??'').trim(),pricePerGuest:Number(b['pricePerGuest']),minGuests:Number(b['minGuests']),maxGuests:Number(b['maxGuests']),isActive:Boolean(b['isActive'])});
-const addOnInput=(b:Record<string,unknown>):AddOnInput=>({name:String(b['name']??'').trim(),description:String(b['description']??'').trim(),price:Number(b['price']),isActive:Boolean(b['isActive'])});
+export function parseActiveFlag(value: unknown): boolean {
+ if(typeof value!=='boolean')throw new AppError(400,'Active status must be true or false.');
+ return value;
+}
+const packageInput=(b:Record<string,unknown>):PackageInput=>({eventId:Number(b['eventId']),name:String(b['name']??'').trim(),description:String(b['description']??'').trim(),pricePerGuest:Number(b['pricePerGuest']),minGuests:Number(b['minGuests']),maxGuests:Number(b['maxGuests']),isActive:parseActiveFlag(b['isActive'])});
+const addOnInput=(b:Record<string,unknown>):AddOnInput=>({name:String(b['name']??'').trim(),description:String(b['description']??'').trim(),price:Number(b['price']),isActive:parseActiveFlag(b['isActive'])});
 const bookingStatuses:readonly BookingStatus[]=['PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED','REJECTED','CANCELLED'];
 function statusInput(body:unknown):{status:BookingStatus;reason?:string}{
  const value=body&&typeof body==='object'?body as Record<string,unknown>:{};

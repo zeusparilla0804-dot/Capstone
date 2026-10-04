@@ -1,14 +1,14 @@
 <header class="dashboard-mobile-header">
   <a class="dashboard-mobile-header__brand" routerLink="/" aria-label="LA Chef home"><span>LA</span> Chef</a>
-  <button type="button" [attr.aria-expanded]="isOpen()" aria-controls="dashboard-navigation" aria-label="Toggle dashboard navigation" (click)="toggleMenu()">
+  <button #menuToggle type="button" [attr.aria-expanded]="isOpen()" aria-controls="dashboard-navigation" aria-label="Toggle dashboard navigation" (click)="toggleMenu()">
     <span></span><span></span><span></span>
   </button>
 </header>
 
-<button class="dashboard-sidebar__backdrop" [class.is-open]="isOpen()" type="button" aria-label="Close dashboard navigation" (click)="closeMenu()"></button>
+<button class="dashboard-sidebar__backdrop" [class.is-open]="isOpen()" type="button" aria-label="Close dashboard navigation" (click)="closeMenu(true)"></button>
 
-<aside id="dashboard-navigation" class="dashboard-sidebar" [class.is-open]="isOpen()">
-  <div class="dashboard-sidebar__top"><a class="dashboard-sidebar__brand" routerLink="/" (click)="closeMenu()"><span>LA</span> Chef</a><button class="dashboard-sidebar__close" type="button" aria-label="Close dashboard navigation" (click)="closeMenu()"><span aria-hidden="true">&times;</span></button></div>
+<aside id="dashboard-navigation" class="dashboard-sidebar" [class.is-open]="isOpen()" [attr.inert]="mobileViewport() && !isOpen() ? '' : null" [attr.aria-hidden]="mobileViewport() && !isOpen() ? 'true' : null">
+  <div class="dashboard-sidebar__top"><a class="dashboard-sidebar__brand" routerLink="/" (click)="closeMenu()"><span>LA</span> Chef</a><button #drawerClose class="dashboard-sidebar__close" type="button" aria-label="Close dashboard navigation" (click)="closeMenu(true)"><span aria-hidden="true">&times;</span></button></div>
 
   <div class="dashboard-sidebar__profile">
     <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ title().charAt(0) }}</div>

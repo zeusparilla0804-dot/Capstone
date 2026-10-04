@@ -14,7 +14,7 @@ process.env.DB_PASSWORD ??= 'test';
 const { allowedBookingTransitions, transitionBooking } = await import('./booking-status.service.js');
 const { withBookingStatusTransaction, bookingStatusHistory } = await import('../repositories/booking-status.repository.js');
 const { booking } = await import('../repositories/admin.repository.js');
-const { adminController } = await import('../controllers/admin.controller.js');
+const { adminController, parseActiveFlag } = await import('../controllers/admin.controller.js');
 const { adminService } = await import('./admin.service.js');
 const { bookingService } = await import('./booking.service.js');
 const bookingController = await import('../controllers/booking.controller.js');
@@ -22,7 +22,7 @@ const bookingController = await import('../controllers/booking.controller.js');
 const transitions: [BookingStatus, readonly BookingStatus[]][] = [
   ['PENDING', ['APPROVED', 'REJECTED', 'CANCELLED']],
   ['APPROVED', ['AWAITING_PAYMENT', 'CANCELLED']],
-  ['AWAITING_PAYMENT', ['PAYMENT_SUBMITTED', 'CANCELLED']],
+  ['AWAITING_PAYMENT', ['PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CANCELLED']],
   ['PAYMENT_SUBMITTED', ['PAYMENT_VERIFIED', 'AWAITING_PAYMENT']],
   ['PAYMENT_VERIFIED', ['CONFIRMED']],
   ['CONFIRMED', ['COMPLETED', 'CANCELLED']],
@@ -98,6 +98,14 @@ function assertStatus(error: unknown, code: number) {
 test('booking status exposes every approved transition and terminal state', () => {
   for (const [status, expected] of transitions) {
     assert.deepEqual(allowedBookingTransitions(status), expected, status);
+  }
+});
+
+test('catalog active flag accepts only literal JSON booleans', () => {
+  assert.equal(parseActiveFlag(true), true);
+  assert.equal(parseActiveFlag(false), false);
+  for (const value of ['true', 'false', 1, 0, null, undefined]) {
+    assert.throws(() => parseActiveFlag(value), error => assertStatus(error, 400));
   }
 });
 

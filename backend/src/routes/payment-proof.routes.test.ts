@@ -148,6 +148,14 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
         assert.deepEqual(Buffer.from(await response.arrayBuffer()), png);
       }
     });
+    await t.test('authorized inline previews retain private cache and nosniff headers', async () => {
+      const response = await fetch(`${base}/api/payment-proofs/1/file?view=inline`, { headers: { cookie: adminCookie } });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get('content-disposition'), 'inline; filename="receipt___X-Evil: yes.png"');
+      assert.equal(response.headers.get('cache-control'), 'private, no-store');
+      assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(response.headers.get('cross-origin-resource-policy'), 'same-site');
+    });
     await t.test('unauthorized and missing files have identical non-disclosing responses', async () => {
       const other = await fetch(`${base}/api/payment-proofs/1/file`, { headers: { cookie: otherCookie } });
       const missing = await fetch(`${base}/api/payment-proofs/999/file`, { headers: { cookie: ownerCookie } });

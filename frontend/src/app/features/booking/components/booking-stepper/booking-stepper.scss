@@ -1,0 +1,11 @@
+.stepper { margin-top: 30px; }
+.stepper ol { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
+.stepper li { position: relative; display: flex; align-items: center; gap: 9px; color: var(--color-text-muted); font-size: .82rem; font-weight: 600; }
+.stepper li:not(:last-child)::after { position: absolute; z-index: 0; top: 15px; right: 12px; left: 42px; height: 1px; background: var(--color-border); content: ''; }
+.stepper li > span { position: relative; z-index: 1; display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-background); font-size: .76rem; }
+.stepper li.is-current { color: var(--color-text); }
+.stepper li.is-current > span { border-color: var(--color-primary); background: var(--color-primary); color: #fff; }
+.stepper li.is-complete { color: var(--color-success); }
+.stepper li.is-complete > span { border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border)); color: var(--color-success); }
+.stepper__mobile { display: none; }
+@media (max-width: 767px) { .stepper ol { grid-template-columns: repeat(4, 1fr); } .stepper li { justify-content: center; } .stepper li strong { display: none; } .stepper li:not(:last-child)::after { right: -20px; left: calc(50% + 20px); } .stepper__mobile { display: flex; justify-content: space-between; margin-bottom: 14px; color: var(--color-text-muted); font-size: .82rem; } .stepper__mobile strong { color: var(--color-text); } }

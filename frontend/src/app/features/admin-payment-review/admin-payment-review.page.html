@@ -16,7 +16,7 @@
     <div class="review-grid">
       <section class="proof-viewer" aria-labelledby="proof-image-title">
         <div class="section-heading"><span>01</span><div><h2 id="proof-image-title">Submitted receipt</h2><p>Private customer upload. Inspect the image and transaction details together.</p></div></div>
-        <div class="image-stage">@if (!imageUnavailable()) { <img [src]="record.proof.fileUrl" alt="Customer payment receipt" (error)="imageUnavailable.set(true)" /> } @else { <div class="image-fallback" role="status"><strong>Preview unavailable</strong><p>Open the original file to inspect it.</p></div> }</div>
+        <div class="image-stage">@if (!imageUnavailable()) { <img [src]="previewUrl(record.proof.fileUrl)" alt="Customer payment receipt" [style.transform]="'scale(' + imageZoom() + ')'" (error)="imageUnavailable.set(true)" /><div class="image-stage__controls" aria-label="Receipt zoom controls"><button type="button" aria-label="Zoom out" (click)="zoomOut()" [disabled]="imageZoom() <= 0.5">-</button><button type="button" aria-label="Reset zoom" (click)="resetZoom()">1:1</button><button type="button" aria-label="Zoom in" (click)="zoomIn()" [disabled]="imageZoom() >= 3">+</button></div> } @else { <div class="image-fallback" role="status"><strong>Preview unavailable</strong><p>Open the original file to inspect it.</p></div> }</div>
         <a class="original-link" [href]="record.proof.fileUrl" target="_blank" rel="noopener">Open original image <span aria-hidden="true">↗</span></a>
       </section>
       <section class="proof-facts" aria-labelledby="proof-details-title">

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const migrationUrl = new URL('../../migrations/008_admin_operations_core.sql', import.meta.url);
+const referenceReleaseUrl = new URL('../../migrations/009_release_rejected_proof_references.sql', import.meta.url);
 
 test('admin operations schema defines payment proofs, booking history, and the email outbox', () => {
   const sql = readFileSync(migrationUrl, 'utf8');
@@ -63,4 +64,14 @@ test('admin operations schema defines payment proofs, booking history, and the e
   assert.match(sql, /ISJSON\(payload\)\s*=\s*1/i);
   assert.match(sql, /status\s+IN\s*\(\s*'PENDING'\s*,\s*'PROCESSING'\s*,\s*'SENT'\s*,\s*'FAILED'\s*\)/i);
   assert.match(sql, /datetime2/i);
+});
+
+test('rejected and superseded proof references are archived before their active uniqueness slot is released', () => {
+  const sql = readFileSync(referenceReleaseUrl, 'utf8');
+  assert.match(sql, /archived_transaction_reference\s+nvarchar\(150\)\s+NULL/i);
+  assert.match(sql, /status\s+IN\s*\(\s*''REJECTED''\s*,\s*''SUPERSEDED''\s*\)/i);
+  assert.match(sql, /archived_transaction_reference\s*=\s*transaction_reference/i);
+  assert.match(sql, /transaction_reference\s*=\s*NULL/i);
+  assert.match(sql, /DROP\s+CONSTRAINT\s+CK_PAYMENT_PROOF_reference/i);
+  assert.match(sql, /archived_transaction_reference\s+IS\s+NOT\s+NULL/i);
 });

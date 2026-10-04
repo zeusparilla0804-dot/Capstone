@@ -1,0 +1,125 @@
+<app-public-header />
+<main class="packages-page">
+  <section class="packages-intro" aria-labelledby="packages-title">
+    <div class="page-container packages-intro__inner">
+      <p class="packages-intro__label">Catering experiences</p>
+      <h1 id="packages-title">Find the right setting for your celebration.</h1>
+      <div class="packages-intro__copy">
+        <p>
+          Explore thoughtfully prepared catering experiences for weddings, birthdays, corporate
+          gatherings, anniversaries, debuts, and intimate celebrations.
+        </p>
+        <p>Every package can be adjusted around your guest count and event needs.</p>
+      </div>
+    </div>
+  </section>
+  <section class="packages-content" aria-labelledby="package-list-title">
+    <div class="page-container">
+      <h2 id="package-list-title" class="visually-hidden">Available packages</h2>
+      @if (packageService.loading()) {
+        <p class="data-state" role="status">Loading packages...</p>
+      }
+      @if (packageService.error()) {
+        <p class="data-state data-state--error" role="alert">
+          {{ packageService.error() }}
+          <button class="btn btn-tertiary" type="button" (click)="packageService.load()">
+            Try again
+          </button>
+        </p>
+      }
+      <div class="filter-heading">
+        <p>Choose your occasion</p>
+        <span>Event type</span>
+      </div>
+      <div class="category-filters" role="tablist" aria-label="Filter packages by event category">
+        @for (category of categories; track category.value) {
+          <button
+            type="button"
+            role="tab"
+            [class.is-active]="selectedCategory() === category.value"
+            [attr.aria-selected]="selectedCategory() === category.value"
+            (click)="setCategory(category.value)"
+          >
+            {{ category.label }}
+          </button>
+        }
+      </div>
+      <p class="packages-count" aria-live="polite">
+        {{ filteredPackages().length }}
+        {{ filteredPackages().length === 1 ? 'catering experience' : 'catering experiences' }}
+      </p>
+      <div class="packages-grid">
+        @for (cateringPackage of filteredPackages(); track cateringPackage.id) {
+          <app-package-card
+            [cateringPackage]="cateringPackage"
+            (viewDetails)="viewPackage($event)"
+            (selectPackage)="selectPackage($event)"
+          />
+        } @empty {
+          <p class="packages-empty">New packages for this category are coming soon.</p>
+        }
+      </div>
+      @if (selectedPackage(); as item) {
+        <section
+          id="package-detail"
+          class="package-detail"
+          tabindex="-1"
+          aria-labelledby="package-detail-title"
+        >
+          <img [src]="item.imageUrl" [alt]="item.name" />
+          <div>
+            <p class="page-kicker">{{ item.category }} catering</p>
+            <h2 id="package-detail-title">{{ item.name }}</h2>
+            <p>{{ item.description }}</p>
+            @if (item.features.length) {
+              <h3>Menu highlights</h3>
+              <ul>
+                @for (feature of item.features; track feature.label) {
+                  <li>{{ feature.label }}</li>
+                }
+              </ul>
+            }
+            <div class="package-detail__actions">
+              <button class="btn btn-primary" type="button" (click)="selectPackage(item.id)">
+                Plan this event</button
+              ><button class="btn btn-secondary" type="button" (click)="closeDetails()">
+                Close
+              </button>
+            </div>
+          </div>
+        </section>
+      }
+    </div>
+  </section>
+  <section class="custom-event" aria-labelledby="custom-event-title">
+    <div class="page-container custom-event__inner">
+      <div>
+        <p class="custom-event__label">Need something different?</p>
+        <h2 id="custom-event-title">Planning something more personal?</h2>
+      </div>
+      <div>
+        <p>
+          Tell us about your celebration and we'll shape a catering experience around your guest
+          count, menu preferences, and occasion.
+        </p>
+        <a class="custom-event__link" routerLink="/book-event"
+          >Create a custom event <span aria-hidden="true">&rarr;</span></a
+        >
+      </div>
+    </div>
+  </section>
+  <section class="planning-cta" aria-labelledby="planning-cta-title">
+    <div class="page-container planning-cta__inner">
+      <div>
+        <p>Ready to plan?</p>
+        <h2 id="planning-cta-title">Your celebration, thoughtfully catered.</h2>
+      </div>
+      <div>
+        <p>Share your plans and we'll help you find the right experience for your guests.</p>
+        <a class="planning-cta__link" routerLink="/book-event"
+          >Start planning <span aria-hidden="true">&rarr;</span></a
+        >
+      </div>
+    </div>
+  </section>
+</main>

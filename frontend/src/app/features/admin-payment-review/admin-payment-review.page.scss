@@ -9,8 +9,13 @@
 .section-heading > span { color: var(--color-accent); font-size: .72rem; font-weight: 800; }
 .section-heading h2 { font-family: var(--font-sans); font-size: 1.05rem; }
 .section-heading p { margin-top: 5px; color: var(--color-text-muted); font-size: .8rem; }
-.image-stage { display: grid; place-items: center; min-height: 420px; max-height: 680px; background: #e9e6de; margin-top: 18px; overflow: hidden; }
-.image-stage img { display: block; width: 100%; height: 100%; max-height: 680px; object-fit: contain; }
+.image-stage { position: relative; display: grid; place-items: center; min-height: 420px; max-height: 680px; background: #e9e6de; margin-top: 18px; overflow: hidden; }
+.image-stage img { display: block; width: 100%; height: 100%; max-height: 680px; object-fit: contain; transform-origin: center; transition: transform 160ms ease; }
+.image-stage__controls { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 1px; border: 1px solid rgba(40, 43, 38, .22); background: rgba(255, 255, 255, .94); }
+.image-stage__controls button { min-width: 42px; height: 42px; border: 0; border-left: 1px solid rgba(40, 43, 38, .12); background: transparent; color: var(--color-text); font: 750 .78rem var(--font-sans); }
+.image-stage__controls button:first-child { border-left: 0; }
+.image-stage__controls button:hover:not(:disabled), .image-stage__controls button:focus-visible { background: #fff; }
+.image-stage__controls button:disabled { opacity: .4; }
 .image-fallback { text-align: center; color: var(--color-text-muted); }
 .image-fallback p { margin-top: 5px; font-size: .8rem; }
 .original-link { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; color: var(--color-text); font-size: .78rem; font-weight: 750; }

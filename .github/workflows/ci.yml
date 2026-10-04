@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [backend, frontend]
+    defaults:
+      run:
+        working-directory: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: ${{ matrix.project }}/package-lock.json
+      - run: npm ci
+      - run: npm test -- --watch=false
+        if: matrix.project == 'frontend'
+      - run: npm test
+        if: matrix.project == 'backend'
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  operations-e2e:
+    if: ${{ vars.LA_CHEF_E2E_ENABLED == 'true' }}
+    runs-on: windows-latest
+    env:
+      NODE_ENV: test
+      FRONTEND_URL: http://localhost:4200
+      DB_SERVER: ${{ secrets.E2E_DB_SERVER }}
+      DB_PORT: ${{ secrets.E2E_DB_PORT }}
+      DB_DATABASE: ${{ secrets.E2E_DB_DATABASE }}
+      DB_USER: ${{ secrets.E2E_DB_USER }}
+      DB_PASSWORD: ${{ secrets.E2E_DB_PASSWORD }}
+      DB_ENCRYPT: "true"
+      DB_TRUST_SERVER_CERTIFICATE: "false"
+      PAYMENT_PROOF_UPLOAD_ROOT: ${{ runner.temp }}\la-chef-proof-e2e
+      PLAYWRIGHT_EXECUTABLE_PATH: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run db:migrate
+        working-directory: backend
+      - run: npm run test:e2e
+        working-directory: backend
+      - run: npm run test:e2e
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: admin-responsive-evidence
+          path: frontend/test-results/admin-dashboard-*.png
+          if-no-files-found: ignore

@@ -1,0 +1,71 @@
+<header class="public-header">
+  <div class="public-header__inner">
+    <a class="public-header__brand" routerLink="/" aria-label="LA Chef home" (click)="closeMenu()">
+      <span>LA</span><strong>Chef</strong>
+    </a>
+
+    <button
+      class="public-header__toggle"
+      type="button"
+      [attr.aria-expanded]="isMenuOpen()"
+      aria-controls="public-navigation"
+      [attr.aria-label]="isMenuOpen() ? 'Close navigation menu' : 'Open navigation menu'"
+      (click)="toggleMenu()"
+    >
+      <span></span><span></span><span></span>
+    </button>
+
+    <nav
+      id="public-navigation"
+      class="public-header__nav"
+      [class.is-open]="isMenuOpen()"
+      aria-label="Main navigation"
+    >
+      <ul class="public-header__links">
+        @for (item of navItems; track item.label) {
+          <li>
+            @if (item.showActiveState === false) {
+              <a [routerLink]="item.route" (click)="closeMenu()">{{ item.label }}</a>
+            } @else {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="is-active"
+                ariaCurrentWhenActive="page"
+                [routerLinkActiveOptions]="{ exact: item.route === '/' }"
+                (click)="closeMenu()"
+                >{{ item.label }}</a
+              >
+            }
+          </li>
+        }
+      </ul>
+
+      <div class="public-header__actions">
+        @if (authenticated()) {
+          <a
+            class="public-header__avatar"
+            routerLink="/dashboard"
+            aria-label="Open user dashboard"
+            (click)="closeMenu()"
+            >JC</a
+          >
+        } @else {
+          <a class="public-header__login" routerLink="/login" (click)="closeMenu()">Log in</a>
+        }
+        <a
+          class="public-header__auth btn btn-primary btn-sm"
+          routerLink="/book-event"
+          (click)="closeMenu()"
+          >Book now</a
+        >
+      </div>
+    </nav>
+    <button
+      class="public-header__backdrop"
+      [class.is-open]="isMenuOpen()"
+      type="button"
+      aria-label="Close navigation menu"
+      (click)="closeMenu()"
+    ></button>
+  </div>
+</header>

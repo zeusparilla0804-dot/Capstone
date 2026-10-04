@@ -278,70 +278,77 @@ async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void
   // Exercise the existing manual-payment repository; replace only SQL execution.
   t.mock.method(sql.Request.prototype, 'query', async function (this: sql.Request, command: string) {
     const values = Object.fromEntries(Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]));
+    if (/SELECT status,customer_id customerId FROM dbo\.RESERVATION/i.test(command)) {
+      assert.match(command, /UPDLOCK,HOLDLOCK/);
+      return { recordset: [{ status: db.booking!.status, customerId: db.booking!.customerId }], rowsAffected: [1] };
+    }
     if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) {
       assert.match(command, /UPDLOCK,HOLDLOCK/);
       return { recordset: [{ payment_id: 3, amount_due: 100, amount_paid: 10 }], rowsAffected: [] };
     }
-    if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
+    if (/UPDATE dbo\.PAYMENT_PROOF SET status='SUPERSEDED'/i.test(command)) {
+      for (const item of db.proofs) if (item.status === 'SUBMITTED') item.status = 'SUPERSEDED';
+    } else if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
       db.credits.push({ ...values, source: 'MANUAL' });
     } else if (/UPDATE dbo\.PAYMENT SET/i.test(command)) {
       assert.equal(values['paymentId'], 3); assert.equal(values['amount'], 90);
       db.payment!.amountPaid = 100; db.payment!.status = 'PAID';
     } else if (/UPDATE i SET status/i.test(command)) {
       db.invoice!.status = 'PAID';
+    } else if (/UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(command)) {
+      db.booking!.status = values['nextStatus'] as BookingStatus;
+    } else if (/INSERT dbo\.BOOKING_STATUS_HISTORY/i.test(command)) {
+      db.history.push(values);
     } else if (/INSERT dbo\.ADMIN_AUDIT_LOG/i.test(command)) {
       db.audits.push(values);
+    } else if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+      return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }], rowsAffected: [1] };
+    } else if (/INSERT dbo\.EMAIL_OUTBOX/i.test(command)) {
+      db.outbox.push(values); return { recordset: [{ id: '1' }], rowsAffected: [1] };
     } else { throw new Error(`Unexpected manual payment SQL: ${command}`); }
     return { recordset: [], rowsAffected: [1] };
   });
   try {
     assert.equal(await recordPayment(2, { reservationId: 5, amount: 90, method: 'CASH', paymentDate: '2026-10-02' }), true);
-    assert.deepEqual(events, ['begin', 'commit']); assert.equal(db.booking!.status, 'PAYMENT_SUBMITTED');
-    assert.equal(db.proofs[0]!.status, 'SUBMITTED'); assert.equal(db.credits.length, 1);
-    assert.equal(db.audits[0]!['auditAction'], 'PAYMENT_RECORDED');
+    assert.deepEqual(events, ['begin', 'commit']); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
+    assert.equal(db.proofs[0]!.status, 'SUPERSEDED'); assert.equal(db.credits.length, 1);
+    assert.equal(db.audits.at(-1)!['auditAction'], 'PAYMENT_RECORDED');
   } finally { await closeDatabase(); }
 }
 
-test('rejection remains possible when manual payment clears the balance between discovery and locks', async t => {
+test('manual payment wins safely when it supersedes a proof between discovery and review locks', async t => {
   const db = new ReviewDb(); db.beforeLocks = () => completeManualPayment(db, t);
-  const result = await db.service().rejectProof(2, proof.id, ' Already paid manually ');
-  assert.equal(result.status, 'REJECTED'); assert.equal(result.rejectionReason, 'Already paid manually');
-  assert.equal(result.paymentTransactionId, undefined); assert.equal(result.verifiedAmount, undefined);
-  assert.equal(db.booking!.status, 'AWAITING_PAYMENT'); assert.equal(db.payment!.amountPaid, 100);
+  await assert.rejects(db.service().rejectProof(2, proof.id, ' Already paid manually '), status(409));
+  assert.equal(db.proofs[0]!.status, 'SUPERSEDED'); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED'); assert.equal(db.payment!.amountPaid, 100);
   assert.equal(db.payment!.status, 'PAID'); assert.equal(db.invoice!.status, 'PAID');
   assert.equal(db.credits.length, 1); assert.equal(db.credits[0]!['source'], 'MANUAL');
-  assert.equal(db.history.length, 1); assert.equal(db.history[0]!['nextStatus'], 'AWAITING_PAYMENT');
-  assert.equal(db.audits.length, 3); assert.equal(db.audits.at(-1)!['auditAction'], 'PAYMENT_PROOF_REJECTED');
-  const audit = JSON.parse(String(db.audits.at(-1)!['auditNewValues']));
-  assert.equal(audit.amountPaid, 100); assert.equal(audit.verifiedAmount, null); assert.equal(audit.paymentTransactionId, null);
-  assert.deepEqual(db.events, ['begin', 'commit']); lockOrder(db);
+  assert.equal(db.history.length, 1); assert.equal(db.history[0]!['nextStatus'], 'PAYMENT_VERIFIED');
+  assert.equal(db.audits.length, 2); assert.equal(db.audits.at(-1)!['auditAction'], 'PAYMENT_RECORDED');
   await assert.rejects(db.service().rejectProof(2, proof.id, 'stale retry'), status(409));
   assert.equal(db.credits.length, 1); assert.equal(db.history.length, 1);
 });
 
 for (const other of ['verifyProof', 'rejectProof'] as const) {
-  test(`zero-balance rejection has one winner against concurrent ${other} after manual completion`, async t => {
+  test(`manual completion prevents concurrent ${other} and rejection from double-processing`, async t => {
     const db = new ReviewDb(); await completeManualPayment(db, t); const service = db.service();
     const results = await Promise.allSettled([
       service[other](2, proof.id, other === 'verifyProof' ? 90 : 'duplicate receipt'),
       service.rejectProof(2, proof.id, 'already paid manually')
     ]);
-    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
-    const loser = results.find(result => result.status === 'rejected'); assert.ok(loser && loser.status === 'rejected'); status(409)(loser.reason);
-    assert.equal(db.proofs[0]!.status, 'REJECTED'); assert.equal(db.booking!.status, 'AWAITING_PAYMENT');
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 0);
+    for (const result of results) { assert.equal(result.status, 'rejected'); if (result.status === 'rejected') status(409)(result.reason); }
+    assert.equal(db.proofs[0]!.status, 'SUPERSEDED'); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
     assert.equal(db.payment!.amountPaid, 100); assert.equal(db.invoice!.status, 'PAID'); assert.equal(db.credits.length, 1);
-    assert.equal(db.history.length, 1); assert.equal(db.audits.length, 3);
-    const committingLocks = db.queries.filter(query => /UPDLOCK/.test(query.command) && /dbo\.PAYMENT_PROOF/.test(query.command));
-    assert.ok(committingLocks.length >= 1); lockOrder(db);
+    assert.equal(db.history.length, 1); assert.equal(db.audits.length, 2);
   });
 }
 
-test('zero-balance rejection rolls back review writes on audit failure and preserves manual credit', async t => {
+test('manual completion leaves no proof review writes to roll back', async t => {
   const db = new ReviewDb(); await completeManualPayment(db, t); db.failOn = 'PAYMENT_PROOF_REJECTED';
-  await assert.rejects(db.service().rejectProof(2, proof.id, 'already paid manually'), /audit failed/);
-  assert.equal(db.proofs[0]!.status, 'SUBMITTED'); assert.equal(db.booking!.status, 'PAYMENT_SUBMITTED');
+  await assert.rejects(db.service().rejectProof(2, proof.id, 'already paid manually'), status(409));
+  assert.equal(db.proofs[0]!.status, 'SUPERSEDED'); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
   assert.equal(db.payment!.amountPaid, 100); assert.equal(db.invoice!.status, 'PAID'); assert.equal(db.credits.length, 1);
-  assert.equal(db.history.length, 0); assert.equal(db.audits.length, 1); assert.deepEqual(db.events, ['begin', 'rollback']);
+  assert.equal(db.history.length, 1); assert.equal(db.audits.length, 2);
 });
 
 test('transaction identity above MAX_SAFE_INTEGER remains exact in FK binding, response, audit and admin reads', async () => {

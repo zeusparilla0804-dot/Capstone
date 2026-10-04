@@ -1,0 +1,58 @@
+<main class="admin-login">
+  <section class="admin-auth-shell">
+    <aside class="admin-brand">
+      <a href="/" aria-label="Return to LA Chef home"
+        ><img src="assets/brand/la-chef-logo.jpg" alt="LA Chef Event Catering Services"
+      /></a>
+      <div>
+        <p>LA Chef operations</p>
+        <h1>Every celebration, coordinated with care.</h1>
+        <span
+          >Review reservations, manage packages, confirm payments, and keep the service team
+          aligned.</span
+        >
+      </div>
+      <small>Authorized personnel only</small>
+    </aside>
+    <section class="admin-form-panel" aria-labelledby="admin-login-title">
+      <div class="admin-mobile-logo"><img src="assets/brand/la-chef-logo.jpg" alt="" /></div>
+      <p class="page-kicker">Administration</p>
+      <h2 id="admin-login-title">Welcome back</h2>
+      <p>Sign in to manage LA Chef operations.</p>
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <div class="form-field">
+          <label for="identity">Email or username</label
+          ><input
+            id="identity"
+            formControlName="identity"
+            autocomplete="username"
+            placeholder="admin@lachef.com"
+          />
+        </div>
+        <div class="form-field">
+          <label for="adminPassword">Password</label>
+          <div class="password-field">
+            <input
+              id="adminPassword"
+              [type]="showPassword() ? 'text' : 'password'"
+              formControlName="password"
+              autocomplete="current-password"
+            /><button type="button" (click)="showPassword.set(!showPassword())">
+              {{ showPassword() ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+        @if (error()) {
+          <p class="admin-error" role="alert">{{ error() }}</p>
+        }
+        <button class="btn btn-primary" type="submit" [disabled]="busy()">
+          {{ busy() ? 'Signing in...' : 'Sign in to dashboard' }}
+        </button>
+      </form>
+      <div class="admin-help">
+        <span>Having trouble signing in?</span><a href="mailto:hello@lachef.ph">Contact support</a>
+      </div>
+      <a class="back-link" href="/">&larr; Back to customer site</a>
+    </section>
+  </section>
+</main>

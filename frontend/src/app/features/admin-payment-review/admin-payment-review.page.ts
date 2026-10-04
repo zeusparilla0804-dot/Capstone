@@ -27,6 +27,7 @@ export class AdminPaymentReviewPage {
   protected readonly reviewError = signal('');
   protected readonly mutationPending = signal(false);
   protected readonly imageUnavailable = signal(false);
+  protected readonly imageZoom = signal(1);
   protected readonly verifiedAmount = signal(0);
   protected correctionReason = '';
   protected rejectionReason = '';
@@ -95,6 +96,22 @@ export class AdminPaymentReviewPage {
 
   protected methodLabel(method: string): string {
     return method === 'E_WALLET' ? 'GCash / e-wallet' : method === 'BANK_TRANSFER' ? 'Bank transfer' : 'Cash';
+  }
+
+  protected previewUrl(fileUrl: string): string {
+    return `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}view=inline`;
+  }
+
+  protected zoomIn(): void {
+    this.imageZoom.update((value) => Math.min(3, value + 0.25));
+  }
+
+  protected zoomOut(): void {
+    this.imageZoom.update((value) => Math.max(0.5, value - 0.25));
+  }
+
+  protected resetZoom(): void {
+    this.imageZoom.set(1);
   }
 
   private submitReview(

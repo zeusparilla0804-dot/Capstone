@@ -65,7 +65,9 @@ export async function downloadProof(request: Request, response: Response, next: 
     response.setHeader('Content-Type', proof.mimeType);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Cache-Control', 'private, no-store');
-    response.setHeader('Content-Disposition', `attachment; filename="${safeProofFilename(proof.originalFilename)}"`);
+    response.setHeader('Cross-Origin-Resource-Policy', 'same-site');
+    const disposition = request.query?.['view'] === 'inline' ? 'inline' : 'attachment';
+    response.setHeader('Content-Disposition', `${disposition}; filename="${safeProofFilename(proof.originalFilename)}"`);
     stream.pipe(response);
   } catch (error) { fail(error); }
 }

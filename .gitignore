@@ -146,3 +146,19 @@ vite.config.ts.timestamp-*
 # Private runtime uploads (source and templates remain tracked)
 backend/var/uploads/**
 !backend/var/uploads/.gitkeep
+backend/data/payment-proofs/**
+!backend/data/payment-proofs/.gitkeep
+
+# Local IDE and agent tooling
+.vscode/
+.agents/
+.superpowers/
+skills-lock.json
+
+# Local release verification workspaces
+.release-candidate.index*
+.release-snapshot/
+
+# Temporary audit helpers and unapproved business fixtures
+backend/audit-*.mjs
+backend/fixtures/*.provisional.sql

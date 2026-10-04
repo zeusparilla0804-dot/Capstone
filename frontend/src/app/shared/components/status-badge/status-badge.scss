@@ -1,0 +1,39 @@
+.status-badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.status-badge--confirmed,
+.status-badge--payment_verified,
+.status-badge--paid {
+  background: color-mix(in srgb, var(--color-success) 14%, #ffffff);
+  color: #1d7040;
+}
+
+.status-badge--pending,
+.status-badge--approved,
+.status-badge--awaiting_payment,
+.status-badge--payment_submitted,
+.status-badge--partially_paid,
+.status-badge--submitted {
+  background: color-mix(in srgb, var(--color-warning) 18%, #ffffff);
+  color: #8a5a10;
+}
+
+.status-badge--cancelled,
+.status-badge--rejected {
+  background: color-mix(in srgb, var(--color-danger) 14%, #ffffff);
+  color: #9c2f2f;
+}
+
+.status-badge--completed {
+  background: #ece9e1;
+  color: var(--color-text-muted);
+}
