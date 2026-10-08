@@ -25,7 +25,9 @@ function installDatabase(t: test.TestContext, initialStatus: string) {
     queries.push(command);
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, value]) => [key, value.value]));
     const result = (recordset: Record<string, unknown>[] = [], rows = 1) => ({ recordset, rowsAffected: [rows] });
-    if (/SELECT status,customer_id customerId FROM dbo\.RESERVATION/i.test(command)) return result([{ status, customerId: 7 }]);
+    if (/SELECT status,customer_id customerId[\s\S]*FROM dbo\.RESERVATION/i.test(command)) return result([{
+      status, customerId: 7, eventDate: '2026-12-01', guestCount: 100
+    }]);
     if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) return result([{ payment_id: 3, amount_due: 100, amount_paid: 10 }]);
     if (/UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(command)) { status = String(values['nextStatus']); return result(); }
     if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) return result([{

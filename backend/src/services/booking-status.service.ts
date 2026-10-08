@@ -4,6 +4,8 @@ import { insertBookingStatusHistory, lockedBookingStatus, runBookingStatusTransa
 import type { BookingActor, BookingStatus } from '../types/admin.types.js';
 import { AppError } from '../utils/app-error.js';
 import { queueBookingNotification } from './notification.service.js';
+import { readCapacitySnapshot } from '../repositories/booking-availability.repository.js';
+import { assessDateAvailability } from './booking-availability.service.js';
 
 const transitions: Record<BookingStatus, readonly BookingStatus[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -28,6 +30,7 @@ export interface BookingTransitionInput {
   reason?: string;
   expectedStatus?: BookingStatus;
   mode?: 'GENERIC_ADMIN';
+  capacityConfirmed?: boolean;
   request?: sql.Request;
 }
 
@@ -51,6 +54,9 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
   if (input.reason !== undefined && typeof input.reason !== 'string') {
     throw new AppError(400, 'Booking reason is invalid.');
   }
+  if (input.capacityConfirmed !== undefined && typeof input.capacityConfirmed !== 'boolean') {
+    throw new AppError(400, 'Capacity confirmation must be true or false.');
+  }
   const reason = input.reason?.trim();
   if (reason && reason.length > 1000) throw new AppError(400, 'Booking reason is too long.');
   if ((input.nextStatus === 'REJECTED' || input.nextStatus === 'CANCELLED') && !reason) {
@@ -68,13 +74,31 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
     if (!allowedBookingTransitions(previousStatus).includes(input.nextStatus)) {
       throw new AppError(409, `Cannot change ${previousStatus} booking to ${input.nextStatus}.`);
     }
+    let capacityWasConfirmed = false;
+    if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED') {
+      const snapshot = await readCapacitySnapshot(current.eventDate, { request, lock: true });
+      const availability = assessDateAvailability({
+        date: current.eventDate,
+        guestCount: current.guestCount,
+        snapshot,
+        includeProposed: false,
+      });
+      if (availability.status === 'FULL') {
+        throw new AppError(409, 'Date capacity changed. Refresh the booking and review it again.', 'CAPACITY_CHANGED');
+      }
+      if (availability.requiresAdminConfirmation && input.capacityConfirmed !== true) {
+        throw new AppError(400, 'Confirm that LA Chef can accommodate this event before approval.', 'CAPACITY_CONFIRMATION_REQUIRED');
+      }
+      capacityWasConfirmed = availability.requiresAdminConfirmation && input.capacityConfirmed === true;
+    }
     if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request, input.actor.type === 'CUSTOMER' ? input.actor.id : undefined)) {
       throw new AppError(409, 'Booking status changed. Refresh and try again.');
     }
     await insertBookingStatusHistory({ reservationId: input.reservationId, previousStatus, nextStatus: input.nextStatus, actor: input.actor, reason }, request);
     if (input.actor.type === 'ADMIN') {
       await writeAdminAudit({ adminId: input.actor.id, action: 'BOOKING_STATUS_CHANGED', entityType: 'BOOKING', entityId: input.reservationId,
-        oldValues: { status: previousStatus }, newValues: { status: input.nextStatus, reason: reason ?? null } }, request);
+        oldValues: { status: previousStatus }, newValues: { status: input.nextStatus, reason: reason ?? null,
+          ...(capacityWasConfirmed ? { capacityConfirmed: true } : {}) } }, request);
     }
     const notification = ({ APPROVED: 'BOOKING_APPROVED', REJECTED: 'BOOKING_REJECTED', CONFIRMED: 'BOOKING_CONFIRMED',
       CANCELLED: 'BOOKING_CANCELLED', COMPLETED: 'BOOKING_COMPLETED' } as const)[input.nextStatus as 'APPROVED' | 'REJECTED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'];

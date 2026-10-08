@@ -13,7 +13,7 @@ process.env.DB_PASSWORD ??= 'test';
 
 const { allowedBookingTransitions, transitionBooking } = await import('./booking-status.service.js');
 const { withBookingStatusTransaction, bookingStatusHistory } = await import('../repositories/booking-status.repository.js');
-const { booking } = await import('../repositories/admin.repository.js');
+const { booking, mapAdminBookingCapacity } = await import('../repositories/admin.repository.js');
 const { adminController, parseActiveFlag } = await import('../controllers/admin.controller.js');
 const { adminService } = await import('./admin.service.js');
 const { bookingService } = await import('./booking.service.js');
@@ -34,6 +34,11 @@ const transitions: [BookingStatus, readonly BookingStatus[]][] = [
 class BookingDb {
   status: BookingStatus = 'PENDING';
   customerId = 7;
+  eventDate = '2026-12-01';
+  guestCount = 100;
+  activeBookingCount = 1;
+  largestGuestCount = 100;
+  hasMediumEvent = false;
   exists = true;
   stale = false;
   failOn: 'history' | 'audit' | undefined;
@@ -59,8 +64,13 @@ class FakeRequest {
       if (this.db.failQueue) throw new Error('outbox insert failed');
       this.db.outbox.push({ ...this.params }); return { recordset: [{ id: '9007199254740993' }], rowsAffected: [1] };
     }
-    if (/SELECT.*FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
-      return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.customerId }] : [], rowsAffected: [this.db.exists ? 1 : 0] };
+    if (!/COUNT_BIG/i.test(command) && /SELECT.*FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
+      return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.customerId,
+        eventDate: this.db.eventDate, guestCount: this.db.guestCount }] : [], rowsAffected: [this.db.exists ? 1 : 0] };
+    }
+    if (/^\s*SELECT\s+COUNT_BIG\s*\(\s*\*\s*\).*FROM dbo\.RESERVATION/is.test(command)) {
+      return { recordset: [{ activeBookingCount: this.db.activeBookingCount,
+        largestGuestCount: this.db.largestGuestCount, hasMediumEvent: this.db.hasMediumEvent ? 1 : 0 }], rowsAffected: [1] };
     }
     if (/UPDATE dbo\.RESERVATION/is.test(command)) {
       if (this.db.stale || this.params['previousStatus'] !== this.db.status ||
@@ -82,7 +92,9 @@ class FakeRequest {
       return { recordset: [{ id: 8, previousStatus: 'PENDING', nextStatus: 'APPROVED', actorType: 'ADMIN', actorId: 3, reason: null, createdAt: new Date('2026-10-02T00:00:00Z') }], rowsAffected: [1] };
     }
     if (/FROM dbo\.RESERVATION/is.test(command)) {
-      return { recordset: [{ id: 5, status: this.db.status }], rowsAffected: [1] };
+      return { recordset: [{ id: 5, status: this.db.status, eventDate: this.db.eventDate,
+        guestCount: this.db.guestCount, activeBookingCount: this.db.activeBookingCount,
+        largestGuestCount: this.db.largestGuestCount, hasMediumEvent: this.db.hasMediumEvent ? 1 : 0 }], rowsAffected: [1] };
     }
     if (/FROM dbo\.RESERVATION_ADD_ON/is.test(command)) return { recordset: [], rowsAffected: [0] };
     throw new Error(`Unexpected query: ${command}`);
@@ -92,6 +104,13 @@ class FakeRequest {
 function assertStatus(error: unknown, code: number) {
   assert.ok(error instanceof AppError);
   assert.equal(error.statusCode, code);
+  return true;
+}
+
+function assertCodedStatus(error: unknown, statusCode: number, code: string) {
+  assert.ok(error instanceof AppError);
+  assert.equal(error.statusCode, statusCode);
+  assert.equal(error.code, code);
   return true;
 }
 
@@ -263,9 +282,125 @@ test('booking status history returns ordered actor and timestamp records', async
 
 test('booking status history appears in admin booking detail', async () => {
   const db = new BookingDb();
+  db.activeBookingCount = 2;
+  db.largestGuestCount = 250;
+  db.hasMediumEvent = true;
   const detail = await booking(5, db.request);
   assert.equal(detail?.status, 'PENDING');
   assert.equal(detail?.statusHistory?.[0]?.nextStatus, 'APPROVED');
+  assert.deepEqual(detail?.capacity, {
+    date: '2026-12-01',
+    guestCount: 100,
+    status: 'NEEDS_CONFIRMATION',
+    activeBookingCount: 2,
+    capacityLimit: 6,
+    remainingRequestSlots: 4,
+    requiresAdminConfirmation: false,
+    message: 'LA Chef will confirm whether this date can accommodate your event.',
+  });
+  assert.equal('largestGuestCount' in detail!, false);
+  assert.equal('hasMediumEvent' in detail!, false);
+});
+
+test('admin booking capacity mapping nests safe summary fields and removes raw aggregates', () => {
+  const item = mapAdminBookingCapacity({
+    id: 5,
+    eventDate: '2026-12-01',
+    guestCount: 250,
+    activeBookingCount: 2,
+    largestGuestCount: 250,
+    hasMediumEvent: 1,
+    total_count: 4,
+  });
+
+  assert.equal(item.capacity.status, 'NEEDS_CONFIRMATION');
+  assert.equal(item.capacity.requiresAdminConfirmation, true);
+  assert.equal(item.capacity.activeBookingCount, 2);
+  assert.equal(item.capacity.capacityLimit, 6);
+  assert.equal(item.capacity.remainingRequestSlots, 4);
+  assert.equal('largestGuestCount' in item, false);
+  assert.equal('hasMediumEvent' in item, false);
+  assert.equal(item.total_count, 4);
+});
+
+test('medium booking approval requires explicit capacity confirmation at both boundaries', async () => {
+  for (const guestCount of [150, 499]) {
+    for (const capacityConfirmed of [undefined, false]) {
+      const db = new BookingDb();
+      db.guestCount = guestCount;
+      db.largestGuestCount = guestCount;
+      db.hasMediumEvent = true;
+      await assert.rejects(
+        transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed, request: db.request }),
+        error => assertCodedStatus(error, 400, 'CAPACITY_CONFIRMATION_REQUIRED'),
+      );
+      assert.equal(db.status, 'PENDING');
+    }
+  }
+});
+
+test('small and large booking boundaries approve without medium confirmation', async () => {
+  for (const guestCount of [149, 500]) {
+    const db = new BookingDb();
+    db.guestCount = guestCount;
+    db.largestGuestCount = guestCount;
+    await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request });
+    assert.equal(db.status, 'APPROVED');
+  }
+});
+
+test('admin approval rejects a stale over-capacity date with a coded conflict', async () => {
+  const db = new BookingDb();
+  db.activeBookingCount = 4;
+  db.largestGuestCount = 600;
+
+  await assert.rejects(
+    transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }),
+    error => assertCodedStatus(error, 409, 'CAPACITY_CHANGED'),
+  );
+  assert.equal(db.status, 'PENDING');
+  assert.equal(db.history.length, 0);
+});
+
+test('confirmed medium approval records the explicit capacity decision in admin audit', async () => {
+  const db = new BookingDb();
+  db.guestCount = 250;
+  db.largestGuestCount = 250;
+  db.hasMediumEvent = true;
+
+  await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed: true, request: db.request });
+
+  assert.equal(db.status, 'APPROVED');
+  assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditNewValues'])), {
+    status: 'APPROVED',
+    reason: null,
+    capacityConfirmed: true,
+  });
+});
+
+test('capacity confirmation accepts only a literal boolean and controller forwards true', async () => {
+  const db = new BookingDb();
+  await assert.rejects(
+    transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed: 'true' as never, request: db.request }),
+    error => assertStatus(error, 400),
+  );
+  assert.equal(db.queries.length, 0);
+
+  const calls: unknown[][] = [];
+  const updateMock = mock.method(adminService, 'updateStatus', async (...args: unknown[]) => { calls.push(args); });
+  try {
+    const errors: unknown[] = [];
+    const response = { json: (_body: unknown) => response };
+    await adminController.status({ params: { id: '5' }, admin: { id: 3 }, body: { status: 'APPROVED', capacityConfirmed: 'true' } } as never, response as never, (error: unknown) => { errors.push(error); });
+    assert.equal(calls.length, 0);
+    assert.equal(errors.length, 1);
+    assertStatus(errors[0], 400);
+
+    await adminController.status({ params: { id: '5' }, admin: { id: 3 }, body: { status: 'APPROVED', capacityConfirmed: true } } as never, response as never, (error: unknown) => { errors.push(error); });
+    assert.deepEqual(calls, [[3, 5, 'APPROVED', undefined, true]]);
+  } finally {
+    updateMock.mock.restore();
+  }
 });
 
 test('booking status endpoint validates status and reason before dispatch', async () => {
@@ -281,7 +416,7 @@ test('booking status endpoint validates status and reason before dispatch', asyn
     assert.equal(errors.length, 2);
     errors.forEach(error => assertStatus(error, 400));
     await invoke({ status: 'CANCELLED', reason: ' Customer request ' });
-    assert.deepEqual(calls, [[3, 5, 'CANCELLED', 'Customer request']]);
+    assert.deepEqual(calls, [[3, 5, 'CANCELLED', 'Customer request', undefined]]);
   } finally {
     updateMock.mock.restore();
   }

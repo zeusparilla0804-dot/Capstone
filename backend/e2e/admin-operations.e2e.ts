@@ -26,6 +26,7 @@ const customerAEmail = `${marker.toLowerCase()}-a@example.test`;
 const customerBEmail = `${marker.toLowerCase()}-b@example.test`;
 const adminEmail = `${marker.toLowerCase()}-admin@example.test`;
 const created: Record<string, number> = {};
+const createdBookingIds: number[] = [];
 let server: ReturnType<typeof app.listen> | undefined;
 
 const receiptJpeg = Buffer.from(
@@ -68,9 +69,9 @@ async function proofForm(reference: string, amount: number, paymentDate: string)
 async function cleanup(): Promise<void> {
   try {
     const pool = await database.getDbPool();
-    if (created.booking) {
+    for (const bookingId of createdBookingIds) {
       await pool.request()
-        .input('id', sql.Int, created.booking)
+        .input('id', sql.Int, bookingId)
         .input('adminId', sql.Int, created.admin)
         .input('emailA', sql.NVarChar(320), customerAEmail)
         .input('emailB', sql.NVarChar(320), customerBEmail)
@@ -91,8 +92,9 @@ async function cleanup(): Promise<void> {
           DELETE FROM dbo.RESERVATION WHERE reservation_id=@id;
         `);
     }
-    if (created.package) {
-      await pool.request().input('id', sql.Int, created.package).query('DELETE FROM dbo.PACKAGE WHERE package_id=@id');
+    for (const packageId of [created.package, created.capacityPackage]) {
+      if (!packageId) continue;
+      await pool.request().input('id', sql.Int, packageId).query('DELETE FROM dbo.PACKAGE WHERE package_id=@id');
     }
     for (const email of [customerAEmail, customerBEmail]) {
       await pool.request().input('email', sql.NVarChar(255), email).query(`
@@ -154,6 +156,13 @@ try {
     })
   }, 201);
   created.package = Number(packageCreate.body.data.id);
+  const capacityPackageCreate = await api(base, '/admin/packages', {
+    method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
+      eventId: Number(event.event_id), name: `${marker} Capacity Package`, description: 'Disposable admin capacity package',
+      pricePerGuest: 100, minGuests: 1, maxGuests: 1000, isActive: true
+    })
+  }, 201);
+  created.capacityPackage = Number(capacityPackageCreate.body.data.id);
 
   const eventDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
   const bookingCreate = await api(base, '/bookings', {
@@ -163,6 +172,78 @@ try {
     })
   }, 201);
   created.booking = Number(bookingCreate.body.data.id);
+  createdBookingIds.push(created.booking);
+
+  const capacityMonth = String((Number.parseInt(marker.slice(-2), 16) % 10) + 1).padStart(2, '0');
+  const mediumDate = `2097-${capacityMonth}-20`;
+  const staleDate = `2097-${capacityMonth}-21`;
+  const capacityBody = (eventDate: string, guestCount: number) => JSON.stringify({
+    eventType: event.event_type,
+    eventDate,
+    eventTime: '14:30',
+    venue: `${marker} Capacity Venue`,
+    guestCount,
+    packageId: created.capacityPackage,
+    addOnIds: [],
+    paymentMethod: 'cash',
+  });
+  const capacityBooking = async (eventDate: string, guestCount: number, sessionCookie: string) => {
+    const result = await api(base, '/bookings', {
+      method: 'POST', headers: { cookie: sessionCookie }, body: capacityBody(eventDate, guestCount)
+    }, 201);
+    createdBookingIds.push(Number(result.body.data.id));
+    return Number(result.body.data.id);
+  };
+
+  const mediumBookingId = await capacityBooking(mediumDate, 250, customerACookie);
+  let capacityDetail = await api(base, `/admin/bookings/${mediumBookingId}`, { headers: { cookie: adminCookie } });
+  assert.equal(capacityDetail.body.data.capacity.status, 'NEEDS_CONFIRMATION');
+  assert.equal(capacityDetail.body.data.capacity.activeBookingCount, 1);
+  assert.equal(capacityDetail.body.data.capacity.capacityLimit, 6);
+  assert.equal(capacityDetail.body.data.capacity.remainingRequestSlots, 5);
+  assert.equal(capacityDetail.body.data.capacity.requiresAdminConfirmation, true);
+  const capacityList = await api(base, `/admin/bookings?date=${mediumDate}`, { headers: { cookie: adminCookie } });
+  const mediumListItem = capacityList.body.data.items.find((item: { id: number }) => Number(item.id) === mediumBookingId);
+  assert.equal(mediumListItem.capacity.requiresAdminConfirmation, true);
+  const missingConfirmation = await api(base, `/admin/bookings/${mediumBookingId}/status`, {
+    method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' })
+  }, 400);
+  assert.equal(missingConfirmation.body.code, 'CAPACITY_CONFIRMATION_REQUIRED');
+  await api(base, `/admin/bookings/${mediumBookingId}/status`, {
+    method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED', capacityConfirmed: 'true' })
+  }, 400);
+  await api(base, `/admin/bookings/${mediumBookingId}/status`, {
+    method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED', capacityConfirmed: true })
+  });
+  capacityDetail = await api(base, `/admin/bookings/${mediumBookingId}`, { headers: { cookie: adminCookie } });
+  assert.equal(capacityDetail.body.data.status, 'APPROVED');
+  assert.ok(capacityDetail.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'APPROVED'));
+  const confirmationAudit = await pool.request()
+    .input('adminId', sql.Int, created.admin)
+    .input('bookingId', sql.Int, mediumBookingId)
+    .query(`SELECT TOP 1 new_values newValues FROM dbo.ADMIN_AUDIT_LOG
+      WHERE admin_id=@adminId AND entity_type='BOOKING' AND entity_id=@bookingId AND action='BOOKING_STATUS_CHANGED'
+      ORDER BY audit_id DESC`);
+  assert.equal(JSON.parse(String(confirmationAudit.recordset[0].newValues)).capacityConfirmed, true);
+
+  const staleBookingId = await capacityBooking(staleDate, 100, customerACookie);
+  await capacityBooking(staleDate, 100, customerBCookie);
+  await capacityBooking(staleDate, 100, customerACookie);
+  const forced = await pool.request()
+    .input('customerId', sql.Int, Number(registeredA.body.data.id))
+    .input('eventId', sql.Int, Number(event.event_id))
+    .input('packageId', sql.Int, created.capacityPackage)
+    .input('reference', sql.NVarChar(30), `${marker}-STALE`)
+    .input('eventDate', sql.Date, new Date(`${staleDate}T00:00:00Z`))
+    .query(`INSERT dbo.RESERVATION(customer_id,event_id,package_id,booking_reference,event_date,event_time,guest_count,
+      venue_address,status,package_unit_price,subtotal,total_amount)
+      OUTPUT INSERTED.reservation_id VALUES(@customerId,@eventId,@packageId,@reference,@eventDate,CAST('15:00' AS time),
+      600,'Forced stale capacity fixture','PENDING',100,60000,60000)`);
+  createdBookingIds.push(Number(forced.recordset[0].reservation_id));
+  const staleApproval = await api(base, `/admin/bookings/${staleBookingId}/status`, {
+    method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' })
+  }, 409);
+  assert.equal(staleApproval.body.code, 'CAPACITY_CHANGED');
 
   await api(base, `/admin/bookings/${created.booking}/status`, {
     method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' })

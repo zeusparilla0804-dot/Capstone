@@ -18,10 +18,12 @@ export async function runBookingStatusTransaction<T>(work: (request: sql.Request
   return withBookingStatusTransaction(new sql.Transaction(await getDbPool()), work);
 }
 
-export async function lockedBookingStatus(reservationId: number, request: sql.Request): Promise<{ status: BookingStatus; customerId: number } | undefined> {
+export async function lockedBookingStatus(reservationId: number, request: sql.Request): Promise<{ status: BookingStatus; customerId: number; eventDate: string; guestCount: number } | undefined> {
   const result = await request
     .replaceInput('reservationId', sql.Int, reservationId)
-    .query<{ status: BookingStatus; customerId: number }>('SELECT status,customer_id customerId FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
+    .query<{ status: BookingStatus; customerId: number; eventDate: string; guestCount: number }>(`SELECT status,customer_id customerId,
+      CONVERT(varchar(10),event_date,23) eventDate,guest_count guestCount
+      FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId`);
   return result.recordset[0];
 }
 

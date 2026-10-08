@@ -278,9 +278,10 @@ async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void
   // Exercise the existing manual-payment repository; replace only SQL execution.
   t.mock.method(sql.Request.prototype, 'query', async function (this: sql.Request, command: string) {
     const values = Object.fromEntries(Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]));
-    if (/SELECT status,customer_id customerId FROM dbo\.RESERVATION/i.test(command)) {
+    if (/SELECT status,customer_id customerId[\s\S]*FROM dbo\.RESERVATION/i.test(command)) {
       assert.match(command, /UPDLOCK,HOLDLOCK/);
-      return { recordset: [{ status: db.booking!.status, customerId: db.booking!.customerId }], rowsAffected: [1] };
+      return { recordset: [{ status: db.booking!.status, customerId: db.booking!.customerId,
+        eventDate: '2026-12-01', guestCount: 100 }], rowsAffected: [1] };
     }
     if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) {
       assert.match(command, /UPDLOCK,HOLDLOCK/);
