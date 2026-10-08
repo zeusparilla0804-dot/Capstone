@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
-import { firstValueFrom, finalize } from 'rxjs';
+import { firstValueFrom, finalize, map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApiResponse, Booking, BookingDraft, BookingStatus, BookingTab, CateringPackage } from '../models';
+import { ApiResponse, Booking, BookingAvailability, BookingDraft, BookingStatus, BookingTab, CateringPackage } from '../models';
 interface ApiBooking extends Omit<Booking,'id'|'customerId'|'thumbnailUrl'|'package'|'addOns'>{readonly id:number;readonly total:number;readonly package:{packageId:number;packageName:string;pricePerGuest:number};readonly addOns:readonly {id:number;name:string;description?:string;price:number}[];}
 const tabByStatus:Record<BookingStatus,BookingTab>={pending:'upcoming',approved:'upcoming',awaiting_payment:'upcoming',payment_submitted:'upcoming',payment_verified:'upcoming',confirmed:'upcoming',completed:'past',rejected:'rejected',cancelled:'cancelled'};
 @Injectable({providedIn:'root'})
@@ -11,8 +11,9 @@ export class BookingService{
  loadMine():void{this.loading.set(true);this.error.set('');this.http.get<ApiResponse<readonly ApiBooking[]>>(`${environment.apiBaseUrl}/bookings/my`,{withCredentials:true}).pipe(finalize(()=>this.loading.set(false))).subscribe({next:r=>this.state.set(r.data.map(x=>this.map(x))),error:()=>this.error.set('Unable to load your bookings.')});}
  getBookingById(id:string){return this.state().find(x=>x.id===id);}
  getBookingsByTab(tab:BookingTab){return [...this.state().filter(x=>tabByStatus[x.status]===tab)].sort((a,b)=>a.eventDate.localeCompare(b.eventDate)*(tab==='upcoming'?1:-1));}
+ checkAvailability(date:string,guestCount:number){return this.http.get<ApiResponse<BookingAvailability>>(`${environment.apiBaseUrl}/bookings/availability`,{params:{date,guestCount:String(guestCount)},withCredentials:true}).pipe(map(response=>response.data));}
  async cancelBooking(id:string,reason:string){try{await firstValueFrom(this.http.patch<void>(`${environment.apiBaseUrl}/bookings/${id}/cancel`,{reason:reason.trim()},{withCredentials:true}));this.state.update(items=>items.map(item=>item.id===id?{...item,status:'cancelled' as const,cancelledAt:new Date().toISOString()}:item));return true;}catch{return false;}}
- async submitDraft(draft:BookingDraft,pkg:CateringPackage,addOns:Booking['addOns']){const r=await firstValueFrom(this.http.post<ApiResponse<ApiBooking>>(`${environment.apiBaseUrl}/bookings`,{eventType:draft.eventType,eventDate:draft.eventDate,eventTime:this.time(draft.eventTime),venue:draft.venue,guestCount:draft.guestCount,packageId:Number(pkg.id),addOnIds:addOns.map(x=>Number(x.id)),paymentMethod:draft.paymentMethod},{withCredentials:true}));this.state.update(items=>[this.map(r.data),...items]);return r.data.reference;}
- private map(x:ApiBooking):Booking{return {...x,id:String(x.id),customerId:'',package:{...x.package,packageId:String(x.package.packageId)},addOns:x.addOns.map(a=>({...a,id:String(a.id)})),thumbnailUrl:`assets/images/packages/${x.eventType==='wedding'?'premium':x.eventType==='debut'?'deluxe':'basic'}-package.png`};}
+ async submitDraft(draft:BookingDraft,pkg:CateringPackage,addOns:Booking['addOns']){const paymentMethod=draft.paymentMethod==='gcash'?'e-wallet':draft.paymentMethod;const r=await firstValueFrom(this.http.post<ApiResponse<ApiBooking>>(`${environment.apiBaseUrl}/bookings`,{eventType:draft.eventType,eventDate:draft.eventDate,eventTime:this.time(draft.eventTime),venue:draft.venue,guestCount:draft.guestCount,packageId:Number(pkg.id),addOnIds:addOns.map(x=>Number(x.id)),paymentMethod},{withCredentials:true}));this.state.update(items=>[this.map(r.data),...items]);return r.data.reference;}
+ private map(x:ApiBooking):Booking{return {...x,id:String(x.id),customerId:'',package:{...x.package,packageId:String(x.package.packageId)},addOns:x.addOns.map(a=>({...a,id:String(a.id)})),thumbnailUrl:`assets/images/packages/${x.eventType==='wedding'?'premium':x.eventType==='debut'?'deluxe':'basic'}-package.webp`};}
  private time(v:string){const m=v.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return v;let h=Number(m[1]);if(m[3]!.toUpperCase()==='PM'&&h<12)h+=12;if(m[3]!.toUpperCase()==='AM'&&h===12)h=0;return `${String(h).padStart(2,'0')}:${m[2]}`;}
 }

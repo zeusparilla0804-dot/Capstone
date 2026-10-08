@@ -28,11 +28,62 @@
                 <div class="form-field"><label for="eventType">Event Type *</label><select id="eventType" formControlName="eventType"><option value="">Select event type</option>@for (type of eventTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select>@if (controlInvalid('eventType')) { <small>Event type is required.</small> }</div>
                 <div class="form-field"><label for="eventDate">Event Date *</label><input id="eventDate" type="date" formControlName="eventDate" [min]="minDate" />@if (controlInvalid('eventDate')) { <small>Please select a valid future date.</small> }</div>
                 <div class="form-field"><label for="eventTime">Event Time *</label><select id="eventTime" formControlName="eventTime"><option value="">Select event time</option>@for (time of eventTimes; track time) { <option [value]="time">{{ time }}</option> }</select>@if (controlInvalid('eventTime')) { <small>Event time is required.</small> }</div>
-                <div class="form-field"><label for="guestCount">Number of Guests *</label><input id="guestCount" type="number" min="1" formControlName="guestCount" />@if (controlInvalid('guestCount')) { <small>Guest count must be at least 1.</small> }</div>
+                <div class="form-field"><label for="guestCount">Number of Guests *</label><input id="guestCount" type="number" [min]="selectedFormPackage()?.minGuests ?? 1" [max]="selectedFormPackage()?.maxGuests ?? null" formControlName="guestCount" />@if (selectedFormPackage(); as selectedPackage) { <span class="guest-range">This package accommodates {{ selectedPackage.minGuests }}-{{ selectedPackage.maxGuests }} guests.</span> } @if (controlInvalid('guestCount')) { @if (eventForm.controls.guestCount.hasError('packageRange') && selectedFormPackage(); as selectedPackage) { <small>Guest count must be between {{ selectedPackage.minGuests }} and {{ selectedPackage.maxGuests }}.</small> } @else { <small>Guest count must be at least 1.</small> } }</div>
+                @if (availabilityState(); as availability) {
+                  <div
+                    #availabilityFeedback
+                    id="availability-feedback"
+                    class="availability-status form-field--wide"
+                    [class.availability-status--checking]="availability.phase === 'checking'"
+                    [class.availability-status--available]="availability.phase === 'ready' && availability.data.status === 'AVAILABLE'"
+                    [class.availability-status--limited]="availability.phase === 'ready' && availability.data.status === 'LIMITED'"
+                    [class.availability-status--review]="availability.phase === 'ready' && availability.data.status === 'NEEDS_CONFIRMATION'"
+                    [class.availability-status--full]="availability.phase === 'ready' && availability.data.status === 'FULL'"
+                    [class.availability-status--error]="availability.phase === 'error' || availabilityConflictMessage()"
+                    tabindex="-1"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    @switch (availability.phase) {
+                      @case ('idle') {
+                        <span class="availability-status__mark" aria-hidden="true">&#8212;</span>
+                        <div><strong>Check your date</strong><p>Choose a future date and enter your guest count.</p></div>
+                      }
+                      @case ('checking') {
+                        <span class="availability-status__mark availability-status__mark--loading" aria-hidden="true"></span>
+                        <div><strong>Checking this date</strong><p>Confirming capacity for your event size.</p></div>
+                      }
+                      @case ('ready') {
+                        <span class="availability-status__mark" aria-hidden="true">@if (availability.data.status === 'FULL') { ! } @else { &#10003; }</span>
+                        <div>
+                          <strong>
+                            @switch (availability.data.status) {
+                              @case ('AVAILABLE') { Date available }
+                              @case ('LIMITED') { Final request slot }
+                              @case ('NEEDS_CONFIRMATION') { Available for review }
+                              @case ('FULL') { Date unavailable }
+                            }
+                          </strong>
+                          <p>{{ availability.data.message }}</p>
+                          <span>{{ availability.data.activeBookingCount }} of {{ availability.data.capacityLimit }} active request slots are currently in use.</span>
+                        </div>
+                      }
+                      @case ('error') {
+                        <span class="availability-status__mark" aria-hidden="true">!</span>
+                        <div><strong>Availability check failed</strong><p>{{ availability.message }}</p></div>
+                        <button class="availability-status__retry" type="button" (click)="retryAvailability()">Try again</button>
+                      }
+                    }
+                    @if (availabilityConflictMessage()) {
+                      <p class="availability-status__conflict">{{ availabilityConflictMessage() }}</p>
+                    }
+                  </div>
+                }
                 <div class="form-field form-field--wide"><label for="venue">Venue *</label><input id="venue" type="text" formControlName="venue" placeholder="Enter event venue or location" />@if (controlInvalid('venue')) { <small>Please enter an event venue.</small> }</div>
                 <div class="form-field form-field--wide"><label for="packageId">Selected Package *</label><select id="packageId" formControlName="packageId"><option value="">Select a package</option>@for (item of packageService.packages(); track item.id) { <option [value]="item.id">{{ item.name }} @if (item.pricePerGuest !== null) { - {{ item.pricePerGuest | currency:'PHP':'symbol-narrow':'1.0-0' }} / guest }</option> }</select>@if (controlInvalid('packageId')) { <small>Please select a package.</small> } @if (!eventForm.controls.packageId.value) { <a class="btn btn-tertiary choose-package" routerLink="/packages">Browse packages</a> }</div>
               </div>
-              <div class="step-actions"><a class="btn btn-secondary" routerLink="/packages">Cancel</a><button class="btn btn-primary" type="submit">Continue to Add-ons <span aria-hidden="true">&rarr;</span></button></div>
+              <div class="step-actions"><a class="btn btn-secondary" routerLink="/packages">Cancel</a><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons <span aria-hidden="true">&rarr;</span></button></div>
             </form>
           }
           @case (2) {

@@ -1,15 +1,24 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { EventType, PaymentMethod } from '../../core/models';
+import { catchError, combineLatest, debounceTime, distinctUntilChanged, filter, map, merge, of, startWith, Subject, switchMap, tap } from 'rxjs';
+import { BookingAvailability, EventType, PaymentMethod } from '../../core/models';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PackageService } from '../../core/services/package.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
 import { BookingStepperComponent } from './components/booking-stepper/booking-stepper';
+import { bookingSubmissionMessage, isBookingCapacityConflict } from './booking-submission-error';
 
 type BookingStep = 1 | 2 | 3 | 4;
+type AvailabilityQuery = Readonly<{ date: string; guestCount: number; key: string }>;
+type AvailabilityState =
+  | Readonly<{ phase: 'idle' }>
+  | Readonly<{ phase: 'checking'; key: string }>
+  | Readonly<{ phase: 'ready'; key: string; data: BookingAvailability }>
+  | Readonly<{ phase: 'error'; key: string; message: string }>;
 
 @Component({
   selector: 'app-booking-page',
@@ -21,12 +30,26 @@ type BookingStep = 1 | 2 | 3 | 4;
 export class BookingPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly bookingService = inject(BookingService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly retryAvailabilityRequest = new Subject<void>();
+  private readonly currentAvailabilityQuery = signal<AvailabilityQuery | null>(null);
+  private readonly availabilityFeedback = viewChild<ElementRef<HTMLElement>>('availabilityFeedback');
   protected readonly draftService = inject(BookingDraftService);
   protected readonly packageService = inject(PackageService);
 
   protected readonly currentStep = signal<BookingStep>(1);
   protected readonly isSubmitting = signal(false);
   protected readonly submissionError = signal('');
+  protected readonly availabilityConflictMessage = signal('');
+  protected readonly availabilityState = signal<AvailabilityState>({ phase: 'idle' });
+  protected readonly canContinueToAddOns = computed(() => {
+    const query = this.currentAvailabilityQuery();
+    const state = this.availabilityState();
+    return query !== null
+      && state.phase === 'ready'
+      && state.key === query.key
+      && state.data.status !== 'FULL';
+  });
   protected readonly bookingReference = signal('');
   protected readonly minDate = new Date().toISOString().slice(0, 10);
   protected readonly eventTypes: readonly { value: EventType; label: string }[] = [
@@ -39,7 +62,6 @@ export class BookingPageComponent {
     { value: 'cash', label: 'Cash', description: 'Pay according to LA Chef payment instructions.' },
     { value: 'bank-transfer', label: 'Bank Transfer', description: 'Transfer details will be provided after approval.' },
     { value: 'gcash', label: 'GCash', description: 'Payment instructions will follow after approval.' },
-    { value: 'card', label: 'Credit / Debit Card', description: 'Card payment is arranged after booking approval.' },
   ];
 
   protected readonly eventForm = new FormGroup({
@@ -67,16 +89,27 @@ export class BookingPageComponent {
     if (draft.packageId && requestedStep >= 2 && requestedStep <= 4) {
       this.currentStep.set(requestedStep as BookingStep);
     }
+    this.watchAvailability();
   }
 
   protected continueToAddOns(): void {
-    if (this.eventForm.invalid) { this.eventForm.markAllAsTouched(); return; }
     const value = this.eventForm.getRawValue();
+    const selectedPackage = this.packageService.getPackageById(value.packageId);
+    if (selectedPackage && (
+      value.guestCount < (selectedPackage.minGuests ?? 1) ||
+      value.guestCount > (selectedPackage.maxGuests ?? Number.MAX_SAFE_INTEGER)
+    )) {
+      this.eventForm.controls.guestCount.setErrors({ packageRange: true });
+    }
+    if (this.eventForm.invalid || !this.canContinueToAddOns()) { this.eventForm.markAllAsTouched(); return; }
     this.draftService.update({ ...value, eventType: value.eventType as EventType, packageId: value.packageId });
     this.currentStep.set(2);
   }
 
   protected goToStep(step: BookingStep): void { this.currentStep.set(step); }
+  protected retryAvailability(): void {
+    if (this.currentAvailabilityQuery()) this.retryAvailabilityRequest.next();
+  }
   protected isAddOnSelected(addOnId: string): boolean { return this.draftService.draft().selectedAddOnIds.includes(addOnId); }
   protected selectPayment(method: PaymentMethod): void { this.draftService.update({ paymentMethod: method }); }
   protected eventTypeLabel(eventType: EventType | null): string {
@@ -92,8 +125,15 @@ export class BookingPageComponent {
     try {
       this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns()));
       this.draftService.reset();
-    } catch {
-      this.submissionError.set("We couldn't submit your booking. Please try again.");
+    } catch (error) {
+      const message = bookingSubmissionMessage(error);
+      this.submissionError.set(message);
+      if (isBookingCapacityConflict(error)) {
+        this.currentStep.set(1);
+        this.availabilityConflictMessage.set(message);
+        this.retryAvailability();
+        setTimeout(() => this.availabilityFeedback()?.nativeElement.focus());
+      }
     } finally {
       this.isSubmitting.set(false);
     }
@@ -104,7 +144,57 @@ export class BookingPageComponent {
     return control.invalid && control.touched;
   }
 
+  protected selectedFormPackage() {
+    return this.packageService.getPackageById(this.eventForm.controls.packageId.value);
+  }
+
   private futureDateValidator(control: FormControl<string>): ValidationErrors | null {
     return control.value && control.value < this.minDate ? { pastDate: true } : null;
+  }
+
+  private watchAvailability(): void {
+    const queryChanges = combineLatest([
+      this.eventForm.controls.eventDate.valueChanges.pipe(startWith(this.eventForm.controls.eventDate.value)),
+      this.eventForm.controls.guestCount.valueChanges.pipe(startWith(this.eventForm.controls.guestCount.value)),
+    ]).pipe(
+      map(([date, guestCount]) => this.toAvailabilityQuery(date, guestCount)),
+      tap((query) => {
+        const previousKey = this.currentAvailabilityQuery()?.key;
+        this.currentAvailabilityQuery.set(query);
+        if (query?.key !== previousKey) this.availabilityConflictMessage.set('');
+        this.availabilityState.set(query ? { phase: 'checking', key: query.key } : { phase: 'idle' });
+      }),
+      debounceTime(300),
+      filter((query): query is AvailabilityQuery => query !== null),
+      distinctUntilChanged((previous, current) => previous.key === current.key),
+    );
+    const retries = this.retryAvailabilityRequest.pipe(
+      map(() => this.currentAvailabilityQuery()),
+      filter((query): query is AvailabilityQuery => query !== null),
+    );
+
+    merge(queryChanges, retries).pipe(
+      tap((query) => this.availabilityState.set({ phase: 'checking', key: query.key })),
+      switchMap((query) => this.bookingService.checkAvailability(query.date, query.guestCount).pipe(
+        map((data): AvailabilityState => ({ phase: 'ready', key: query.key, data })),
+        catchError(() => of<AvailabilityState>({
+          phase: 'error',
+          key: query.key,
+          message: 'We could not check this date right now. Please try again.',
+        })),
+        map((state) => ({ query, state })),
+      )),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(({ query, state }) => {
+      if (this.currentAvailabilityQuery()?.key === query.key) this.availabilityState.set(state);
+    });
+  }
+
+  private toAvailabilityQuery(date: string, guestCount: number): AvailabilityQuery | null {
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= this.minDate;
+    const validGuestCount = Number.isInteger(guestCount) && guestCount >= 1 && guestCount <= 10_000;
+    return validDate && validGuestCount
+      ? { date, guestCount, key: `${date}:${guestCount}` }
+      : null;
   }
 }
