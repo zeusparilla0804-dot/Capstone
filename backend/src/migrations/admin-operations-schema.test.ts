@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const migrationUrl = new URL('../../migrations/008_admin_operations_core.sql', import.meta.url);
 const referenceReleaseUrl = new URL('../../migrations/009_release_rejected_proof_references.sql', import.meta.url);
+const capacityIndexUrl = new URL('../../migrations/010_booking_capacity_availability.sql', import.meta.url);
 
 test('admin operations schema defines payment proofs, booking history, and the email outbox', () => {
   const sql = readFileSync(migrationUrl, 'utf8');
@@ -74,4 +75,19 @@ test('rejected and superseded proof references are archived before their active 
   assert.match(sql, /transaction_reference\s*=\s*NULL/i);
   assert.match(sql, /DROP\s+CONSTRAINT\s+CK_PAYMENT_PROOF_reference/i);
   assert.match(sql, /archived_transaction_reference\s+IS\s+NOT\s+NULL/i);
+});
+
+test('booking capacity migration adds the ordered reservation availability index idempotently', () => {
+  const sql = readFileSync(capacityIndexUrl, 'utf8');
+
+  assert.match(sql, /SET\s+XACT_ABORT\s+ON/i);
+  assert.match(sql, /BEGIN\s+TRANSACTION/i);
+  assert.match(sql, /COMMIT/i);
+  assert.match(sql, /sys\.indexes/i);
+  assert.match(sql, /name\s*=\s*'IX_RESERVATION_event_capacity'/i);
+  assert.match(sql, /object_id\s*=\s*OBJECT_ID\s*\(\s*'dbo\.RESERVATION'\s*\)/i);
+  assert.match(
+    sql,
+    /CREATE\s+INDEX\s+IX_RESERVATION_event_capacity\s+ON\s+dbo\.RESERVATION\s*\(\s*event_date\s*,\s*status\s*\)\s+INCLUDE\s*\(\s*guest_count\s*\)/i,
+  );
 });

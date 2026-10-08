@@ -1,7 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assessDateAvailability } from './booking-availability.service.js';
 import type { CapacitySnapshot } from '../types/availability.types.js';
+
+process.env.FRONTEND_URL ??= 'http://localhost:4200';
+process.env.PAYMENT_PROOF_UPLOAD_ROOT ??= 'test-proofs';
+process.env.DB_SERVER ??= 'localhost';
+process.env.DB_DATABASE ??= 'test';
+process.env.DB_USER ??= 'test';
+process.env.DB_PASSWORD ??= 'test';
+
+const [{ assessDateAvailability, createBookingAvailabilityService }, { AppError }] = await Promise.all([
+  import('./booking-availability.service.js'),
+  import('../utils/app-error.js'),
+]);
 
 const emptySnapshot: CapacitySnapshot = {
   activeBookingCount: 0,
@@ -97,4 +108,71 @@ test('full capacity takes precedence over medium-event confirmation', () => {
   assert.equal(result.status, 'FULL');
   assert.equal(result.remainingRequestSlots, 0);
   assert.equal(result.requiresAdminConfirmation, true);
+});
+
+test('preview reads an unlocked snapshot and evaluates the proposed booking', async () => {
+  const calls: unknown[][] = [];
+  const service = createBookingAvailabilityService({
+    readCapacitySnapshot: async (...args) => {
+      calls.push(args);
+      return { activeBookingCount: 5, largestGuestCount: 100, hasMediumEvent: false };
+    },
+  });
+
+  const result = await service.preview('2026-12-10', 100);
+
+  assert.equal(result.status, 'LIMITED');
+  assert.deepEqual(calls, [['2026-12-10']]);
+});
+
+test('preview maps snapshot failures to a safe availability error', async () => {
+  const service = createBookingAvailabilityService({
+    readCapacitySnapshot: async () => { throw new Error('database unavailable'); },
+  });
+
+  await assert.rejects(service.preview('2026-12-10', 100), (error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.statusCode, 503);
+    assert.equal(error.code, 'AVAILABILITY_UNAVAILABLE');
+    return true;
+  });
+});
+
+test('write assertion requests a locked snapshot and rejects a full date with a coded conflict', async () => {
+  const request = { transaction: true };
+  const calls: unknown[][] = [];
+  const service = createBookingAvailabilityService({
+    readCapacitySnapshot: async (...args) => {
+      calls.push(args);
+      return { activeBookingCount: 6, largestGuestCount: 100, hasMediumEvent: false };
+    },
+  });
+
+  await assert.rejects(
+    service.assertCanAccept('2026-12-10', 100, request as never),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.statusCode, 409);
+      assert.equal(error.code, 'BOOKING_DATE_FULL');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, [['2026-12-10', { request, lock: true }]]);
+});
+
+test('existing booking summary reuses its request without adding another proposed booking', async () => {
+  const request = { transaction: true };
+  const calls: unknown[][] = [];
+  const service = createBookingAvailabilityService({
+    readCapacitySnapshot: async (...args) => {
+      calls.push(args);
+      return { activeBookingCount: 2, largestGuestCount: 250, hasMediumEvent: true };
+    },
+  });
+
+  const result = await service.summarizeExisting('2026-12-10', 250, request as never);
+
+  assert.equal(result.activeBookingCount, 2);
+  assert.equal(result.remainingRequestSlots, 4);
+  assert.deepEqual(calls, [['2026-12-10', { request }]]);
 });

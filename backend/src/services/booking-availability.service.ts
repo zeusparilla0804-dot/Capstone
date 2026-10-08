@@ -3,6 +3,12 @@ import type {
   AvailabilityStatus,
   BookingAvailability,
 } from '../types/availability.types.js';
+import type sql from 'mssql';
+import {
+  readCapacitySnapshot,
+  type CapacitySnapshotOptions,
+} from '../repositories/booking-availability.repository.js';
+import { AppError } from '../utils/app-error.js';
 
 function isMediumEvent(guestCount: number): boolean {
   return guestCount >= 150 && guestCount <= 499;
@@ -49,3 +55,60 @@ export function assessDateAvailability(input: AssessDateAvailabilityInput): Book
     message: availabilityMessage(status),
   };
 }
+
+interface BookingAvailabilityDependencies {
+  readCapacitySnapshot(
+    eventDate: string,
+    options?: CapacitySnapshotOptions,
+  ): Promise<AssessDateAvailabilityInput['snapshot']>;
+}
+
+export function createBookingAvailabilityService(deps: BookingAvailabilityDependencies) {
+  return {
+    async preview(date: string, guestCount: number): Promise<BookingAvailability> {
+      try {
+        const snapshot = await deps.readCapacitySnapshot(date);
+        return assessDateAvailability({ date, guestCount, snapshot, includeProposed: true });
+      } catch {
+        throw new AppError(
+          503,
+          'Date availability is temporarily unavailable. Please try again.',
+          'AVAILABILITY_UNAVAILABLE',
+        );
+      }
+    },
+
+    async assertCanAccept(
+      date: string,
+      guestCount: number,
+      request: sql.Request,
+    ): Promise<BookingAvailability> {
+      const snapshot = await deps.readCapacitySnapshot(date, { request, lock: true });
+      const availability = assessDateAvailability({
+        date,
+        guestCount,
+        snapshot,
+        includeProposed: true,
+      });
+      if (availability.status === 'FULL') {
+        throw new AppError(409, availability.message, 'BOOKING_DATE_FULL');
+      }
+      return availability;
+    },
+
+    async summarizeExisting(
+      date: string,
+      guestCount: number,
+      request?: sql.Request,
+    ): Promise<BookingAvailability> {
+      const snapshot = request
+        ? await deps.readCapacitySnapshot(date, { request })
+        : await deps.readCapacitySnapshot(date);
+      return assessDateAvailability({ date, guestCount, snapshot, includeProposed: false });
+    },
+  };
+}
+
+export const bookingAvailabilityService = createBookingAvailabilityService({
+  readCapacitySnapshot,
+});
