@@ -33,6 +33,10 @@ for (const kind of ['booking', 'invoice'] as const) {
         }
         if (/FROM dbo.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Wedding Package', event_type: 'Wedding',
           price_per_head: 100, min_guest: 1, max_guest: 200 }]);
+        if (/COUNT_BIG\s*\(\s*\*\s*\).*FROM dbo\.RESERVATION/is.test(command)) {
+          assert.match(command, /WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
+          return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
+        }
         if (/SELECT event_id/.test(command)) return result([{ event_id: 1 }]);
         if (/INSERT dbo.RESERVATION/.test(command)) { domain.push('booking'); return result([{ reservation_id: 5, created_at: new Date() }]); }
         if (/INSERT dbo.PAYMENT/.test(command)) { domain.push('payment'); return result(); }

@@ -20,7 +20,22 @@ export function parseBooking(body: Record<string, unknown>): CreateBookingDto {
     paymentMethod
   };
 }
+export function parseAvailabilityQuery(query: Record<string, unknown>): { date: string; guestCount: number } {
+  const rawGuestCount = query['guestCount'];
+  if (typeof rawGuestCount !== 'string' || !/^[1-9]\d*$/.test(rawGuestCount)) {
+    throw new AppError(400, 'Guest count is invalid.');
+  }
+  const guestCount = Number(rawGuestCount);
+  if (!Number.isSafeInteger(guestCount) || guestCount > 10_000) {
+    throw new AppError(400, 'Guest count is invalid.');
+  }
+  return {
+    date: isoDate(query['date'], 'Event date', true),
+    guestCount,
+  };
+}
 export async function create(req:Request,res:Response,next:NextFunction){try{res.status(201).json({success:true,data:await bookingService.create(req.customer!.id,parseBooking(req.body))});}catch(e){next(e);}}
+export async function availability(req:Request,res:Response,next:NextFunction){try{const input=parseAvailabilityQuery(req.query);res.json({success:true,data:await bookingService.availability(input.date,input.guestCount)});}catch(e){next(e);}}
 export async function mine(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.list(req.customer!.id)});}catch(e){next(e);}}
 export async function one(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.byId(req.customer!.id,identifier(req.params['id']))});}catch(e){next(e);}}
 export async function dashboard(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.dashboard(req.customer!.id)});}catch(e){next(e);}}

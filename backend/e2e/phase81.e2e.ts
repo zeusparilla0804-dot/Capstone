@@ -25,6 +25,7 @@ const customerAEmail = `${marker.toLowerCase()}-a@example.test`;
 const customerBEmail = `${marker.toLowerCase()}-b@example.test`;
 const adminEmail = `${marker.toLowerCase()}-admin@example.test`;
 const created: Record<string, number> = {};
+const createdBookingIds: number[] = [];
 let server: ReturnType<typeof app.listen> | undefined;
 
 function cookie(response: Response): string {
@@ -45,8 +46,8 @@ async function request(base: string, path: string, init: RequestInit = {}, expec
 
 async function cleanup(): Promise<void> {
   const pool = await getDbPool();
-  if (created.booking) {
-    await pool.request().input('id', sql.Int, created.booking)
+  for (const bookingId of createdBookingIds) {
+    await pool.request().input('id', sql.Int, bookingId)
       .input('emailA', sql.NVarChar(320), customerAEmail)
       .input('emailB', sql.NVarChar(320), customerBEmail).query(`
       DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient IN(@emailA,@emailB)
@@ -66,6 +67,7 @@ async function cleanup(): Promise<void> {
   }
   for (const [type, table, key, id] of [
     ['PACKAGE', 'PACKAGE', 'package_id', created.package],
+    ['PACKAGE', 'PACKAGE', 'package_id', created.capacityPackage],
     ['ADD_ON', 'ADD_ON', 'add_on_id', created.addOn]
   ] as const) {
     if (!id) continue;
@@ -117,6 +119,8 @@ try {
   await request(base, '/admin/dashboard', { headers: { cookie: customerACookie } }, 401);
   const packageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable E2E package', pricePerGuest: 123.45, minGuests: 10, maxGuests: 50, isActive: true }) }, 201);
   created.package = Number(packageCreate.body.data.id);
+  const capacityPackageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Capacity Package`, description: 'Disposable capacity E2E package', pricePerGuest: 100, minGuests: 1, maxGuests: 1000, isActive: true }) }, 201);
+  created.capacityPackage = Number(capacityPackageCreate.body.data.id);
   const addOnCreate = await request(base, '/admin/add-ons', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ name: `${marker} Add-on`, description: 'Disposable E2E add-on', price: 45.67, isActive: true }) }, 201);
   created.addOn = Number(addOnCreate.body.data.id);
 
@@ -128,7 +132,76 @@ try {
   const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   const bookingCreate = await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: `${marker} Venue`, guestCount: 10, packageId: created.package, addOnIds: [created.addOn], paymentMethod: 'cash', total: 0 }) }, 201);
   created.booking = Number(bookingCreate.body.data.id);
+  createdBookingIds.push(created.booking);
   assert.equal(bookingCreate.body.data.total, 1280.17, 'Server must ignore the manipulated client total.');
+
+  const capacityMonth = String((Number.parseInt(marker.slice(-2), 16) % 10) + 1).padStart(2, '0');
+  const smallDate = `2098-${capacityMonth}-10`;
+  const largeDate = `2098-${capacityMonth}-11`;
+  const exclusiveDate = `2098-${capacityMonth}-12`;
+  const emptyExclusiveDate = `2098-${capacityMonth}-13`;
+  const capacityBody = (eventDate: string, guestCount: number) => JSON.stringify({
+    eventType: event.event_type,
+    eventDate,
+    eventTime: '12:30',
+    venue: `${marker} Capacity Venue`,
+    guestCount,
+    packageId: created.capacityPackage,
+    addOnIds: [],
+    paymentMethod: 'cash',
+  });
+  const createCapacityBooking = async (eventDate: string, guestCount: number, sessionCookie: string, expected = 201) => {
+    const result = await request(base, '/bookings', {
+      method: 'POST',
+      headers: { cookie: sessionCookie },
+      body: capacityBody(eventDate, guestCount),
+    }, expected);
+    if (expected === 201) createdBookingIds.push(Number(result.body.data.id));
+    return result;
+  };
+
+  await request(base, `/bookings/availability?date=${smallDate}&guestCount=100`, {}, 401);
+  const preview = await request(base, `/bookings/availability?date=${smallDate}&guestCount=100`, { headers: { cookie: customerACookie } });
+  assert.deepEqual(Object.keys(preview.body.data).sort(), [
+    'activeBookingCount', 'capacityLimit', 'date', 'guestCount', 'message',
+    'remainingRequestSlots', 'requiresAdminConfirmation', 'status',
+  ]);
+  assert.equal(preview.body.data.status, 'AVAILABLE');
+  assert.equal(preview.body.data.capacityLimit, 6);
+
+  for (let index = 0; index < 6; index += 1) {
+    await createCapacityBooking(smallDate, 100, index % 2 === 0 ? customerACookie : customerBCookie);
+  }
+  const fullSmallDate = await createCapacityBooking(smallDate, 100, customerACookie, 409);
+  assert.equal(fullSmallDate.body.code, 'BOOKING_DATE_FULL');
+
+  const cancelledId = createdBookingIds.at(-6)!;
+  await request(base, `/bookings/${cancelledId}/cancel`, {
+    method: 'PATCH',
+    headers: { cookie: customerACookie },
+    body: JSON.stringify({ reason: 'Capacity release test.' }),
+  }, 204);
+  await createCapacityBooking(smallDate, 100, customerACookie);
+
+  const rejectedId = createdBookingIds.at(-5)!;
+  await request(base, `/admin/bookings/${rejectedId}/status`, {
+    method: 'PATCH',
+    headers: { cookie: adminCookie },
+    body: JSON.stringify({ status: 'REJECTED', reason: 'Capacity release test.' }),
+  });
+  await createCapacityBooking(smallDate, 100, customerBCookie);
+
+  await createCapacityBooking(largeDate, 100, customerACookie);
+  await createCapacityBooking(largeDate, 100, customerBCookie);
+  const largeFinalSlot = await createCapacityBooking(largeDate, 600, customerACookie);
+  assert.equal(largeFinalSlot.body.data.guestCount, 600);
+  const fullLargeDate = await createCapacityBooking(largeDate, 100, customerBCookie, 409);
+  assert.equal(fullLargeDate.body.code, 'BOOKING_DATE_FULL');
+
+  await createCapacityBooking(exclusiveDate, 100, customerACookie);
+  const occupiedExclusiveDate = await createCapacityBooking(exclusiveDate, 1000, customerBCookie, 409);
+  assert.equal(occupiedExclusiveDate.body.code, 'BOOKING_DATE_FULL');
+  await createCapacityBooking(emptyExclusiveDate, 1000, customerBCookie);
 
   const mine = await request(base, '/bookings/my', { headers: { cookie: customerACookie } });
   assert.ok(mine.body.data.some((item: { id: number }) => Number(item.id) === created.booking));

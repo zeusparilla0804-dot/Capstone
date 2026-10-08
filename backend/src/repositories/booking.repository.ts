@@ -5,6 +5,7 @@ import type { BookingRecord, CreateBookingDto } from '../types/domain.types.js';
 import { findAddOns, findPackageById } from './catalog.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { queueBookingNotification } from '../services/notification.service.js';
+import { bookingAvailabilityService } from '../services/booking-availability.service.js';
 
 function dateOnly(value: Date | string): string { return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10); }
 function timeOnly(value: Date | string): string { return value instanceof Date ? value.toISOString().slice(11, 16) : String(value).slice(0, 5); }
@@ -16,6 +17,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
     const pkg = await findPackageById(dto.packageId, request); if (!pkg) throw new AppError(400, 'Selected package is unavailable.');
     if (pkg.category.toLowerCase() !== dto.eventType.toLowerCase()) throw new AppError(400, 'Selected package does not match the event type.');
     if (dto.guestCount < pkg.minGuests || dto.guestCount > pkg.maxGuests) throw new AppError(400, `Guest count must be between ${pkg.minGuests} and ${pkg.maxGuests}.`);
+    await bookingAvailabilityService.assertCanAccept(dto.eventDate, dto.guestCount, new sql.Request(transaction));
     const addOns = await findAddOns(dto.addOnIds, new sql.Request(transaction));
     if (addOns.length !== new Set(dto.addOnIds).size) throw new AppError(400, 'One or more add-ons are unavailable.');
     const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
