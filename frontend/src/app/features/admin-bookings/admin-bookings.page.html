@@ -27,7 +27,7 @@
                 <tr>
                   <td>{{ item.reference }}</td><td>{{ item.customerName }}</td><td>{{ item.eventType }}</td>
                   <td>{{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</td>
-                  <td>{{ item.guestCount }}</td><td>{{ item.packageName || 'Not assigned' }}</td>
+                  <td><span>{{ item.guestCount }}</span><span class="capacity-meta">{{ item.capacity.activeBookingCount }} / {{ item.capacity.capacityLimit }} active &middot; {{ capacityStatusLabel(item) }}</span></td><td>{{ item.packageName || 'Not assigned' }}</td>
                   <td class="is-number">{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
                   <td><app-status-badge [status]="item.status" /></td>
                   <td><a class="btn btn-tertiary" [routerLink]="['/admin/bookings', item.id]">View details</a></td>
@@ -35,7 +35,7 @@
                     @if (actionsFor(item.status).length) {
                       <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
                         <option value="">Choose action</option>
-                        @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ option.replaceAll('_', ' ') }}</option> }
+                        @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ actionLabel(item, option) }}</option> }
                       </select>
                     } @else { <span class="admin-status-unavailable">No actions</span> }
                   </td>
@@ -48,11 +48,15 @@
                   @if (action.booking.id === item.id) {
                     <tr class="admin-status-reason-row"><td colspan="11">
                       <div class="admin-status-reason">
-                        <label [for]="'status-reason-' + item.id">Reason for {{ action.status.toLowerCase() }} {{ item.reference }}</label>
-                        <textarea [id]="'status-reason-' + item.id" [(ngModel)]="actionReason" maxlength="1000" rows="3" required></textarea>
+                        @if (action.capacityConfirmation) {
+                          <div><strong>Confirm accommodation for {{ item.guestCount }} guests</strong><p>Approving confirms that LA Chef can serve this event on {{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}.</p></div>
+                        } @else {
+                          <label [for]="'status-reason-' + item.id">Reason for {{ action.status.toLowerCase() }} {{ item.reference }}</label>
+                          <textarea [id]="'status-reason-' + item.id" [(ngModel)]="actionReason" maxlength="1000" rows="3" required></textarea>
+                        }
                         <div class="admin-status-reason__actions">
                           <button class="btn btn-secondary btn-sm" type="button" (click)="closeReason()" [disabled]="actionPending()">Keep status</button>
-                          <button class="btn btn-primary btn-sm" type="button" data-testid="confirm-status" (click)="confirmAction()" [disabled]="!actionReason.trim() || actionPending()">Confirm {{ action.status.toLowerCase() }}</button>
+                          <button class="btn btn-primary btn-sm" type="button" data-testid="confirm-status" (click)="confirmAction()" [disabled]="(action.reasonRequired && !actionReason.trim()) || actionPending()">{{ action.capacityConfirmation ? 'Approve and confirm capacity' : 'Confirm ' + action.status.toLowerCase() }}</button>
                         </div>
                       </div>
                     </td></tr>

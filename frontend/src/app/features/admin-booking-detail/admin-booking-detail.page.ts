@@ -13,6 +13,7 @@ interface BookingAction {
   readonly label: string;
   readonly tone: 'primary' | 'secondary' | 'danger';
   readonly reasonRequired?: boolean;
+  readonly capacityConfirmation?: boolean;
 }
 
 const actions: Record<AdminBookingStatus, readonly BookingAction[]> = {
@@ -57,9 +58,15 @@ export class AdminBookingDetailPage {
   protected readonly mutationPending = signal(false);
   protected readonly pendingAction = signal<BookingAction | null>(null);
   protected actionReason = '';
-  protected readonly availableActions = computed(() =>
-    this.booking() ? actions[this.booking()!.status as AdminBookingStatus] ?? [] : [],
-  );
+  protected readonly availableActions = computed(() => {
+    const booking = this.booking();
+    if (!booking) return [];
+    const available = actions[booking.status as AdminBookingStatus] ?? [];
+    if (!booking.capacity.requiresAdminConfirmation) return available;
+    return available.map((action) => action.status === 'APPROVED'
+      ? { ...action, label: 'Approve and confirm capacity', capacityConfirmation: true }
+      : action);
+  });
   protected readonly outstandingBalance = computed(() =>
     Math.max(0, (this.booking()?.total ?? 0) - (this.booking()?.amountPaid ?? 0)),
   );
@@ -102,7 +109,10 @@ export class AdminBookingDetailPage {
     }
     this.mutationPending.set(true);
     this.actionError.set('');
-    this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined)
+    const request = action.capacityConfirmation
+      ? this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined, true)
+      : this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined);
+    request
       .pipe(finalize(() => this.mutationPending.set(false)))
       .subscribe({
         next: () => {
@@ -113,7 +123,9 @@ export class AdminBookingDetailPage {
         },
         error: (error) => {
           if (error?.status === 409) {
-            this.actionError.set('This booking changed in another session. The latest details are shown.');
+            this.actionError.set(error?.error?.code === 'CAPACITY_CHANGED' && error?.error?.message
+              ? error.error.message
+              : 'This booking changed in another session. The latest details are shown.');
             this.pendingAction.set(null);
             this.load();
           } else {
@@ -144,5 +156,15 @@ export class AdminBookingDetailPage {
     if (item.actorType === 'CUSTOMER') return item.nextStatus === 'PENDING' ? 'Submitted by customer' : 'Updated by customer';
     if (item.actorType === 'ADMIN') return 'Updated by administrator';
     return 'Updated automatically';
+  }
+
+  protected capacityStatusLabel(status: AdminBookingDetail['capacity']['status']): string {
+    const labels = {
+      AVAILABLE: 'Available',
+      LIMITED: 'Final slot',
+      NEEDS_CONFIRMATION: 'Needs confirmation',
+      FULL: 'Full',
+    } as const;
+    return labels[status];
   }
 }

@@ -31,7 +31,12 @@ export class AdminBookingsPage {
   protected readonly message = signal('');
   protected readonly actionError = signal('');
   protected readonly actionPending = signal(false);
-  protected readonly pendingAction = signal<{ booking: AdminBooking; status: string } | null>(null);
+  protected readonly pendingAction = signal<{
+    booking: AdminBooking;
+    status: string;
+    reasonRequired: boolean;
+    capacityConfirmation: boolean;
+  } | null>(null);
   protected actionReason = '';
   protected search = '';
   protected status = '';
@@ -43,6 +48,15 @@ export class AdminBookingsPage {
   constructor() { this.load(); }
 
   protected actionsFor(status: string): readonly string[] { return genericActions[status] ?? []; }
+  protected actionLabel(item: AdminBooking, status: string): string {
+    if (this.requiresCapacityConfirmation(item, status)) return 'Approve and confirm capacity';
+    return status.replaceAll('_', ' ');
+  }
+
+  protected capacityStatusLabel(item: AdminBooking): string {
+    const labels = { AVAILABLE: 'Available', LIMITED: 'Final slot', NEEDS_CONFIRMATION: 'Needs confirmation', FULL: 'Full' } as const;
+    return labels[item.capacity.status];
+  }
 
   protected load(page = this.page) {
     this.page = page;
@@ -61,9 +75,11 @@ export class AdminBookingsPage {
     if (this.actionPending() || !this.actionsFor(item.status).includes(nextStatus)) return;
     this.message.set('');
     this.actionError.set('');
-    if (nextStatus === 'REJECTED' || nextStatus === 'CANCELLED') {
+    const reasonRequired = nextStatus === 'REJECTED' || nextStatus === 'CANCELLED';
+    const capacityConfirmation = this.requiresCapacityConfirmation(item, nextStatus);
+    if (reasonRequired || capacityConfirmation) {
       this.actionReason = '';
-      this.pendingAction.set({ booking: item, status: nextStatus });
+      this.pendingAction.set({ booking: item, status: nextStatus, reasonRequired, capacityConfirmation });
       return;
     }
     this.pendingAction.set(null);
@@ -73,8 +89,8 @@ export class AdminBookingsPage {
   protected confirmAction() {
     const action = this.pendingAction();
     const reason = this.actionReason.trim();
-    if (!action || !reason || reason.length > 1000 || this.actionPending()) return;
-    this.sendAction(action.booking, action.status, reason);
+    if (!action || (action.reasonRequired && !reason) || reason.length > 1000 || this.actionPending()) return;
+    this.sendAction(action.booking, action.status, reason || undefined, action.capacityConfirmation);
   }
 
   protected closeReason() {
@@ -84,9 +100,12 @@ export class AdminBookingsPage {
     this.actionError.set('');
   }
 
-  private sendAction(item: AdminBooking, status: string, reason?: string) {
+  private sendAction(item: AdminBooking, status: string, reason?: string, capacityConfirmed = false) {
     this.actionPending.set(true);
-    this.api.updateBookingStatus(item.id, status, reason).subscribe({
+    const request = capacityConfirmed
+      ? this.api.updateBookingStatus(item.id, status, reason, true)
+      : this.api.updateBookingStatus(item.id, status, reason);
+    request.subscribe({
       next: () => {
         this.actionPending.set(false);
         this.pendingAction.set(null);
@@ -95,9 +114,15 @@ export class AdminBookingsPage {
         this.message.set('Booking status updated.');
         this.load();
       },
-      error: () => {
+      error: (error) => {
         this.actionPending.set(false);
-        this.actionError.set('Unable to update this booking. Refresh the list and try again.');
+        if (error?.status === 409 && error?.error?.code === 'CAPACITY_CHANGED') {
+          this.pendingAction.set(null);
+          this.actionError.set(error?.error?.message || 'Date capacity changed. Review the refreshed availability.');
+          this.load();
+        } else {
+          this.actionError.set('Unable to update this booking. Refresh the list and try again.');
+        }
       }
     });
   }
@@ -107,5 +132,9 @@ export class AdminBookingsPage {
       next: response => this.router.navigate(['/admin/invoices', response.data.invoiceId]),
       error: () => this.error.set('Invoice can only be issued for an approved booking.')
     });
+  }
+
+  private requiresCapacityConfirmation(item: AdminBooking, status: string): boolean {
+    return status === 'APPROVED' && item.capacity.requiresAdminConfirmation;
   }
 }

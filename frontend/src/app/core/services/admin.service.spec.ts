@@ -29,4 +29,11 @@ describe('AdminService booking status', () => {
     expect(request.request.body).toEqual({ status: 'APPROVED' });
     request.flush({ success: true });
   });
+
+  it('sends an explicit capacity confirmation only for a medium approval', () => {
+    service.updateBookingStatus(5, 'APPROVED', undefined, true).subscribe();
+    const request = http.expectOne(`${environment.apiBaseUrl}/admin/bookings/5/status`);
+    expect(request.request.body).toEqual({ status: 'APPROVED', capacityConfirmed: true });
+    request.flush({ success: true });
+  });
 });

@@ -13,8 +13,13 @@ export class AdminService {
   dashboard(period?: string) { return this.http.get<ApiResponse<AdminDashboard>>(`${this.base}/dashboard`, { ...this.options, params: period ? new HttpParams().set('period', period) : undefined }); }
   bookings(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminBooking>>>(`${this.base}/bookings`, { ...this.options, params: this.params(filters) }); }
   booking(id: number) { return this.http.get<ApiResponse<AdminBookingDetail>>(`${this.base}/bookings/${id}`, this.options); }
-  updateBookingStatus(id: number, status: string, reason?: string) {
-    return this.http.patch<ApiResponse<never>>(`${this.base}/bookings/${id}/status`, reason === undefined ? { status } : { status, reason }, this.options);
+  updateBookingStatus(id: number, status: string, reason?: string, capacityConfirmed?: boolean) {
+    const body = {
+      status,
+      ...(reason === undefined ? {} : { reason }),
+      ...(capacityConfirmed === undefined ? {} : { capacityConfirmed }),
+    };
+    return this.http.patch<ApiResponse<never>>(`${this.base}/bookings/${id}/status`, body, this.options);
   }
   issueInvoice(id: number) { return this.http.post<ApiResponse<Invoice>>(`${this.base}/bookings/${id}/invoice`, {}, this.options); }
   customers(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminCustomer>>>(`${this.base}/customers`, { ...this.options, params: this.params(filters) }); }

@@ -28,6 +28,22 @@
       @if (item.invoiceId) { <a class="btn btn-secondary" [routerLink]="['/admin/invoices', item.invoiceId]">View invoice</a> }
     </section>
 
+    <section class="capacity-strip" aria-labelledby="capacity-title">
+      <div class="capacity-strip__heading">
+        <p class="section-label">Date capacity</p>
+        <h2 id="capacity-title">{{ capacityStatusLabel(item.capacity.status) }}</h2>
+        <p>{{ item.capacity.message }}</p>
+      </div>
+      <dl>
+        <div><dt>Current load</dt><dd>{{ item.capacity.activeBookingCount }} active bookings</dd></div>
+        <div><dt>Daily threshold</dt><dd>{{ item.capacity.capacityLimit }} booking limit</dd></div>
+        <div><dt>After this request</dt><dd>{{ item.capacity.remainingRequestSlots }} slots remaining</dd></div>
+      </dl>
+      @if (item.capacity.requiresAdminConfirmation && item.status === 'PENDING') {
+        <p class="capacity-strip__notice">Approval requires an explicit capacity confirmation for this event size.</p>
+      }
+    </section>
+
     <div class="detail-grid">
       <section class="detail-section" aria-labelledby="event-details-title">
         <div class="section-heading"><span>01</span><div><h2 id="event-details-title">Event details</h2><p>The confirmed information supplied with this booking.</p></div></div>
@@ -56,9 +72,9 @@
 
     @if (pendingAction(); as action) {
       <section class="action-confirmation" aria-labelledby="confirm-action-title">
-        <div><p class="section-label">Confirmation</p><h2 id="confirm-action-title">{{ action.label }}</h2><p>{{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }}</p></div>
+        <div><p class="section-label">Confirmation</p><h2 id="confirm-action-title">{{ action.label }}</h2><p>@if (action.capacityConfirmation) { This approval confirms that LA Chef can accommodate {{ item.guestCount }} guests on this date. } @else { {{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }} }</p></div>
         @if (action.reasonRequired) { <label for="action-reason">Reason<textarea id="action-reason" [(ngModel)]="actionReason" maxlength="1000" rows="4"></textarea></label> }
-        <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()">{{ mutationPending() ? 'Updating...' : 'Confirm action' }}</button></div>
+        <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()">{{ mutationPending() ? 'Updating...' : action.capacityConfirmation ? 'Approve and confirm capacity' : 'Confirm action' }}</button></div>
       </section>
     }
 

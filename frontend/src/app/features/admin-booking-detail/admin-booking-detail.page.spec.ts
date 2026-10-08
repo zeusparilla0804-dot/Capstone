@@ -12,7 +12,13 @@ const detail: AdminBookingDetail = {
   id: 42, reference: 'LC-0042', customerName: 'Klint Charles', email: 'klint@example.test', phone: '09171234567',
   eventType: 'Wedding', eventDate: '2026-12-10', eventTime: '18:00', venue: 'Santa Rosa, Laguna', guestCount: 100,
   packageName: 'Diamond', packageUnitPrice: 850, subtotal: 85000, discount: 0, total: 85000, amountPaid: 10000,
-  status: 'PENDING', addOns: [], statusHistory: [{ id: 1, previousStatus: null, nextStatus: 'PENDING', actorType: 'CUSTOMER', actorId: 7, reason: null, createdAt: '2026-10-01T00:00:00.000Z' }]
+  status: 'PENDING',
+  capacity: {
+    date: '2026-12-10', guestCount: 100, status: 'AVAILABLE', activeBookingCount: 2,
+    capacityLimit: 6, remainingRequestSlots: 4, requiresAdminConfirmation: false,
+    message: 'This date is available for your event.',
+  },
+  addOns: [], statusHistory: [{ id: 1, previousStatus: null, nextStatus: 'PENDING', actorType: 'CUSTOMER', actorId: 7, reason: null, createdAt: '2026-10-01T00:00:00.000Z' }]
 };
 
 describe('AdminBookingDetailPage', () => {
@@ -49,6 +55,52 @@ describe('AdminBookingDetailPage', () => {
     expect(text).toContain('Submitted by customer');
   });
 
+  it('shows the current date capacity as operational context', () => {
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Date capacity');
+    expect(text).toContain('2 active bookings');
+    expect(text).toContain('6 booking limit');
+    expect(text).toContain('4 slots remaining');
+    expect(text).toContain('Available');
+  });
+
+  it('requires explicit capacity confirmation for a pending medium event', () => {
+    const component = fixture.componentInstance as any;
+    component.booking.set({
+      ...detail,
+      guestCount: 250,
+      capacity: {
+        ...detail.capacity,
+        guestCount: 250,
+        status: 'NEEDS_CONFIRMATION',
+        requiresAdminConfirmation: true,
+        message: 'LA Chef will confirm whether this date can accommodate your event.',
+      },
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Approve and confirm capacity');
+    component.chooseAction('APPROVED');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('This approval confirms that LA Chef can accommodate 250 guests');
+    component.confirmAction();
+
+    expect(api.updateBookingStatus).toHaveBeenCalledWith(42, 'APPROVED', undefined, true);
+  });
+
+  it('keeps normal approval for 149 and 500 guest events', () => {
+    const component = fixture.componentInstance as any;
+    for (const guestCount of [149, 500]) {
+      component.booking.set({
+        ...detail,
+        guestCount,
+        capacity: { ...detail.capacity, guestCount, requiresAdminConfirmation: false },
+      });
+      expect(component.availableActions().find((action: { status: string }) => action.status === 'APPROVED').label)
+        .toBe('Approve booking');
+    }
+  });
+
   it('maps every booking state to only its approved manual actions', () => {
     const component = fixture.componentInstance as unknown as {
       booking: { set(value: AdminBookingDetail): void };
@@ -76,13 +128,13 @@ describe('AdminBookingDetailPage', () => {
   });
 
   it('refreshes current data after a stale 409 transition conflict', () => {
-    api.updateBookingStatus.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409, error: { message: 'Booking status changed.' } })));
+    api.updateBookingStatus.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409, error: { code: 'CAPACITY_CHANGED', message: 'Date capacity changed. Review refreshed capacity.' } })));
     const component = fixture.componentInstance as unknown as { chooseAction(status: string): void; confirmAction(): void };
     component.chooseAction('APPROVED');
     component.confirmAction();
     fixture.detectChanges();
     expect(api.booking).toHaveBeenCalledTimes(2);
-    expect(fixture.nativeElement.textContent).toContain('changed in another session');
+    expect(fixture.nativeElement.textContent).toContain('Date capacity changed. Review refreshed capacity.');
   });
 });
 
