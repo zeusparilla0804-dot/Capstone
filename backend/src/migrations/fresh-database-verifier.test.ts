@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createDisposableDatabaseName,
+  npmScriptInvocation,
   readFreshDatabaseConfig,
   runFreshDatabaseVerification,
   type FreshDatabaseConfig,
@@ -99,6 +100,18 @@ test('generates only LA_CHEF_VERIFY_<hex> database names', () => {
   assert.equal(name, 'LA_CHEF_VERIFY_1234567890ABCDEF1234567890ABCDEF');
   assert.match(createDisposableDatabaseName(), /^LA_CHEF_VERIFY_[A-F0-9]{32}$/);
   assert.throws(() => createDisposableDatabaseName('not-a-uuid'), /valid UUID/i);
+});
+
+test('uses ComSpec for npm scripts on Windows and direct npm elsewhere', () => {
+  assert.deepEqual(npmScriptInvocation('db:migrate', 'win32', 'C:\\Windows\\System32\\cmd.exe'), {
+    executable: 'C:\\Windows\\System32\\cmd.exe',
+    arguments: ['/d', '/s', '/c', 'npm.cmd run db:migrate'],
+  });
+  assert.deepEqual(npmScriptInvocation('test:e2e', 'linux'), {
+    executable: 'npm',
+    arguments: ['run', 'test:e2e'],
+  });
+  assert.throws(() => npmScriptInvocation('db:migrate & whoami', 'win32'), /npm script name/i);
 });
 
 test('rejects an unsafe database name or the configured DB_DATABASE', async () => {

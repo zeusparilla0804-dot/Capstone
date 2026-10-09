@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sql from 'mssql';
 import {
+  npmScriptInvocation,
   readFreshDatabaseConfig,
   runFreshDatabaseVerification,
   type FreshDatabaseConfig,
@@ -94,9 +95,9 @@ function childEnvironment(databaseName: string): NodeJS.ProcessEnv {
 }
 
 async function runNpmScript(script: string, databaseName: string): Promise<void> {
-  const executable = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const invocation = npmScriptInvocation(script);
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(executable, ['run', script], {
+    const child = spawn(invocation.executable, invocation.arguments, {
       cwd: backendRoot,
       env: childEnvironment(databaseName),
       stdio: 'inherit',

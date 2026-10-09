@@ -84,6 +84,7 @@ test('baseline validates compatible existing objects and throws on violations', 
   assert.match(sql, /sys\.types/i);
   assert.match(sql, /sys\.identity_columns/i);
   assert.match(sql, /sys\.key_constraints/i);
+  assert.match(sql, /key_constraint\.type\s+COLLATE\s+DATABASE_DEFAULT\s*=\s*expected\.constraint_type/i);
   assert.match(sql, /sys\.foreign_keys/i);
   assert.match(sql, /sys\.check_constraints/i);
   assert.match(sql, /sys\.default_constraints/i);

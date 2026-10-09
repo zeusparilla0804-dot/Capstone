@@ -5,8 +5,22 @@ import {
   EXPECTED_MIGRATIONS,
   EXPECTED_SCHEMA_CONTRACT,
   findSchemaContractViolations,
+  loadSchemaSnapshot,
   type SchemaSnapshot,
 } from './schema-contract.js';
+
+test('schema loader trims fixed-width SQL object type codes', async () => {
+  const pool = {
+    request: () => ({
+      query: async () => ({
+        recordsets: [[], [], [], [{ table_name: 'PACKAGE', name: 'FK_PACKAGE_EVENT', type: 'F ' }], [], []],
+      }),
+    }),
+  };
+
+  const snapshot = await loadSchemaSnapshot(pool as never);
+  assert.deepEqual(snapshot.constraints, [{ table: 'PACKAGE', name: 'FK_PACKAGE_EVENT', type: 'F' }]);
+});
 
 function validSnapshot(): SchemaSnapshot {
   return structuredClone({

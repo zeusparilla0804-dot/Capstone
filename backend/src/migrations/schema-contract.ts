@@ -457,7 +457,7 @@ export async function loadSchemaSnapshot(pool: sql.ConnectionPool): Promise<Sche
       nullable: Boolean(row['is_nullable']), identity: Boolean(row['is_identity']),
     })),
     constraints: constraintRows.map((row) => ({
-      table: String(row['table_name']), name: String(row['name']), type: String(row['type']) as ConstraintShape['type'],
+      table: String(row['table_name']), name: String(row['name']), type: String(row['type']).trim() as ConstraintShape['type'],
     })),
     indexes: indexRows.map((row) => ({
       table: String(row['table_name']), name: String(row['name']), unique: Boolean(row['is_unique']),

@@ -330,7 +330,7 @@ WHERE NOT EXISTS (
   WHERE table_metadata.schema_id=SCHEMA_ID('dbo')
     AND table_metadata.name=expected.table_name
     AND key_constraint.name=expected.constraint_name
-    AND key_constraint.type=expected.constraint_type
+    AND key_constraint.type COLLATE DATABASE_DEFAULT=expected.constraint_type
 );
 
 DECLARE @expected_foreign_keys TABLE (

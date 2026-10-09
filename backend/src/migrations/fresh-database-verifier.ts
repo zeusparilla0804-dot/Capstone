@@ -24,6 +24,26 @@ export interface FreshDatabaseVerifierDependencies {
   dropDatabase(databaseName: string): Promise<void>;
 }
 
+export interface NpmScriptInvocation {
+  executable: string;
+  arguments: string[];
+}
+
+export function npmScriptInvocation(
+  script: string,
+  platform = process.platform,
+  comSpec = process.env.ComSpec,
+): NpmScriptInvocation {
+  if (!/^[a-z0-9][a-z0-9:-]*$/i.test(script)) throw new Error('Invalid npm script name.');
+  if (platform === 'win32') {
+    return {
+      executable: comSpec?.trim() || 'cmd.exe',
+      arguments: ['/d', '/s', '/c', `npm.cmd run ${script}`],
+    };
+  }
+  return { executable: 'npm', arguments: ['run', script] };
+}
+
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim();
   if (!value) throw new Error(`Missing required fresh-database verification variable: ${name}.`);
