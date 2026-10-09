@@ -155,6 +155,9 @@ backend/data/payment-proofs/**
 .superpowers/
 skills-lock.json
 
+# Local Git worktrees
+.worktrees/
+
 # Local release verification workspaces
 .release-candidate.index*
 .release-snapshot/
