@@ -9,6 +9,7 @@ const adminEmail = 'browser.admin@example.test';
 const customerEmail = 'browser.customer@example.test';
 const password = 'Browser-QA-2026!';
 const packageName = 'Browser QA Package';
+const mediumPackageName = 'Browser Medium Capacity Package';
 const uploadRoot = resolve('var/uploads/browser-e2e');
 const receiptJpeg = Buffer.from(
   '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMDAsKCwsNDhIQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRT/2wBDAQMEBAUEBQkFBQkUDQsNFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBT/wAARCAAEAAQDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KKKAP/2Q==',
@@ -32,6 +33,7 @@ async function cleanup(): Promise<void> {
     .input('customerEmail', sql.NVarChar(255), customerEmail)
     .input('adminEmail', sql.NVarChar(255), adminEmail)
     .input('packageName', sql.NVarChar(150), packageName)
+    .input('mediumPackageName', sql.NVarChar(150), mediumPackageName)
     .query(`
       DECLARE @customerId int=(SELECT customer_id FROM dbo.CUSTOMER WHERE email=@customerEmail);
       DECLARE @adminId int=(SELECT admin_id FROM dbo.ADMIN WHERE email=@adminEmail);
@@ -45,7 +47,7 @@ async function cleanup(): Promise<void> {
       DELETE p FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id WHERE r.customer_id=@customerId;
       DELETE ra FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.RESERVATION r ON r.reservation_id=ra.reservation_id WHERE r.customer_id=@customerId;
       DELETE FROM dbo.RESERVATION WHERE customer_id=@customerId;
-      DELETE FROM dbo.PACKAGE WHERE package_name=@packageName;
+      DELETE FROM dbo.PACKAGE WHERE package_name IN(@packageName,@mediumPackageName);
       DELETE FROM dbo.AUTH_SESSION WHERE customer_id=@customerId;
       DELETE FROM dbo.CUSTOMER WHERE customer_id=@customerId;
       DELETE FROM dbo.ADMIN_SESSION WHERE admin_id=@adminId;
@@ -103,6 +105,10 @@ const packageResult = await api('/admin/packages', { method: 'POST', headers: { 
   eventId: Number(event.event_id), name: packageName, description: 'Disposable browser QA package',
   pricePerGuest: 250, minGuests: 10, maxGuests: 50, isActive: true
 }) }, 201);
+const mediumPackageResult = await api('/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
+  eventId: Number(event.event_id), name: mediumPackageName, description: 'Disposable browser medium-capacity package',
+  pricePerGuest: 400, minGuests: 150, maxGuests: 499, isActive: true
+}) }, 201);
 const eventDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 const bookingResult = await api('/bookings', { method: 'POST', headers: { cookie: customerCookie }, body: JSON.stringify({
   eventType: event.event_type, eventDate, eventTime: '14:00', venue: 'Browser QA Venue', guestCount: 10,
@@ -119,6 +125,12 @@ proof.set('transactionReference', 'BROWSER-QA-REFERENCE');
 proof.set('paymentDate', eventDate);
 proof.set('proof', new Blob([receiptJpeg], { type: 'image/jpeg' }), 'browser-proof.jpg');
 await api(`/bookings/${bookingId}/payment-proofs`, { method: 'POST', headers: { cookie: customerCookie }, body: proof }, 201);
+
+const mediumEventDate = new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10);
+await api('/bookings', { method: 'POST', headers: { cookie: customerCookie }, body: JSON.stringify({
+  eventType: event.event_type, eventDate: mediumEventDate, eventTime: '16:00', venue: 'Browser Medium Capacity Venue', guestCount: 250,
+  packageId: Number(mediumPackageResult.body.data.id), addOnIds: [], paymentMethod: 'e-wallet'
+}) }, 201);
 
 console.log(`Browser QA fixture ready at http://localhost:${environment.port}`);
 

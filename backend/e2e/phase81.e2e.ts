@@ -203,6 +203,41 @@ try {
   assert.equal(occupiedExclusiveDate.body.code, 'BOOKING_DATE_FULL');
   await createCapacityBooking(emptyExclusiveDate, 1000, customerBCookie);
 
+  const concurrentDay = String((Number.parseInt(marker.slice(-4, -2), 16) % 8) + 20).padStart(2, '0');
+  const concurrentDate = `2098-${capacityMonth}-${concurrentDay}`;
+  for (let index = 0; index < 5; index += 1) {
+    await createCapacityBooking(concurrentDate, 100, index % 2 === 0 ? customerACookie : customerBCookie);
+  }
+  const concurrentAttempts = await Promise.allSettled([
+    fetch(`${base}/bookings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: customerACookie },
+      body: capacityBody(concurrentDate, 100),
+    }),
+    fetch(`${base}/bookings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: customerBCookie },
+      body: capacityBody(concurrentDate, 100),
+    }),
+  ]);
+  assert.ok(concurrentAttempts.every((attempt) => attempt.status === 'fulfilled'));
+  const concurrentResponses = concurrentAttempts.map((attempt) => (attempt as PromiseFulfilledResult<Response>).value);
+  const concurrentOutcomes = await Promise.all(concurrentResponses.map(async (response) => ({
+    status: response.status,
+    body: await response.json(),
+  })));
+  assert.deepEqual(concurrentOutcomes.map((outcome) => outcome.status).sort(), [201, 409]);
+  const concurrentSuccess = concurrentOutcomes.find((outcome) => outcome.status === 201)!;
+  const concurrentConflict = concurrentOutcomes.find((outcome) => outcome.status === 409)!;
+  createdBookingIds.push(Number(concurrentSuccess.body.data.id));
+  assert.equal(concurrentConflict.body.code, 'BOOKING_DATE_FULL');
+  const concurrentCount = await pool.request().input('eventDate', sql.Date, concurrentDate).query(`
+    SELECT COUNT(*) AS count FROM dbo.RESERVATION
+    WHERE event_date=@eventDate
+      AND status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')
+  `);
+  assert.equal(Number(concurrentCount.recordset[0].count), 6, 'Exactly one concurrent request must claim the final slot.');
+
   const mine = await request(base, '/bookings/my', { headers: { cookie: customerACookie } });
   assert.ok(mine.body.data.some((item: { id: number }) => Number(item.id) === created.booking));
   const dashboard = await request(base, '/bookings/dashboard', { headers: { cookie: customerACookie } });

@@ -52,6 +52,7 @@
 .history-row time, .history-list li p { color: var(--color-text-muted); font-size: .72rem; }
 .history-list li p { margin-top: 4px; }
 .history-list blockquote { border-left: 2px solid var(--color-accent); margin: 9px 0 0; padding-left: 12px; color: var(--color-text-muted); font-size: .78rem; }
+.history-list .empty-history { display: block; padding-bottom: 0; color: var(--color-text-muted); font-size: .82rem; }
 .detail-state { border-top: 1px solid var(--color-border); padding: 44px 0; }
 .detail-state p { margin: 8px 0 18px; color: var(--color-text-muted); }
 .admin-feedback, .admin-action-error { margin-top: 16px; }

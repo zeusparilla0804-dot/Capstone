@@ -55,7 +55,10 @@ app.get('/', (_req: Request, res: Response) => {
 });
 
 app.use('/api/health', healthRoutes);
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/admin/login', authLimiter);
+app.use('/api/auth', authRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/add-ons', addOnRoutes);
 app.use('/api/bookings', bookingRoutes);

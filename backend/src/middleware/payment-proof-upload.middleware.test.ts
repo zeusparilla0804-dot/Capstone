@@ -68,6 +68,15 @@ async function tempFiles(): Promise<string[]> {
   }
 }
 
+async function waitFor(condition: () => Promise<boolean>, message: string): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (Date.now() < deadline) {
+    if (await condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  assert.fail(message);
+}
+
 test('maps declared MIME mismatch to 400 and removes the temporary upload', async () => {
   await withServer((_request, response) => response.sendStatus(204), async (url) => {
     const response = await postFile(url, [{ bytes: png, name: 'proof.png', type: 'image/jpeg' }]);
@@ -119,7 +128,7 @@ test('removes an unconsumed validated upload after a downstream error response',
   await withServer((_request, _response, next) => next(new Error('downstream failure')), async (url) => {
     const response = await postFile(url, [{ bytes: png, name: 'proof.png', type: 'image/png' }]);
     assert.equal(response.status, 500);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitFor(async () => (await tempFiles()).length === 0, 'Temporary upload was not removed.');
     assert.deepEqual(await tempFiles(), []);
   });
 });
@@ -146,7 +155,10 @@ test('cleanup lifecycle removes temporary files on request abort and response er
     const response = new EventEmitter();
     registerTemporaryProofCleanup(request, response, filePath, directory);
     (event === 'aborted' ? request : response).emit(event, new Error('connection failed'));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(async () => {
+      try { await stat(filePath); return false; }
+      catch { return true; }
+    }, `Temporary file was not removed after ${event}.`);
     await assert.rejects(stat(filePath));
   }
 });
