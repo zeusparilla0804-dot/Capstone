@@ -12,6 +12,7 @@
     "test:browser:fixture": "tsx e2e/browser-fixture.ts",
     "db:migrate": "tsx src/scripts/migrate.ts",
     "db:migrate:prod": "node dist/scripts/migrate.js",
+    "db:verify:fresh": "tsx e2e/fresh-database.e2e.ts",
     "admin:create": "tsx src/scripts/create-admin.ts"
   },
   "keywords": [],
