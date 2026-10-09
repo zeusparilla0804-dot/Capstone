@@ -10,11 +10,11 @@ LA Chef uses an Angular 22 frontend, an Express API, and Microsoft SQL Server 20
 - npm 10 or newer
 - Microsoft SQL Server 2022-compatible host
 - HTTPS-capable reverse proxy or load balancer
-- Separate least-privilege SQL logins for application runtime and schema migration
+- Separate least-privilege SQL logins for application runtime, schema migration, and disposable verification
 - Durable private storage for payment-proof files
 - A secret manager for database and optional SMTP credentials
 
-Tracked schema migrations `001` through `006`, `008`, and `009` are ordered upgrades for the existing LA Chef base schema. The untracked local `backend/fixtures/starter-catalog.provisional.sql` contains provisional catalog data and is outside automatic migration discovery. It is not approved for production. The schema migrations do not create the original business tables from an empty database. Provision a new environment from an approved, versioned baseline backup before applying the release migrations.
+Tracked migrations provision an empty SQL Server database in this exact order: `000_initial_schema.sql`, `001` through `006`, then `008` through `010`. The missing `007` filename is intentional: an old local starter-catalog migration was never approved or tracked, and fresh migration history must not invent it. Migration `006` inserts the five system event types; no administrator, customer, package, menu, reservation, payment, or other business record is seeded. The local `backend/fixtures/starter-catalog.provisional.sql`, when present, remains outside automatic migration discovery and is not approved for production.
 
 ## Environment
 
@@ -33,6 +33,8 @@ Use the hosting platform's secret store. Committed `.env*.example` files contain
 | `SMTP_*` | Optional SMTP transport values from the secret store |
 | `EMAIL_WORKER_ENABLED` | Enable only when all SMTP settings are valid |
 | `EMAIL_WORKER_*` | Polling, batch, retry, and lease controls |
+
+`VERIFY_DB_*` values are verification-only credentials for a principal allowed to create and drop databases in CI or isolated staging. They must never be supplied to the application runtime. `VERIFY_DB_CONFIRM_DISPOSABLE` remains `false` by default and is set to `true` only for an intentional verifier run. A public domain routes HTTPS traffic to the frontend/API; it never receives SQL credentials.
 
 Authentication uses opaque random tokens whose hashes are stored in SQL Server. Session cookies are `HttpOnly`, `Secure` in production, and `SameSite=Lax`.
 
@@ -85,6 +87,7 @@ cd backend
 npm ci
 npm test
 npm run build
+npm run db:verify:fresh
 npm run test:e2e
 npm audit --omit=dev
 
@@ -96,17 +99,19 @@ npm run test:e2e
 npm audit --omit=dev
 ```
 
-The optional `operations-e2e` CI job runs only when repository variable `LA_CHEF_E2E_ENABLED=true` and the five `E2E_DB_*` secrets point to a disposable, pre-baselined SQL Server database. It applies migrations, runs SQL E2E, runs browser E2E, and publishes responsive screenshots.
+The optional `operations-e2e` CI job runs only when repository variable `LA_CHEF_E2E_ENABLED=true`. Dedicated `E2E_DB_PROVISIONER_USER` and `E2E_DB_PROVISIONER_PASSWORD` secrets create a generated `LA_CHEF_VERIFY_*` database, run the complete migration chain twice, validate schema and data boundaries, run backend SQL E2E, verify baseline idempotency, and drop the database. The existing `E2E_DB_*` runtime secrets then drive the persistent integration and browser checks. A verifier failure stops the job.
 
 ## Deploy
 
-1. Tag immutable frontend and backend artifacts and record the previous known-good tags.
-2. Back up and verify SQL Server plus private proof storage.
-3. Apply migrations once using the migration principal.
-4. Deploy the backend with durable proof storage mounted and wait for readiness.
-5. Deploy the frontend/reverse proxy and verify security headers at the public edge.
-6. Run `STAGING_BASE_URL=https://staging.example.com node scripts/staging-smoke.mjs` in staging.
-7. Verify customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, audit log, and logout.
+1. Back up and verify SQL Server plus private proof storage, and record the previous known-good artifact tags.
+2. Build and tag immutable frontend and backend artifacts.
+3. Run `npm run db:verify:fresh` with the dedicated verifier principal in CI or isolated staging infrastructure.
+4. Apply tracked migrations with `npm run db:migrate:prod` using the migration principal. Stop deployment on any migration failure; numbered migrations are not automatically reversed.
+5. Deploy the backend with the least-privilege runtime principal and durable proof storage, then wait for readiness.
+6. Promote the frontend/reverse proxy and verify security headers at the public edge.
+7. For a genuinely new environment, supply strong one-time `ADMIN_*` values from the secret manager and run `npm run admin:create`; remove those values immediately afterward.
+8. Run `STAGING_BASE_URL=https://staging.example.com node scripts/staging-smoke.mjs` in staging.
+9. Verify customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, audit log, and logout.
 
 Health endpoints:
 

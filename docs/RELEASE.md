@@ -10,12 +10,14 @@
 
 - Customer catering, ordering, booking, payment, and account flows
 - Administrative operations and reporting interfaces
-- Intended tracked schema migrations `001`-`006`, `008`, and `009`
+- Tracked empty-database schema migrations `000`-`006` and `008`-`010`
 - Container, reverse-proxy, CI, backup, restore, and smoke-test templates
 
 ## Validation
 
-Run `npm run build` and `npm test` in both application directories. Run backend SQL E2E and frontend browser E2E against an isolated, pre-baselined SQL Server database. Apply migrations in numeric order before starting the application.
+Run `npm run build` and `npm test` in both application directories. Run `npm run db:verify:fresh` with a dedicated non-production provisioner, then run frontend browser E2E against the isolated integration environment. Apply migrations in filename order before starting the application.
+
+Fresh-database verification completed locally on 2026-10-09: migrations `000`-`006` and `008`-`010` applied from an empty generated database, the second migration pass was idempotent, both backend SQL E2E suites passed, the raw `000` rerun preserved schema and row counts, and cleanup left zero `LA_CHEF_VERIFY_*` databases. The only inserted reference data was five system event types.
 
 Verification completed on 2026-10-04 from an exported, credential-free candidate snapshot:
 
@@ -35,7 +37,6 @@ Copy the appropriate committed `.env.*.example` file to a secret-managed runtime
 ## Known Constraints
 
 - The frontend requires Node.js `22.22.3` or newer.
-- Schema migrations `001`-`006`, `008`, and `009` upgrade the existing LA Chef schema; an empty-database baseline is not yet tracked.
 - Any change after the verified release commit requires the complete release matrix to be rerun before tagging.
 - Local `backend/fixtures/starter-catalog.provisional.sql` contains provisional business data and is excluded pending client approval.
 - Payments are manual and proof-based; no live card or GCash gateway is included.

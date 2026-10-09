@@ -1,6 +1,6 @@
 # LA Chef Production Readiness Audit
 
-Date: 2026-10-04
+Date: 2026-10-09
 Release candidate: `v1.0.0-rc.1`
 Verdict: **NOT READY FOR PRODUCTION**
 
@@ -14,16 +14,11 @@ Verdict: **NOT READY FOR PRODUCTION**
 - Production dependency audits report no known high or critical vulnerabilities.
 - No real environment file, uploaded proof, build output, test screenshot, or obvious credential is intended for source control.
 - A separate Git index exports a 285-file candidate snapshot without changing the existing staging area. Fresh `npm ci`, backend/frontend tests, production builds, SQL E2E, and Playwright E2E are run from that exported snapshot under Node.js `22.22.3`.
+- Empty-database verification provisions a generated database from tracked migrations `000`-`006` and `008`-`010`, validates the current catalog and data boundary, runs both backend SQL E2E suites, rechecks baseline idempotency, and drops the generated database.
 
 ## Critical
 
-### C-01 No reproducible empty-database baseline
-
-- Location: intended migrations `001`-`006`, `008_admin_operations_core.sql`, and `009_release_rejected_proof_references.sql`
-- Evidence: migration 001 alters foundational tables that are not created by a tracked migration.
-- Reproduce: run `npm run db:migrate` against an empty SQL Server database.
-- Impact: a new environment or disaster recovery cannot be reproduced from repository contents alone.
-- Required fix: create and validate a versioned `000` baseline or document and archive an approved baseline backup with checksum and restore rehearsal. CI must provision that baseline before migrations.
+No unresolved Critical finding is currently recorded. This does not make the release production-ready while the High and Medium deployment gates below remain open.
 
 ## High
 
@@ -82,6 +77,7 @@ The untracked `backend/fixtures/starter-catalog.provisional.sql` contains provis
 
 ## Resolved Since The Previous Audit
 
+- C-01 is resolved: on 2026-10-09, `npm run db:verify:fresh` created an allow-listed disposable database, applied `000`-`006` and `008`-`010` twice, validated the complete schema, confirmed exactly five event-type reference rows and zero business rows before fixtures, passed both backend SQL E2E suites, reran `000` without changing schema or row counts, and removed the database. A follow-up query found zero remaining `LA_CHEF_VERIFY_*` databases.
 - The coherent 285-file candidate is captured in a local release commit and passes the complete verification matrix from a clean exported checkout of that commit.
 - Customer login no longer validates hidden registration fields; login also accepts existing shorter passwords while registration still requires 12 characters.
 - Customer/admin session state persists correctly across protected navigation.
@@ -101,7 +97,7 @@ The untracked `backend/fixtures/starter-catalog.provisional.sql` contains provis
 
 ## Unverified Conditions
 
-- Clean-baseline database provisioning and full disaster recovery.
+- Full coordinated disaster recovery for SQL data and private proof storage.
 - Real SMTP delivery and sender reputation/configuration.
 - Real production DNS, TLS, proxy headers, secret store, alerts, and log retention.
 - Sustained write load, pool exhaustion, and multi-instance worker load.
@@ -110,13 +106,12 @@ The untracked `backend/fixtures/starter-catalog.provisional.sql` contains provis
 
 ## Deployment Gate
 
-1. Resolve C-01 and prove clean environment provisioning.
-2. Preserve clean-checkout CI verification for every release tag and rerun the matrix after any candidate change.
-3. Implement password recovery or obtain a documented, time-limited launch exception with a secure support procedure.
-4. Define and enforce scheduling/capacity rules before accepting real reservations.
-5. Verify least-privilege SQL permissions.
-6. Complete coordinated database/proof-storage backup and restore rehearsal.
-7. Replace placeholder public content and validate frontend security headers.
-8. Configure and test SMTP, or launch with email clearly disabled and monitored pending outbox rows.
-9. Complete manual browser/accessibility/device QA and staging fault/load checks.
-10. Repeat this audit; do not promote while a Critical issue remains.
+1. Preserve clean-checkout CI verification for every release tag and rerun the matrix after any candidate change.
+2. Implement password recovery or obtain a documented, time-limited launch exception with a secure support procedure.
+3. Define and enforce scheduling/capacity rules before accepting real reservations.
+4. Verify least-privilege SQL permissions, including that the runtime principal cannot create or drop databases.
+5. Complete coordinated database/proof-storage backup and restore rehearsal.
+6. Replace placeholder public content and validate frontend security headers.
+7. Configure and test SMTP, or launch with email clearly disabled and monitored pending outbox rows.
+8. Complete manual browser/accessibility/device QA and staging fault/load checks.
+9. Repeat this audit and do not promote while an unresolved Critical issue exists.
