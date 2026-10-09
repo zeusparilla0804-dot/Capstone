@@ -27,5 +27,13 @@ describe('DashboardSidebarComponent', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(toggle);
   });
+
+  it('renders initials from the first and last parts of the account name', () => {
+    fixture.componentRef.setInput('title', 'zeus parilla');
+    fixture.detectChanges();
+
+    const avatar = fixture.nativeElement.querySelector('.dashboard-sidebar__avatar') as HTMLElement;
+    expect(avatar.textContent?.trim()).toBe('ZP');
+  });
 });
 

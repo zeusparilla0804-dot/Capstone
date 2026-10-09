@@ -9,6 +9,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PaymentProofService } from '../../core/services/payment-proof.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
+import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
 
 @Component({
   selector: 'app-payment-proof-page',
@@ -47,13 +48,7 @@ export class PaymentProofPageComponent {
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
     paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
   });
-  protected readonly navItems: readonly DashboardNavItem[] = [
-    { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
-    { label: 'My Bookings', route: '/my-bookings', icon: 'calendar' },
-    { label: 'Billing & Payments', route: '/my-bookings', icon: 'wallet', showActiveState: false },
-    { label: 'Profile', route: '/dashboard', icon: 'profile', showActiveState: false },
-    { label: 'Logout', route: '/', icon: 'logout', isAction: true },
-  ];
+  protected readonly navItems = CUSTOMER_NAV_ITEMS;
 
   constructor() {
     if (!this.booking()) this.bookingService.loadMine();

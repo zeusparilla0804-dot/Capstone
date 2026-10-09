@@ -5,6 +5,7 @@ import { BookingCalculationService } from '../../core/services/booking-calculati
 import { AuthService } from '../../core/services/auth.service';
 import { CustomerActivity, StatCard } from '../../core/models';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
+import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
 import { StatCardComponent } from '../../shared/components/stat-card/stat-card';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 
@@ -52,13 +53,7 @@ export class CustomerDashboardPageComponent {
     if (paidBooking) activities.push({ id: `payment-${paidBooking.id}`, title: 'Payment recorded', description: `${this.formatCurrency(paidBooking.amountPaid)} down payment`, dateLabel: this.shortDate(paidBooking.createdAt), type: 'payment' });
     return activities.slice(0, 3);
   });
-  protected readonly navItems: readonly DashboardNavItem[] = [
-    { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
-    { label: 'My Bookings', route: '/my-bookings', icon: 'calendar' },
-    { label: 'Billing & Payments', route: '/my-bookings', icon: 'wallet', showActiveState: false },
-    { label: 'Profile', route: '/dashboard', icon: 'profile', showActiveState: false },
-    { label: 'Logout', route: '/', icon: 'logout', isAction: true },
-  ];
+  protected readonly navItems = CUSTOMER_NAV_ITEMS;
   constructor() { this.bookingService.loadMine(); }
 
   protected formatCurrency(value: number): string {

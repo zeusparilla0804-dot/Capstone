@@ -1,0 +1,67 @@
+<main class="profile-layout">
+  <app-dashboard-sidebar
+    [title]="auth.user()?.fullName ?? 'Customer'"
+    subtitle="Customer"
+    [navItems]="navItems"
+    (navAction)="handleNavAction($event)"
+  />
+
+  <section class="profile-content">
+    <div class="profile-container">
+      <header class="profile-header">
+        <div>
+          <p class="page-kicker">Customer portal</p>
+          <h1>Profile</h1>
+          <p>Review the contact details connected to your LA Chef account.</p>
+        </div>
+        <a class="btn btn-primary" routerLink="/book-event">Book an Event</a>
+      </header>
+
+      @if (auth.user(); as user) {
+        <section class="profile-overview" aria-labelledby="account-details-title">
+          <div class="profile-identity">
+            <div class="profile-avatar" aria-hidden="true">{{ initials() }}</div>
+            <div>
+              <p class="profile-identity__label">Customer account</p>
+              <h2 id="account-details-title">{{ user.fullName }}</h2>
+              <span>Account ID {{ user.id }}</span>
+            </div>
+          </div>
+
+          <dl class="profile-details">
+            <div>
+              <dt>Full name</dt>
+              <dd>{{ user.fullName }}</dd>
+            </div>
+            <div>
+              <dt>Email address</dt>
+              <dd><a [href]="'mailto:' + user.email">{{ user.email }}</a></dd>
+            </div>
+            <div>
+              <dt>Phone number</dt>
+              <dd>{{ user.phone || 'Not provided' }}</dd>
+            </div>
+            <div>
+              <dt>Account type</dt>
+              <dd>{{ user.role === 'customer' ? 'Customer' : 'Administrator' }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section class="profile-actions" aria-labelledby="profile-actions-title">
+          <div>
+            <p class="page-kicker">Your events</p>
+            <h2 id="profile-actions-title">Continue planning</h2>
+            <p>Manage your existing reservations or start a new catering request.</p>
+          </div>
+          <div class="profile-actions__buttons">
+            <a class="btn btn-secondary" routerLink="/my-bookings">View My Bookings</a>
+            <a class="btn btn-primary" routerLink="/book-event">Plan a New Event</a>
+          </div>
+        </section>
+      } @else {
+        <p class="data-state" role="status">Loading your profile...</p>
+      }
+    </div>
+  </section>
+</main>

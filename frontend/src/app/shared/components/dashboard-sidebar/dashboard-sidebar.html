@@ -11,7 +11,7 @@
   <div class="dashboard-sidebar__top"><a class="dashboard-sidebar__brand" routerLink="/" (click)="closeMenu()"><span>LA</span> Chef</a><button #drawerClose class="dashboard-sidebar__close" type="button" aria-label="Close dashboard navigation" (click)="closeMenu(true)"><span aria-hidden="true">&times;</span></button></div>
 
   <div class="dashboard-sidebar__profile">
-    <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ title().charAt(0) }}</div>
+    <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ initials() }}</div>
     <div><strong>{{ title() }}</strong><span>{{ subtitle() }}</span></div>
   </div>
 

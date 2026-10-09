@@ -1,4 +1,4 @@
-export interface AuthenticatedCustomer { id: number; fullName: string; email: string; role: 'customer'; }
+export interface AuthenticatedCustomer { id: number; fullName: string; email: string; phone: string; role: 'customer'; }
 export interface AuthenticatedAdmin { id: number; fullName: string; email: string; role: 'admin'; }
 export interface PackageRecord { id: number; name: string; category: string; description: string; pricePerGuest: number; minGuests: number; maxGuests: number; features: { label: string }[]; }
 export interface AddOnRecord { id: number; name: string; description: string; price: number; }

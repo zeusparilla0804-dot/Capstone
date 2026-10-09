@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { initialsForName } from '../../utils/user-display';
 
 interface PublicNavItem {
   readonly label: string;
@@ -27,10 +28,13 @@ interface PublicNavItem {
 })
 export class PublicHeaderComponent {
   private readonly document = inject(DOCUMENT);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   readonly isAuthenticated = input(false);
   protected readonly authenticated = computed(
     () => this.isAuthenticated() || this.auth.user() !== null,
+  );
+  protected readonly customerInitials = computed(() =>
+    initialsForName(this.auth.user()?.fullName),
   );
   protected readonly isMenuOpen = signal(false);
   protected readonly navItems: readonly PublicNavItem[] = [

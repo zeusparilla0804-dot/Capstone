@@ -44,10 +44,10 @@
         @if (authenticated()) {
           <a
             class="public-header__avatar"
-            routerLink="/dashboard"
-            aria-label="Open user dashboard"
+            routerLink="/profile"
+            [attr.aria-label]="'Open profile for ' + (auth.user()?.fullName ?? 'customer')"
             (click)="closeMenu()"
-            >JC</a
+            >{{ customerInitials() }}</a
           >
         } @else {
           <a class="public-header__login" routerLink="/login" (click)="closeMenu()">Log in</a>

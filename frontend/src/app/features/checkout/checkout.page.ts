@@ -5,6 +5,7 @@ import { PaymentMethod } from '../../core/models';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
+import { bookingSubmissionMessage } from '../booking/booking-submission-error';
 
 @Component({
   selector: 'app-checkout-page',
@@ -21,7 +22,7 @@ export class CheckoutPageComponent {
   protected readonly errorMessage = signal('');
   protected readonly methods: readonly { value: PaymentMethod; label: string }[] = [
     { value: 'cash', label: 'Cash' }, { value: 'bank-transfer', label: 'Bank Transfer' },
-    { value: 'gcash', label: 'GCash' }, { value: 'card', label: 'Credit / Debit Card' },
+    { value: 'gcash', label: 'GCash' },
   ];
 
   protected selectPayment(paymentMethod: PaymentMethod): void { this.draftService.update({ paymentMethod }); }
@@ -40,8 +41,8 @@ export class CheckoutPageComponent {
     try {
       this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns()));
       this.draftService.reset();
-    } catch {
-      this.errorMessage.set("We couldn't submit your booking. Please try again.");
+    } catch (error) {
+      this.errorMessage.set(bookingSubmissionMessage(error));
     } finally {
       this.isSubmitting.set(false);
     }

@@ -78,11 +78,16 @@ test('customer account navigation and package booking journey', async ({ page })
   await expect(page).toHaveURL(/\/billing$/);
   await expect(page.getByRole('heading', { name: 'Billing & Payments' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'View Invoice' })).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/customer-billing-1280.png', fullPage: true });
 
   await page.getByRole('link', { name: 'Profile' }).click();
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.getByRole('heading', { name: 'Browser Customer' })).toBeVisible();
   await expect(page.getByText(customerEmail)).toBeVisible();
+  await expect(page.getByText('09171234567')).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/customer-profile-1280.png', fullPage: true });
 
   await page.goto('/packages');
   const profileLink = page.getByRole('link', { name: 'Open profile for Browser Customer' });
@@ -220,7 +225,9 @@ test('customer profile and billing navigation stay usable on mobile', async ({ p
   await page.getByRole('link', { name: 'Profile' }).click();
   await expect(page).toHaveURL(/\/profile$/);
   await expect(page.locator('.profile-avatar')).toHaveText('BC');
+  await expect(page.getByText('09171234567')).toBeVisible();
   await assertNoHorizontalOverflow(page);
+  await page.screenshot({ path: 'test-results/customer-profile-390.png', fullPage: true });
 
   await openNavigation();
   await page.getByRole('link', { name: 'Billing & Payments' }).click();

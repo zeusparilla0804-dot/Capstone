@@ -113,8 +113,16 @@ try {
   const register = async (email: string) => request(base, '/auth/register', { method: 'POST', body: JSON.stringify({ firstName: marker, lastName: 'Customer', email, phone: '09171234567', password }) }, 201);
   const customerA = await register(customerAEmail);
   const customerB = await register(customerBEmail);
+  assert.equal(customerA.body.data.phone, '09171234567', 'Registration must return the customer phone for the profile.');
   const customerACookie = cookie(customerA.response);
   const customerBCookie = cookie(customerB.response);
+  const currentCustomer = await request(base, '/auth/me', { headers: { cookie: customerACookie } });
+  assert.equal(currentCustomer.body.data.phone, '09171234567', 'Session restoration must return the customer phone for the profile.');
+  const customerLogin = await request(base, '/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: customerBEmail, password }),
+  });
+  assert.equal(customerLogin.body.data.phone, '09171234567', 'Login must return the customer phone for the profile.');
 
   await request(base, '/admin/dashboard', { headers: { cookie: customerACookie } }, 401);
   const packageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable E2E package', pricePerGuest: 123.45, minGuests: 10, maxGuests: 50, isActive: true }) }, 201);

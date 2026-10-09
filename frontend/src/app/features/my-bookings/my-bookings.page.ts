@@ -6,6 +6,7 @@ import { BookingService } from '../../core/services/booking.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingCardComponent } from '../../shared/components/booking-card/booking-card';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
+import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
 
 @Component({
   selector: 'app-my-bookings-page',
@@ -33,13 +34,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected readonly filters: readonly { value: BookingTab; label: string }[] = [
     { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' },
   ];
-  protected readonly navItems: readonly DashboardNavItem[] = [
-    { label: 'Dashboard', route: '/dashboard', icon: 'dashboard' },
-    { label: 'My Bookings', route: '/my-bookings', icon: 'calendar' },
-    { label: 'Billing & Payments', route: '/my-bookings', icon: 'wallet', showActiveState: false },
-    { label: 'Profile', route: '/dashboard', icon: 'profile', showActiveState: false },
-    { label: 'Logout', route: '/', icon: 'logout', isAction: true },
-  ];
+  protected readonly navItems = CUSTOMER_NAV_ITEMS;
   constructor() { this.bookingService.loadMine(); }
 
   ngAfterViewChecked(): void {

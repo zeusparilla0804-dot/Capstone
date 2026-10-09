@@ -1,4 +1,4 @@
-export type PaymentMethod = 'cash' | 'bank-transfer' | 'gcash' | 'card';
+export type PaymentMethod = 'cash' | 'bank-transfer' | 'gcash';
 
 export interface Payment {
   readonly id: string;

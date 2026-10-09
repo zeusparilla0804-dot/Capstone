@@ -62,6 +62,24 @@ export const routes: Routes = [
     title: 'Dashboard | LA Chef',
   },
   {
+    path: 'billing',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/customer-billing/customer-billing.page').then(
+        (m) => m.CustomerBillingPageComponent,
+      ),
+    title: 'Billing & Payments | LA Chef',
+  },
+  {
+    path: 'profile',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/customer-profile/customer-profile.page').then(
+        (m) => m.CustomerProfilePageComponent,
+      ),
+    title: 'Profile | LA Chef',
+  },
+  {
     path: 'admin/login',
     loadComponent: () =>
       import('./features/admin-login/admin-login.page').then((m) => m.AdminLoginPage),

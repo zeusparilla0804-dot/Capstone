@@ -1,6 +1,7 @@
-import { Component, ElementRef, HostListener, ViewChild, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, ViewChild, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { initialsForName } from '../../utils/user-display';
 
 export interface DashboardNavItem {
   readonly label: string;
@@ -24,6 +25,7 @@ export class DashboardSidebarComponent {
   readonly subtitle = input.required<string>();
   readonly navItems = input.required<readonly DashboardNavItem[]>();
   readonly navAction = output<DashboardNavItem>();
+  protected readonly initials = computed(() => initialsForName(this.title()));
   protected readonly isOpen = signal(false);
   protected readonly mobileViewport = signal(typeof window !== 'undefined' && window.innerWidth <= 767);
 

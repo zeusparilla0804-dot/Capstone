@@ -1,0 +1,83 @@
+<main class="billing-layout">
+  <app-dashboard-sidebar
+    [title]="auth.user()?.fullName ?? 'Customer'"
+    subtitle="Customer"
+    [navItems]="navItems"
+    (navAction)="handleNavAction($event)"
+  />
+
+  <section class="billing-content">
+    <div class="billing-container">
+      <header class="billing-header">
+        <div>
+          <p class="page-kicker">Customer portal</p>
+          <h1>Billing & Payments</h1>
+          <p>Track invoices, recorded payments, and remaining balances for your events.</p>
+        </div>
+        <a class="btn btn-primary" routerLink="/book-event">Book an Event</a>
+      </header>
+
+      @if (bookingService.loading()) {
+        <p class="data-state" role="status">Loading your billing records...</p>
+      } @else if (bookingService.error()) {
+        <p class="data-state data-state--error" role="alert">
+          {{ bookingService.error() }}
+          <button class="btn btn-tertiary" type="button" (click)="bookingService.loadMine()">Try again</button>
+        </p>
+      } @else if (records().length) {
+        <section class="billing-summary" aria-label="Billing summary">
+          <dl>
+            <div><dt>Total booked</dt><dd>{{ formatCurrency(totalBilled()) }}</dd></div>
+            <div><dt>Payments recorded</dt><dd>{{ formatCurrency(totalPaid()) }}</dd></div>
+            <div><dt>Outstanding balance</dt><dd>{{ formatCurrency(outstandingBalance()) }}</dd></div>
+          </dl>
+        </section>
+
+        <section class="billing-records" aria-labelledby="billing-records-title">
+          <div class="billing-records__heading">
+            <div>
+              <p class="page-kicker">Account history</p>
+              <h2 id="billing-records-title">Event billing records</h2>
+            </div>
+            <span>{{ records().length }} {{ records().length === 1 ? 'record' : 'records' }}</span>
+          </div>
+
+          <div class="billing-list">
+            @for (record of records(); track record.id) {
+              <article class="billing-record">
+                <div class="billing-record__event">
+                  <span>{{ record.reference }}</span>
+                  <h3>{{ record.eventName }}</h3>
+                  <time [attr.datetime]="record.eventDate">{{ formatDate(record.eventDate) }}</time>
+                </div>
+                <app-status-badge [status]="record.status" />
+                <dl class="billing-record__amounts">
+                  <div><dt>Total</dt><dd>{{ formatCurrency(record.total) }}</dd></div>
+                  <div><dt>Paid</dt><dd>{{ formatCurrency(record.paid) }}</dd></div>
+                  <div><dt>Balance</dt><dd>{{ formatCurrency(record.balance) }}</dd></div>
+                </dl>
+                <div class="billing-record__actions">
+                  @if (record.invoiceId) {
+                    <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', record.invoiceId]">View Invoice</a>
+                  }
+                  @if (record.acceptsPayment && record.balance > 0) {
+                    <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
+                      {{ record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
+                    </a>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        </section>
+      } @else {
+        <section class="billing-empty">
+          <p class="page-kicker">No records yet</p>
+          <h2>Your billing history will appear here</h2>
+          <p>Once you submit a booking, its totals and payment status will be available on this page.</p>
+          <a class="btn btn-primary" routerLink="/book-event">Plan Your First Event</a>
+        </section>
+      }
+    </div>
+  </section>
+</main>

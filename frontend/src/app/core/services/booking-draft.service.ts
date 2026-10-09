@@ -49,7 +49,7 @@ export class BookingDraftService {
   }
 
   selectPackage(packageId: string | null): void {
-    this.update({ packageId: packageId && this.packageService.getPackageById(packageId) ? packageId : null });
+    this.update({ packageId: packageId || null });
   }
 
   toggleAddOn(addOnId: string): void {

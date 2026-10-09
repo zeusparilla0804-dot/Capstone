@@ -4,7 +4,7 @@ import type { AuthenticatedAdmin, AuthenticatedCustomer } from '../types/domain.
 
 export async function findCustomerCredentials(email: string) {
   const pool = await getDbPool();
-  const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT customer_id, first_name, last_name, email, password FROM dbo.CUSTOMER WHERE email = @email`);
+  const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT customer_id, first_name, last_name, email, contact_number, password FROM dbo.CUSTOMER WHERE email = @email`);
   return result.recordset[0];
 }
 export async function createCustomer(input: { firstName: string; lastName: string; email: string; phone: string; passwordHash: string }): Promise<number> {
@@ -18,9 +18,9 @@ export async function createSession(customerId: number, tokenHash: string, expir
 }
 export async function findCustomerBySession(tokenHash: string): Promise<AuthenticatedCustomer | undefined> {
   const pool = await getDbPool();
-  const result = await pool.request().input('tokenHash', sql.Char(64), tokenHash).query(`SELECT c.customer_id,c.first_name,c.last_name,c.email FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME()`);
+  const result = await pool.request().input('tokenHash', sql.Char(64), tokenHash).query(`SELECT c.customer_id,c.first_name,c.last_name,c.email,c.contact_number FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME()`);
   const row = result.recordset[0];
-  return row ? { id: Number(row.customer_id), fullName: `${row.first_name} ${row.last_name}`, email: row.email, role: 'customer' } : undefined;
+  return row ? { id: Number(row.customer_id), fullName: `${row.first_name} ${row.last_name}`, email: row.email, phone: row.contact_number, role: 'customer' } : undefined;
 }
 export async function deleteSession(tokenHash: string): Promise<void> {
   const pool = await getDbPool();
