@@ -51,7 +51,7 @@ export class BookingPageComponent {
       && state.data.status !== 'FULL';
   });
   protected readonly bookingReference = signal('');
-  protected readonly minDate = new Date().toISOString().slice(0, 10);
+  protected readonly minDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
   protected readonly eventTypes: readonly { value: EventType; label: string }[] = [
     { value: 'wedding', label: 'Wedding' }, { value: 'birthday', label: 'Birthday' },
     { value: 'corporate', label: 'Corporate Event' }, { value: 'debut', label: 'Debut' },
@@ -165,8 +165,8 @@ export class BookingPageComponent {
         this.availabilityState.set(query ? { phase: 'checking', key: query.key } : { phase: 'idle' });
       }),
       debounceTime(300),
+      distinctUntilChanged((previous, current) => previous?.key === current?.key),
       filter((query): query is AvailabilityQuery => query !== null),
-      distinctUntilChanged((previous, current) => previous.key === current.key),
     );
     const retries = this.retryAvailabilityRequest.pipe(
       map(() => this.currentAvailabilityQuery()),

@@ -15,6 +15,11 @@ test('date and time validation rejects impossible values', () => {
   assert.throws(() => time24('24:00'), AppError);
 });
 
+test('future-only dates reject today', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  assert.throws(() => isoDate(today, 'Event date', true), AppError);
+});
+
 test('money validation rounds to SQL precision and rejects unsafe amounts', () => {
   assert.equal(finiteMoney(12.345, 'Amount'), 12.35);
   for (const value of [-1, Number.NaN, Number.POSITIVE_INFINITY, 100_000_000]) assert.throws(() => finiteMoney(value, 'Amount'), AppError);

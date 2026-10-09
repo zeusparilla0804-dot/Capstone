@@ -28,8 +28,8 @@ export function isoDate(value: unknown, name: string, futureOnly = false): strin
   if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== date) {
     throw new AppError(400, `${name} is invalid.`);
   }
-  if (futureOnly && date < new Date().toISOString().slice(0, 10)) {
-    throw new AppError(400, `${name} cannot be in the past.`);
+  if (futureOnly && date <= new Date().toISOString().slice(0, 10)) {
+    throw new AppError(400, `${name} must be in the future.`);
   }
   return date;
 }

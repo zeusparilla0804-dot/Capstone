@@ -116,6 +116,21 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.canContinueToAddOns()).toBe(true);
   });
 
+  it('rechecks the same availability query after an invalid value is restored', () => {
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+
+    vi.advanceTimersByTime(300);
+    expect(bookingService.checkAvailability).toHaveBeenCalledTimes(1);
+    component.eventForm.controls.eventDate.setValue('');
+    vi.advanceTimersByTime(300);
+    component.eventForm.controls.eventDate.setValue(initialDraft.eventDate);
+    vi.advanceTimersByTime(300);
+
+    expect(bookingService.checkAvailability).toHaveBeenCalledTimes(2);
+    expect(component.availabilityState().phase).toBe('ready');
+    expect(component.canContinueToAddOns()).toBe(true);
+  });
+
   it('allows available, limited, and review states but blocks a full date', () => {
     bookingService.checkAvailability.mockImplementation(() => of(availability('AVAILABLE')));
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
