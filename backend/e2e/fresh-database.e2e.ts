@@ -34,6 +34,7 @@ const BUSINESS_TABLES = [
   'INVOICE_ITEM',
   'NOTIFICATION',
   'EMAIL_OUTBOX',
+  'PASSWORD_RESET_TOKEN',
 ] as const;
 
 type BusinessTable = (typeof BUSINESS_TABLES)[number];

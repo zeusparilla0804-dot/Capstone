@@ -85,17 +85,17 @@ test('missing keys constraints indexes defaults and sequence produce named viola
   ]);
 });
 
-test('fresh migration history requires 000-006 and 008-010 without 007', () => {
+test('fresh migration history requires 000-006 and 008-011 without 007', () => {
   const snapshot = validSnapshot();
   snapshot.migrations.push('007_starter_catalog.sql');
   assert.deepEqual(findSchemaContractViolations(snapshot, { migrationHistory: 'fresh' }), [
     'dbo.SCHEMA_MIGRATION.007_starter_catalog.sql: unexpected migration',
   ]);
 
-  snapshot.migrations = snapshot.migrations.filter((migration) => migration !== '010_booking_capacity_availability.sql');
+  snapshot.migrations = snapshot.migrations.filter((migration) => migration !== '011_password_recovery.sql');
   assert.deepEqual(findSchemaContractViolations(snapshot, { migrationHistory: 'fresh' }), [
     'dbo.SCHEMA_MIGRATION.007_starter_catalog.sql: unexpected migration',
-    'dbo.SCHEMA_MIGRATION.010_booking_capacity_availability.sql: missing migration',
+    'dbo.SCHEMA_MIGRATION.011_password_recovery.sql: missing migration',
   ]);
 });
 

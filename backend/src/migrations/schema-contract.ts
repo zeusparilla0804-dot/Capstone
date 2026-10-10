@@ -58,6 +58,7 @@ export const EXPECTED_MIGRATIONS = [
   '008_admin_operations_core.sql',
   '009_release_rejected_proof_references.sql',
   '010_booking_capacity_availability.sql',
+  '011_password_recovery.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -200,6 +201,14 @@ const columns: ColumnShape[] = [
   integer('EMAIL_OUTBOX', 'attempt_count'), datetime2('EMAIL_OUTBOX', 'next_attempt_at', true),
   nvarchar('EMAIL_OUTBOX', 'last_error', 2000, true), datetime2('EMAIL_OUTBOX', 'created_at'),
   datetime2('EMAIL_OUTBOX', 'sent_at', true), datetime2('EMAIL_OUTBOX', 'updated_at'),
+
+  bigint('PASSWORD_RESET_TOKEN', 'reset_id', false, true),
+  column('PASSWORD_RESET_TOKEN', 'selector', 'char', 22, 0, 0, false),
+  column('PASSWORD_RESET_TOKEN', 'token_hash', 'char', 64, 0, 0, false),
+  column('PASSWORD_RESET_TOKEN', 'principal_type', 'varchar', 10, 0, 0, false),
+  integer('PASSWORD_RESET_TOKEN', 'customer_id', true), integer('PASSWORD_RESET_TOKEN', 'admin_id', true),
+  datetime2('PASSWORD_RESET_TOKEN', 'expires_at'), datetime2('PASSWORD_RESET_TOKEN', 'used_at', true),
+  datetime2('PASSWORD_RESET_TOKEN', 'invalidated_at', true), datetime2('PASSWORD_RESET_TOKEN', 'created_at'),
 ];
 
 function constraints(table: string, type: ConstraintShape['type'], names: string[]): ConstraintShape[] {
@@ -263,6 +272,11 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('EMAIL_OUTBOX', 'PK', ['PK_EMAIL_OUTBOX']),
   ...constraints('EMAIL_OUTBOX', 'D', ['DF_EMAIL_OUTBOX_status', 'DF_EMAIL_OUTBOX_attempt_count', 'DF_EMAIL_OUTBOX_created', 'DF_EMAIL_OUTBOX_updated']),
   ...constraints('EMAIL_OUTBOX', 'C', ['CK_EMAIL_OUTBOX_payload', 'CK_EMAIL_OUTBOX_status', 'CK_EMAIL_OUTBOX_attempt_count', 'CK_EMAIL_OUTBOX_related_entity', 'CK_EMAIL_OUTBOX_sent_at']),
+  ...constraints('PASSWORD_RESET_TOKEN', 'PK', ['PK_PASSWORD_RESET_TOKEN']),
+  ...constraints('PASSWORD_RESET_TOKEN', 'UQ', ['UQ_PASSWORD_RESET_TOKEN_selector', 'UQ_PASSWORD_RESET_TOKEN_hash']),
+  ...constraints('PASSWORD_RESET_TOKEN', 'F', ['FK_PASSWORD_RESET_TOKEN_CUSTOMER', 'FK_PASSWORD_RESET_TOKEN_ADMIN']),
+  ...constraints('PASSWORD_RESET_TOKEN', 'D', ['DF_PASSWORD_RESET_TOKEN_created']),
+  ...constraints('PASSWORD_RESET_TOKEN', 'C', ['CK_PASSWORD_RESET_TOKEN_principal']),
 ];
 
 function index(table: string, name: string, keys: string[], includes: string[] = [], unique = false, filter: string | null = null): IndexShape {
@@ -296,6 +310,9 @@ const indexes: IndexShape[] = [
   index('BOOKING_STATUS_HISTORY', 'IX_BOOKING_STATUS_HISTORY_reservation_created', ['reservation_id', 'created_at']),
   index('EMAIL_OUTBOX', 'IX_EMAIL_OUTBOX_status_next_attempt', ['status', 'next_attempt_at', 'created_at'], ['attempt_count']),
   index('EMAIL_OUTBOX', 'IX_EMAIL_OUTBOX_related_entity', ['related_entity_type', 'related_entity_id', 'created_at']),
+  index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_customer_created', ['customer_id', 'created_at'], ['expires_at', 'used_at', 'invalidated_at'], false, 'customer_id is not null'),
+  index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_admin_created', ['admin_id', 'created_at'], ['expires_at', 'used_at', 'invalidated_at'], false, 'admin_id is not null'),
+  index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_expiry', ['expires_at'], ['used_at', 'invalidated_at']),
 ];
 
 export const EXPECTED_SCHEMA_CONTRACT: Omit<SchemaSnapshot, 'migrations'> = {
