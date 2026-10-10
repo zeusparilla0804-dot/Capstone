@@ -12,7 +12,9 @@ export type EmailTemplateKey =
   | 'BOOKING_CONFIRMED'
   | 'BOOKING_CANCELLED'
   | 'BOOKING_RESCHEDULED'
-  | 'BOOKING_COMPLETED';
+  | 'BOOKING_COMPLETED'
+  | 'PASSWORD_RESET_REQUESTED'
+  | 'PASSWORD_CHANGED';
 
 export interface EmailOutboxRecord {
   id: string;

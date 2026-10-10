@@ -14,7 +14,9 @@ const templates: Record<EmailTemplateKey, { subject: string; message: string; ex
   BOOKING_CONFIRMED: { subject: 'Booking confirmed', message: 'Your booking is confirmed. We look forward to catering your event.' },
   BOOKING_CANCELLED: { subject: 'Booking cancelled', message: 'Your booking has been cancelled. Please check your booking or contact LA Chef for details.' },
   BOOKING_RESCHEDULED: { subject: 'Booking rescheduled', message: 'Your booking has been rescheduled. Please review your event details.' },
-  BOOKING_COMPLETED: { subject: 'Booking completed', message: 'Your booking is completed. Thank you for choosing LA Chef.' }
+  BOOKING_COMPLETED: { subject: 'Booking completed', message: 'Your booking is completed. Thank you for choosing LA Chef.' },
+  PASSWORD_RESET_REQUESTED: { subject: 'Reset your password', message: 'Password reset delivery requires the protected renderer.' },
+  PASSWORD_CHANGED: { subject: 'Password changed', message: 'Your LA Chef account password was changed. If this was not you, contact LA Chef immediately.' }
 };
 
 export function validateEmailPayload(key: unknown, raw: unknown): Record<string, string> {
@@ -22,6 +24,24 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
     throw new AppError(400, 'Invalid notification template or payload.');
   }
   const definition = templates[key as EmailTemplateKey];
+  if (key === 'PASSWORD_RESET_REQUESTED') {
+    const payload = raw as Record<string, unknown>;
+    if (Object.keys(payload).some(field => !['displayName', 'selector', 'principalType'].includes(field)) ||
+        typeof payload.displayName !== 'string' || !payload.displayName.trim() || payload.displayName.length > 200 || /[\x00-\x1f\x7f]/.test(payload.displayName) ||
+        typeof payload.selector !== 'string' || !/^[A-Za-z0-9_-]{22}$/.test(payload.selector) ||
+        (payload.principalType !== 'CUSTOMER' && payload.principalType !== 'ADMIN')) {
+      throw new AppError(400, 'Invalid notification payload value.');
+    }
+    return { displayName: payload.displayName.trim(), selector: payload.selector, principalType: payload.principalType };
+  }
+  if (key === 'PASSWORD_CHANGED') {
+    const payload = raw as Record<string, unknown>;
+    if (Object.keys(payload).some(field => field !== 'displayName') || typeof payload.displayName !== 'string' ||
+        !payload.displayName.trim() || payload.displayName.length > 200 || /[\x00-\x1f\x7f]/.test(payload.displayName)) {
+      throw new AppError(400, 'Invalid notification payload value.');
+    }
+    return { displayName: payload.displayName.trim() };
+  }
   const keys = ['customerName', 'bookingReference', 'eventDate', ...(definition.extra ? [definition.extra] : [])];
   const payload = raw as Record<string, unknown>;
   if (Object.keys(payload).some(field => !keys.includes(field))) throw new AppError(400, 'Notification payload contains unsupported fields.');
@@ -44,7 +64,15 @@ function escapeHtml(value: string): string {
 
 export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail {
   const payload = validateEmailPayload(key, raw);
+  if (key === 'PASSWORD_RESET_REQUESTED') {
+    throw new AppError(404, 'Password reset notification preview is unavailable.');
+  }
   const definition = templates[key];
+  if (key === 'PASSWORD_CHANGED') {
+    const lines = [`Hello ${payload.displayName},`, definition.message, brand];
+    return { subject: `${definition.subject} | LA Chef`, text: lines.join('\n\n'),
+      html: lines.map(line => `<p>${escapeHtml(line)}</p>`).join('') };
+  }
   const lines = [`Hello ${payload.customerName},`, definition.message, `Booking: ${payload.bookingReference}`,
     `Event date: ${payload.eventDate}`];
   if (key === 'INVOICE_ISSUED') lines.push(`Invoice: ${payload.invoiceNumber}`);
