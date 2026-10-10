@@ -47,6 +47,22 @@ const authLimiter = rateLimit({
   message: { success: false, message: 'Too many authentication attempts. Please try again later.' }
 });
 
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many password reset requests. Please try again later.' }
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many password reset attempts. Please try again later.' }
+});
+
 app.get('/', (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
@@ -58,6 +74,10 @@ app.use('/api/health', healthRoutes);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/admin/login', authLimiter);
+app.use('/api/auth/password/forgot', forgotPasswordLimiter);
+app.use('/api/auth/admin/password/forgot', forgotPasswordLimiter);
+app.use('/api/auth/password/reset', resetPasswordLimiter);
+app.use('/api/auth/admin/password/reset', resetPasswordLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/add-ons', addOnRoutes);
