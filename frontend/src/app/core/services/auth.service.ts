@@ -57,6 +57,24 @@ export class AuthService {
     }
   }
 
+  async requestPasswordReset(email: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post<{ success: boolean; message: string }>(
+        `${environment.apiBaseUrl}/auth/password/forgot`,
+        { email },
+      ),
+    );
+  }
+
+  async resetPassword(token: string, password: string, confirmPassword: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post<{ success: boolean; message: string }>(
+        `${environment.apiBaseUrl}/auth/password/reset`,
+        { token, password, confirmPassword },
+      ),
+    );
+  }
+
   private async loadCurrentUser(): Promise<boolean> {
     try {
       const response = await firstValueFrom(

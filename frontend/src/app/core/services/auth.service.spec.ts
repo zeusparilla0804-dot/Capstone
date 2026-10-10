@@ -59,4 +59,31 @@ describe('AuthService', () => {
 
     await expect(Promise.all([firstCheck, secondCheck])).resolves.toEqual([true, true]);
   });
+
+  it('requests a customer password reset without credentials', async () => {
+    const result = service.requestPasswordReset('customer@example.test');
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/password/forgot`);
+
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ email: 'customer@example.test' });
+    expect(request.request.withCredentials).toBe(false);
+    request.flush({ success: true, message: 'If an account uses that email, password reset instructions will arrive shortly.' });
+    await expect(result).resolves.toBeUndefined();
+  });
+
+  it('submits the complete customer reset body and propagates server errors', async () => {
+    const result = service.resetPassword('selector.proof', 'new-password-123', 'new-password-123');
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/password/reset`);
+
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({
+      token: 'selector.proof',
+      password: 'new-password-123',
+      confirmPassword: 'new-password-123',
+    });
+    expect(request.request.withCredentials).toBe(false);
+    request.flush({ success: false, message: 'This password reset link is invalid.', code: 'PASSWORD_RESET_INVALID' },
+      { status: 400, statusText: 'Bad Request' });
+    await expect(result).rejects.toMatchObject({ status: 400 });
+  });
 });
