@@ -1,6 +1,24 @@
 import type { EmailWorkerSettings } from '../types/notification.types.js';
 
-type NodeEnvironment = 'development' | 'test' | 'production';
+export type NodeEnvironment = 'development' | 'test' | 'production';
+
+export function readPasswordResetConfiguration(env: NodeJS.ProcessEnv, nodeEnv: NodeEnvironment) {
+  const hmacSecret = env.PASSWORD_RESET_HMAC_SECRET?.trim();
+
+  if (!hmacSecret) {
+    if (nodeEnv === 'production') {
+      throw new Error('Missing required environment variable: PASSWORD_RESET_HMAC_SECRET');
+    }
+
+    return { hmacSecret: undefined, ttlMs: 900_000, cooldownMs: 60_000 };
+  }
+
+  if (Buffer.byteLength(hmacSecret, 'utf8') < 32) {
+    throw new Error('PASSWORD_RESET_HMAC_SECRET must be at least 32 bytes.');
+  }
+
+  return { hmacSecret, ttlMs: 900_000, cooldownMs: 60_000 };
+}
 
 export function validEmailAddress(value: string): boolean {
   return value.length <= 320 && /^[^\s<>@,;"\\\x00-\x1f\x7f]+@[^\s<>@,;"\\\x00-\x1f\x7f]+\.[^\s<>@,;"\\\x00-\x1f\x7f]+$/.test(value);
@@ -85,6 +103,7 @@ export const environment = Object.freeze({
   frontendOrigin,
   paymentProofUploadRoot: required('PAYMENT_PROOF_UPLOAD_ROOT'),
   email: readEmailConfiguration(process.env),
+  passwordReset: readPasswordResetConfiguration(process.env, nodeEnv),
   db: {
     server: required('DB_SERVER'),
     port: positiveInteger('DB_PORT', 1433),
