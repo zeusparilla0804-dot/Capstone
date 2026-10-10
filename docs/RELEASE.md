@@ -17,7 +17,7 @@
 
 Run `npm run build` and `npm test` in both application directories. Run `npm run db:verify:fresh` with a dedicated non-production provisioner, then run frontend browser E2E against the isolated integration environment. Apply migrations in filename order before starting the application.
 
-Fresh-database verification completed locally on 2026-10-09: migrations `000`-`006` and `008`-`010` applied from an empty generated database, the second migration pass was idempotent, both backend SQL E2E suites passed, the raw `000` rerun preserved schema and row counts, and cleanup left zero `LA_CHEF_VERIFY_*` databases. The only inserted reference data was five system event types.
+Fresh-database verification completed locally on 2026-10-10: migrations `000`-`006` and `008`-`010` applied from an empty generated database, the second migration pass was idempotent, both backend SQL E2E suites passed, the raw `000` rerun preserved schema and row counts, and cleanup left zero `LA_CHEF_VERIFY_*` databases. The only inserted reference data was five system event types.
 
 Verification completed on 2026-10-04 from an exported, credential-free candidate snapshot:
 

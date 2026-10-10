@@ -1,6 +1,6 @@
 # LA Chef Release File Inventory
 
-Date: 2026-10-09
+Date: 2026-10-10
 Candidate: `v1.0.0-rc.1`
 
 This inventory covers every modified or previously untracked path reviewed for the release candidate. Paths are grouped by release treatment so local tooling, credentials, generated files, and unapproved business data cannot enter the release commit.

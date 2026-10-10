@@ -1,6 +1,6 @@
 # LA Chef Production Readiness Audit
 
-Date: 2026-10-09
+Date: 2026-10-10
 Release candidate: `v1.0.0-rc.1`
 Verdict: **NOT READY FOR PRODUCTION**
 
@@ -77,7 +77,7 @@ The untracked `backend/fixtures/starter-catalog.provisional.sql` contains provis
 
 ## Resolved Since The Previous Audit
 
-- C-01 is resolved: on 2026-10-09, `npm run db:verify:fresh` created an allow-listed disposable database, applied `000`-`006` and `008`-`010` twice, validated the complete schema, confirmed exactly five event-type reference rows and zero business rows before fixtures, passed both backend SQL E2E suites, reran `000` without changing schema or row counts, and removed the database. A follow-up query found zero remaining `LA_CHEF_VERIFY_*` databases.
+- C-01 is resolved: on 2026-10-10, `npm run db:verify:fresh` created an allow-listed disposable database, applied `000`-`006` and `008`-`010` twice, validated the complete schema, confirmed exactly five event-type reference rows and zero business rows before fixtures, passed both backend SQL E2E suites, reran `000` without changing schema or row counts, and removed the database. A follow-up query found zero remaining `LA_CHEF_VERIFY_*` databases.
 - The coherent 285-file candidate is captured in a local release commit and passes the complete verification matrix from a clean exported checkout of that commit.
 - Customer login no longer validates hidden registration fields; login also accepts existing shorter passwords while registration still requires 12 characters.
 - Customer/admin session state persists correctly across protected navigation.
