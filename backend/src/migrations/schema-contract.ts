@@ -427,10 +427,27 @@ export async function loadSchemaSnapshot(pool: sql.ConnectionPool): Promise<Sche
     JOIN sys.types ty ON ty.user_type_id=c.user_type_id
     LEFT JOIN sys.identity_columns ic ON ic.object_id=c.object_id AND ic.column_id=c.column_id
     WHERE t.schema_id=SCHEMA_ID('dbo') ORDER BY t.name,c.column_id;
-    SELECT t.name table_name,o.name,o.type
-    FROM sys.objects o JOIN sys.tables t ON t.object_id=o.parent_object_id
-    WHERE t.schema_id=SCHEMA_ID('dbo') AND o.type IN('C','D','F','PK','UQ')
-    ORDER BY t.name,o.name;
+    SELECT constraint_data.table_name,constraint_data.name,constraint_data.type
+    FROM (
+      SELECT t.name table_name,k.name,k.type
+      FROM sys.key_constraints k JOIN sys.tables t ON t.object_id=k.parent_object_id
+      WHERE t.schema_id=SCHEMA_ID('dbo')
+      UNION ALL
+      SELECT t.name table_name,f.name,CAST('F' AS char(2)) type
+      FROM sys.foreign_keys f JOIN sys.tables t ON t.object_id=f.parent_object_id
+      WHERE t.schema_id=SCHEMA_ID('dbo') AND EXISTS(
+        SELECT 1 FROM sys.foreign_key_columns fc WHERE fc.constraint_object_id=f.object_id
+      )
+      UNION ALL
+      SELECT t.name table_name,c.name,CAST('C' AS char(2)) type
+      FROM sys.check_constraints c JOIN sys.tables t ON t.object_id=c.parent_object_id
+      WHERE t.schema_id=SCHEMA_ID('dbo')
+      UNION ALL
+      SELECT t.name table_name,d.name,CAST('D' AS char(2)) type
+      FROM sys.default_constraints d JOIN sys.tables t ON t.object_id=d.parent_object_id
+      WHERE t.schema_id=SCHEMA_ID('dbo')
+    ) constraint_data
+    ORDER BY constraint_data.table_name,constraint_data.name;
     SELECT t.name table_name,i.name,i.is_unique,i.filter_definition,
       keys.key_columns,includes.included_columns
     FROM sys.tables t JOIN sys.indexes i ON i.object_id=t.object_id

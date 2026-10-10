@@ -22,6 +22,27 @@ test('schema loader trims fixed-width SQL object type codes', async () => {
   assert.deepEqual(snapshot.constraints, [{ table: 'PACKAGE', name: 'FK_PACKAGE_EVENT', type: 'F' }]);
 });
 
+test('schema loader reads dedicated constraint catalogs', async () => {
+  let statement = '';
+  const pool = {
+    request: () => ({
+      query: async (sql: string) => {
+        statement = sql;
+        return { recordsets: [[], [], [], [], [], []] };
+      },
+    }),
+  };
+
+  await loadSchemaSnapshot(pool as never);
+  for (const catalog of [
+    'sys.key_constraints',
+    'sys.foreign_keys',
+    'sys.foreign_key_columns',
+    'sys.check_constraints',
+    'sys.default_constraints',
+  ]) assert.match(statement, new RegExp(catalog.replace('.', '\\.')));
+});
+
 function validSnapshot(): SchemaSnapshot {
   return structuredClone({
     ...EXPECTED_SCHEMA_CONTRACT,
