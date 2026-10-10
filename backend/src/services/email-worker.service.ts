@@ -8,6 +8,7 @@ import {
 import { renderEmail } from '../templates/email-templates.js';
 import type { BatchResult, EmailWorkerSettings } from '../types/notification.types.js';
 import { logger } from '../utils/logger.js';
+import { renderPasswordResetEmail } from './password-reset-email.service.js';
 
 interface MailTransport {
   sendMail(message: Record<string, unknown>): Promise<{ rejected?: unknown[] } | unknown>;
@@ -19,6 +20,7 @@ interface WorkerDependencies {
   transport?: MailTransport;
   settings: EmailWorkerSettings;
   from: { name: string; address: string };
+  renderPasswordResetEmail: (item: ClaimedEmail, now: Date) => Promise<ReturnType<typeof renderEmail> | undefined>;
 }
 
 function failureDetails(error: unknown): { transient: boolean; summary: string } {
@@ -51,7 +53,13 @@ export function createEmailWorker(deps: WorkerDependencies) {
         continue;
       }
       try {
-        const rendered = renderEmail(item.templateKey, item.payload);
+        const rendered = item.templateKey === 'PASSWORD_RESET_REQUESTED'
+          ? await deps.renderPasswordResetEmail(item, now)
+          : renderEmail(item.templateKey, item.payload);
+        if (!rendered) {
+          if (await deps.repository.finish(item, { status: 'FAILED', error: 'RESET_TOKEN_UNAVAILABLE' }, now)) result.failed++;
+          continue;
+        }
         const response = await transport.sendMail({
           from: deps.from,
           to: item.recipient,
@@ -125,5 +133,6 @@ export const emailWorker = createEmailWorker({
   repository: emailOutboxRepository,
   transport,
   settings: environment.email.worker,
-  from: smtp?.from ?? { name: 'LA Chef Event Catering Services', address: 'disabled@invalid.local' }
+  from: smtp?.from ?? { name: 'LA Chef Event Catering Services', address: 'disabled@invalid.local' },
+  renderPasswordResetEmail,
 });

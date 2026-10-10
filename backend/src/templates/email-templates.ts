@@ -26,13 +26,13 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
   const definition = templates[key as EmailTemplateKey];
   if (key === 'PASSWORD_RESET_REQUESTED') {
     const payload = raw as Record<string, unknown>;
-    if (Object.keys(payload).some(field => !['displayName', 'selector', 'principalType'].includes(field)) ||
-        typeof payload.displayName !== 'string' || !payload.displayName.trim() || payload.displayName.length > 200 || /[\x00-\x1f\x7f]/.test(payload.displayName) ||
+    if (Object.keys(payload).some(field => !['accountName', 'selector', 'accountType'].includes(field)) ||
+        typeof payload.accountName !== 'string' || !payload.accountName.trim() || payload.accountName.length > 200 || /[\x00-\x1f\x7f]/.test(payload.accountName) ||
         typeof payload.selector !== 'string' || !/^[A-Za-z0-9_-]{22}$/.test(payload.selector) ||
-        (payload.principalType !== 'CUSTOMER' && payload.principalType !== 'ADMIN')) {
+        (payload.accountType !== 'CUSTOMER' && payload.accountType !== 'ADMIN')) {
       throw new AppError(400, 'Invalid notification payload value.');
     }
-    return { displayName: payload.displayName.trim(), selector: payload.selector, principalType: payload.principalType };
+    return { accountName: payload.accountName.trim(), selector: payload.selector, accountType: payload.accountType };
   }
   if (key === 'PASSWORD_CHANGED') {
     const payload = raw as Record<string, unknown>;
@@ -60,6 +60,25 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
+}
+
+export function renderPasswordResetRequestedEmail(accountName: string, resetUrl: string): RenderedEmail {
+  const subject = 'Reset your password | LA Chef';
+  const text = [
+    `Hello ${accountName},`,
+    'We received a request to reset your LA Chef account password.',
+    `Reset password: ${resetUrl}`,
+    'This link expires in 15 minutes and can be used once. If you did not request it, you can ignore this email.',
+    brand,
+  ].join('\n\n');
+  const html = [
+    `<p>Hello ${escapeHtml(accountName)},</p>`,
+    '<p>We received a request to reset your LA Chef account password.</p>',
+    `<p><a href="${escapeHtml(resetUrl)}">Reset password</a></p>`,
+    '<p>This link expires in 15 minutes and can be used once. If you did not request it, you can ignore this email.</p>',
+    `<p>${brand}</p>`,
+  ].join('');
+  return { subject, text, html };
 }
 
 export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail {

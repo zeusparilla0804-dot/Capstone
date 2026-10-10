@@ -97,7 +97,7 @@ test('issue invalidates prior tokens, stores only hash and selector, and atomica
   assert.deepEqual(db.notifications, [{
     recipient: principal.email,
     templateKey: 'PASSWORD_RESET_REQUESTED',
-    payload: { displayName: principal.displayName, selector: 'a'.repeat(22), principalType: 'CUSTOMER' },
+    payload: { accountName: principal.displayName, selector: 'a'.repeat(22), accountType: 'CUSTOMER' },
   }]);
 });
 

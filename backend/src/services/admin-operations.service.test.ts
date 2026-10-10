@@ -140,7 +140,11 @@ test('admin operations queries fetch customer history directly by customer_id wi
 
 test('admin operations queries bind outbox and audit filters and preserve bigint identifiers', async () => {
   const outboxRecorder = new RequestRecorder(() => ({
-    recordset: [{ id: '9007199254740993', payload: '{"bookingReference":"BK-1"}', total_count: 1 }]
+    recordset: [
+      { id: '9007199254740993', templateKey: 'BOOKING_RECEIVED', payload: '{"bookingReference":"BK-1"}', total_count: 2 },
+      { id: '9007199254740994', templateKey: 'PASSWORD_RESET_REQUESTED',
+        payload: '{"accountName":"Secret Name","accountType":"CUSTOMER","selector":"aaaaaaaaaaaaaaaaaaaaaa"}', total_count: 2 }
+    ]
   }));
   const outboxRepository = repositoryWith(outboxRecorder);
   const outbox = await outboxRepository['emailOutbox']({
@@ -149,6 +153,7 @@ test('admin operations queries bind outbox and audit filters and preserve bigint
   }) as { items: { id: string; payload: Record<string, unknown> }[] };
   assert.equal(outbox.items[0]!.id, '9007199254740993');
   assert.equal(outbox.items[0]!.payload['bookingReference'], 'BK-1');
+  assert.deepEqual(outbox.items[1]!.payload, { sensitive: true });
   assert.deepEqual(outboxRecorder.calls[0]!.params, {
     search: 'customer', status: 'FAILED', templateKey: 'BOOKING_RECEIVED', relatedEntityType: 'BOOKING',
     relatedEntityId: '9007199254740995', offset: 0, pageSize: 20

@@ -94,9 +94,9 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
           recipient: input.principal.email,
           templateKey: 'PASSWORD_RESET_REQUESTED',
           payload: {
-            displayName: input.principal.displayName,
+            accountName: input.principal.displayName,
             selector: input.selector,
-            principalType: input.principal.principalType,
+            accountType: input.principal.principalType,
           },
         }, request);
         return 'ISSUED';

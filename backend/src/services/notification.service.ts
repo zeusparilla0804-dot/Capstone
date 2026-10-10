@@ -46,6 +46,9 @@ export function createNotificationService(deps: { repository: EmailOutboxReposit
       if (deps.nodeEnv === 'production') throw new AppError(404, 'Notification preview is unavailable.');
       const record = await deps.repository.findById(bigintId(outboxId));
       if (!record) throw new AppError(404, 'Notification not found.');
+      if (record.templateKey === 'PASSWORD_RESET_REQUESTED') {
+        throw new AppError(404, 'Notification preview is unavailable.');
+      }
       return renderEmail(record.templateKey, record.payload);
     },
     bookingContext(reservationId: number, request: sql.Request): Promise<BookingNotificationContext | undefined> {

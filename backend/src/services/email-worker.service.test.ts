@@ -78,10 +78,10 @@ class OutboxDb {
     assert.equal(typeof notificationModule?.createNotificationService, 'function', 'notification service must exist');
     return notificationModule.createNotificationService({ repository: this.repository(), nodeEnv });
   }
-  worker(transport?: any, overrides = {}) {
+  worker(transport?: any, overrides = {}, renderPasswordResetEmail = async () => undefined) {
     assert.equal(typeof workerModule?.createEmailWorker, 'function', 'email outbox worker must exist');
     return workerModule.createEmailWorker({ repository: this.repository(), transport, settings: { ...settings, ...overrides },
-      from: { name: 'LA Chef Event Catering Services', address: 'chef@example.test' } });
+      from: { name: 'LA Chef Event Catering Services', address: 'chef@example.test' }, renderPasswordResetEmail });
   }
   async seed() { await this.notification().queueNotification(input); }
 }
@@ -124,6 +124,29 @@ test('email outbox configured delivery marks SENT and clears old retry/error met
   assert.equal(messages[0].to, 'Customer@Example.test'); assert.equal(messages[0].from.name, 'LA Chef Event Catering Services');
   assert.equal('attachments' in messages[0], false); assert.equal(messages[0].disableFileAccess, true); assert.equal(messages[0].disableUrlAccess, true);
   assert.ok(messages[0].text.includes('BK-5')); assert.ok(messages[0].html.includes('BK-5'));
+});
+
+test('email worker uses the protected renderer for reset messages and fails closed when token is unavailable', async () => {
+  for (const available of [true, false]) {
+    const db = new OutboxDb();
+    await db.notification().queueNotification({ recipient: 'customer@example.test', templateKey: 'PASSWORD_RESET_REQUESTED',
+      payload: { accountName: 'Customer', accountType: 'CUSTOMER', selector: 'a'.repeat(22) } });
+    const messages: unknown[] = [];
+    const rendered = { subject: 'Reset password', text: 'protected reset link', html: '<p>protected reset link</p>' };
+    const result = await db.worker({ sendMail: async (message: unknown) => { messages.push(message); return {}; } }, {},
+      async () => available ? rendered : undefined).processEmailBatch(now);
+    assert.equal(result.sent, available ? 1 : 0);
+    assert.equal(result.failed, available ? 0 : 1);
+    assert.equal(messages.length, available ? 1 : 0);
+    assert.equal(db.rows[0].status, available ? 'SENT' : 'FAILED');
+  }
+});
+
+test('password reset notification preview is unavailable in development without reconstruction', async () => {
+  const db = new OutboxDb();
+  await db.notification().queueNotification({ recipient: 'customer@example.test', templateKey: 'PASSWORD_RESET_REQUESTED',
+    payload: { accountName: 'Customer', accountType: 'CUSTOMER', selector: 'a'.repeat(22) } });
+  await assert.rejects(db.notification().renderEmailPreview('9007199254740993'), (error: any) => error.statusCode === 404);
 });
 
 for (const [attempt, delay] of [[0, 60_000], [1, 120_000], [7, 3_600_000]]) {

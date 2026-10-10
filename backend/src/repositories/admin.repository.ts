@@ -225,7 +225,8 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
           ORDER BY created_at DESC,notification_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
       return paged(result.recordset.map(row => ({ ...row, id: String(row['id']),
         relatedEntityId: row['relatedEntityId'] == null ? undefined : String(row['relatedEntityId']),
-        payload: parseJsonObject(row['payload']), createdAt: dateValue(row['createdAt']), updatedAt: dateValue(row['updatedAt']),
+        payload: row['templateKey'] === 'PASSWORD_RESET_REQUESTED' ? { sensitive: true } : parseJsonObject(row['payload']),
+        createdAt: dateValue(row['createdAt']), updatedAt: dateValue(row['updatedAt']),
         nextAttemptAt: row['nextAttemptAt'] == null ? undefined : dateValue(row['nextAttemptAt']),
         sentAt: row['sentAt'] == null ? undefined : dateValue(row['sentAt']) })), query);
     },
