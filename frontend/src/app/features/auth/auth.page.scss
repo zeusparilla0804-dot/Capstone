@@ -99,6 +99,19 @@ form {
 .form-field .field-hint {
   color: var(--color-text-muted);
 }
+.password-assist {
+  width: fit-content;
+  color: var(--color-primary-dark);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .password-assist:hover {
+    text-decoration: underline;
+  }
+}
 .password-field {
   position: relative;
 }

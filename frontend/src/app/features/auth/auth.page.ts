@@ -1,12 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
 @Component({
   selector: 'app-auth-page',
-  imports: [PublicHeaderComponent, ReactiveFormsModule],
+  imports: [PublicHeaderComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './auth.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './auth.page.scss',

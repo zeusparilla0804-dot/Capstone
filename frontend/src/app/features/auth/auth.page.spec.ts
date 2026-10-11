@@ -56,4 +56,10 @@ describe('AuthPageComponent', () => {
     expect(auth.register).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('/dashboard');
   });
+
+  it('links customer sign-in to customer password recovery', () => {
+    const link = fixture.nativeElement.querySelector('a[href="/forgot-password"]');
+    expect(link).not.toBeNull();
+    expect(link.textContent).toContain('Forgot password');
+  });
 });

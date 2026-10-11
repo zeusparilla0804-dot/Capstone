@@ -77,6 +77,9 @@
           @if (form.controls.password.touched && form.controls.password.invalid) {
             <small>Password must contain at least 12 characters.</small>
           }
+          @if (!registerMode()) {
+            <a class="password-assist" routerLink="/forgot-password">Forgot password?</a>
+          }
         </div>
         @if (error()) {
           <p class="auth-error" role="alert">{{ error() }}</p>

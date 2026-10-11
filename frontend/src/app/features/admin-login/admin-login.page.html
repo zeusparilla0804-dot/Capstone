@@ -41,6 +41,7 @@
               {{ showPassword() ? 'Hide' : 'Show' }}
             </button>
           </div>
+          <a class="password-assist" routerLink="/admin/forgot-password">Forgot password?</a>
         </div>
         @if (error()) {
           <p class="admin-error" role="alert">{{ error() }}</p>

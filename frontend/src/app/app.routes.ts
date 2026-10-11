@@ -39,6 +39,18 @@ export const routes: Routes = [
     title: 'Sign In | LA Chef',
   },
   {
+    path: 'forgot-password',
+    data: Object.freeze({ audience: 'customer', mode: 'forgot' }),
+    loadComponent: () => import('./features/password-recovery/password-recovery.page').then(m => m.PasswordRecoveryPage),
+    title: 'Reset Password | LA Chef',
+  },
+  {
+    path: 'reset-password',
+    data: Object.freeze({ audience: 'customer', mode: 'reset' }),
+    loadComponent: () => import('./features/password-recovery/password-recovery.page').then(m => m.PasswordRecoveryPage),
+    title: 'Choose a New Password | LA Chef',
+  },
+  {
     path: 'my-bookings',
     canActivate: [authGuard],
     loadComponent: () =>
@@ -84,6 +96,18 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/admin-login/admin-login.page').then((m) => m.AdminLoginPage),
     title: 'Admin Sign In | LA Chef',
+  },
+  {
+    path: 'admin/forgot-password',
+    data: Object.freeze({ audience: 'admin', mode: 'forgot' }),
+    loadComponent: () => import('./features/password-recovery/password-recovery.page').then(m => m.PasswordRecoveryPage),
+    title: 'Admin Password Recovery | LA Chef',
+  },
+  {
+    path: 'admin/reset-password',
+    data: Object.freeze({ audience: 'admin', mode: 'reset' }),
+    loadComponent: () => import('./features/password-recovery/password-recovery.page').then(m => m.PasswordRecoveryPage),
+    title: 'Choose an Admin Password | LA Chef',
   },
   {
     path: 'admin/dashboard',

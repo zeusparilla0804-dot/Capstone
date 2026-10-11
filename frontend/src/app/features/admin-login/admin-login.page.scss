@@ -119,6 +119,19 @@ form > .btn {
   color: var(--color-danger);
   font-size: 0.85rem;
 }
+.password-assist {
+  width: fit-content;
+  color: var(--color-primary-dark);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-decoration: none;
+  text-underline-offset: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .password-assist:hover {
+    text-decoration: underline;
+  }
+}
 .admin-help {
   display: flex;
   gap: 6px;
