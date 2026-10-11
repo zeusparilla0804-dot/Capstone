@@ -9,26 +9,26 @@
 ## Included
 
 - Customer catering, ordering, booking, payment, and account flows
+- Customer and administrator password recovery with protected email delivery and all-session revocation
 - Administrative operations and reporting interfaces
-- Tracked empty-database schema migrations `000`-`006` and `008`-`010`
+- Tracked empty-database schema migrations `000`-`006` and `008`-`011`
 - Container, reverse-proxy, CI, backup, restore, and smoke-test templates
 
 ## Validation
 
 Run `npm run build` and `npm test` in both application directories. Run `npm run db:verify:fresh` with a dedicated non-production provisioner, then run frontend browser E2E against the isolated integration environment. Apply migrations in filename order before starting the application.
 
-Fresh-database verification completed locally on 2026-10-10: migrations `000`-`006` and `008`-`010` applied from an empty generated database, the second migration pass was idempotent, both backend SQL E2E suites passed, the raw `000` rerun preserved schema and row counts, and cleanup left zero `LA_CHEF_VERIFY_*` databases. The only inserted reference data was five system event types.
+Fresh-database verification includes migrations `000`-`006` and `008`-`011`, an idempotent second migration pass, all backend SQL E2E journeys, baseline rerun checks, disposable-database cleanup, and the five approved system event-type reference rows only.
 
-Verification completed on 2026-10-04 from an exported, credential-free candidate snapshot:
+Verification completed on 2026-10-11 from the isolated password-recovery worktree under Node.js `22.22.3`:
 
-- Clean dependency installation: backend `175` packages and frontend `331` packages installed with `npm ci` under Node.js `22.22.3`.
-- Backend: 175 tests executed, 173 passed, 2 expected platform-specific skips; production build passed.
-- SQL E2E: Phase 8.1 and Admin Operations workflows passed with fixture cleanup.
-- Frontend: 52 Angular tests passed; production build passed under Node.js `22.22.3`.
-- Browser E2E: 5 Playwright tests passed, including `390`, `768`, `1024`, and `1440` pixel checks.
-- Production dependency audits: 0 known vulnerabilities in both applications.
-- Candidate secret scan: no production credential signatures; no populated environment file included.
-- Candidate business-data scan: no provisional catalog fixture or production mock/seed insertion included.
+- Backend: 266 tests executed, 264 passed, 2 expected Windows permission skips; production build passed.
+- SQL E2E: Phase 8.1, Admin Operations, and Password Recovery journeys passed with fixture cleanup.
+- Fresh database: migrations `000`-`006` and `008`-`011` applied twice, schema/data contracts and all three SQL journeys passed, and the disposable database was removed.
+- Frontend: 89 Angular tests passed; production build passed with only the pre-existing booking stylesheet budget warning.
+- Browser E2E: 9 Playwright tests passed, including recovery and operational checks at `390`, `768`, `1024`, and `1440` pixels.
+- Candidate scan: no complete reset token or populated recovery secret is tracked; documented environment values are placeholders only.
+- No dependency version changed in this feature. The previous clean-install and production dependency-audit evidence remains applicable to the unchanged lockfiles.
 
 ## Configuration
 
@@ -43,3 +43,5 @@ Copy the appropriate committed `.env.*.example` file to a secret-managed runtime
 - Payment-proof storage must be durable and backed up with its matching SQL metadata.
 - Container execution requires Docker and must be validated on a Docker-capable host.
 - No production deployment is part of this release preparation.
+- Live SMTP delivery remains a staging gate; local tests prove outbox safety and rendering boundaries, not real mailbox receipt.
+- Recovery rate limits are process-local and require a shared proxy/store before multi-instance API scaling.

@@ -13,13 +13,19 @@ npm run test:e2e
 
 Screenshots are written to `frontend/test-results/admin-dashboard-<width>.png`. They are generated evidence and are intentionally ignored by Git.
 
+## Automated Recovery Evidence
+
+On 2026-10-11, Playwright verified customer and administrator forgot/reset routes at `390`, `768`, `1024`, and `1440` pixels in Microsoft Edge/Chromium. Every route-width combination checks page-level horizontal overflow and captures generated evidence under `frontend/test-results/recovery-<route>-<width>.png`.
+
+The recovery journey also verifies keyboard submission, exact customer/admin API selection, generic sent copy that does not reveal account existence, missing and rejected token states, role-correct return links, successful password-change copy, and removal of the token-bearing query string through history replacement.
+
 ## Manual Release Matrix
 
 Automated checks do not replace device and assistive-technology review. Before production, test widths `320`, `375`, `390`, `768`, `1024`, and `1440` with representative short and long data values.
 
 | Area | Screens | Required checks |
 | --- | --- | --- |
-| Public | Header, Home, Packages, Login, 404 | Mobile menu, image gallery, filters, CTA wrapping, labels, errors |
+| Public | Header, Home, Packages, Login, Recovery, 404 | Mobile menu, image gallery, filters, CTA wrapping, labels, errors, token-free success URL |
 | Booking | Event details, package/add-ons, review, checkout | Stepper, field sizing, totals, pending state, retained input |
 | Customer | Dashboard, My Bookings, Payment Proof, Invoice | Drawer, cards, long references, upload states, table/print layout |
 | Admin | Login, Dashboard, Bookings, Customers, Payments, Outbox, Audit, Catalog | Drawer, filters, record layouts, proof viewer, dialogs, status actions |
