@@ -1,8 +1,8 @@
-<main class="profile-layout">
+<main class="profile-layout portal-surface">
   <app-dashboard-sidebar
     [title]="auth.user()?.fullName ?? 'Customer'"
     subtitle="Customer"
-    [navItems]="navItems"
+    [navItems]="navItems()"
     (navAction)="handleNavAction($event)"
   />
 
@@ -55,10 +55,11 @@
             <p>Manage your existing reservations or start a new catering request.</p>
           </div>
           <div class="profile-actions__buttons">
-            <a class="btn btn-secondary" routerLink="/my-bookings">View My Bookings</a>
+            <a class="btn btn-secondary" routerLink="/my-bookings">View My Reservations</a>
             <a class="btn btn-primary" routerLink="/book-event">Plan a New Event</a>
           </div>
         </section>
+
       } @else {
         <p class="data-state" role="status">Loading your profile...</p>
       }

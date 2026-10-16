@@ -10,6 +10,7 @@ import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 import { transitionBooking } from './booking-status.service.js';
 import { queueBookingNotification } from './notification.service.js';
+import { hasRequiredReservationDeposit, requiredReservationDeposit } from './reservation-billing-policy.js';
 
 interface Dependencies {
   readRequest: () => sql.Request | Promise<sql.Request>;
@@ -113,14 +114,18 @@ export function createPaymentVerificationService(deps: Dependencies) {
         const status = amount === undefined ? 'REJECTED' : 'VERIFIED';
         if (!await markProofReviewed({ proofId, reservationId: proof.reservationId, adminId, status, reason,
           amount, transactionId, invoiceId }, request)) throw conflict();
+        const cumulativePaid = (paidCents + (amount === undefined ? 0 : Math.round(amount * 100))) / 100;
+        const nextStatus = status === 'VERIFIED' && hasRequiredReservationDeposit(Number(payment.amountDue), cumulativePaid)
+          ? 'PAYMENT_VERIFIED'
+          : 'AWAITING_PAYMENT';
         await transitionBooking({ reservationId: proof.reservationId, expectedStatus: 'PAYMENT_SUBMITTED',
-          nextStatus: status === 'VERIFIED' ? 'PAYMENT_VERIFIED' : 'AWAITING_PAYMENT', actor: { type: 'ADMIN', id: adminId }, reason, request });
+          nextStatus, actor: { type: 'ADMIN', id: adminId }, reason, request });
         // ADMIN_AUDIT_LOG.entity_id is int; proof IDs are bigint, so anchor on booking.
         await writeAdminAudit({ adminId, action: `PAYMENT_PROOF_${status}`, entityType: 'BOOKING', entityId: proof.reservationId,
           oldValues: { proofId, status: proof.status, amountPaid: paidCents / 100 },
           newValues: { proofId, status, verifiedAmount: amount ?? null, reason: reason ?? null,
             paymentTransactionId: transactionId ?? null, invoiceId: invoiceId ?? null,
-            amountPaid: (paidCents + (amount === undefined ? 0 : Math.round(amount * 100))) / 100 } }, request);
+            amountPaid: cumulativePaid } }, request);
         await queueBookingNotification(proof.reservationId,
           status === 'VERIFIED' ? 'PAYMENT_PROOF_VERIFIED' : 'PAYMENT_PROOF_REJECTED', request,
           status === 'VERIFIED' ? { amount: amount!.toFixed(2) } : {}, 'PAYMENT_PROOF', String(proof.id));
@@ -155,9 +160,15 @@ export function createPaymentVerificationService(deps: Dependencies) {
         booking: { id: Number(context.reservationId), reference: context.bookingReference, status: context.bookingStatus,
           eventDate: new Date(context.eventDate).toISOString().slice(0, 10) },
         customer: { id: Number(context.customerId), name: context.customerName, email: context.customerEmail },
-        payment: context.paymentId == null ? undefined : { id: Number(context.paymentId), amountDue: Number(context.amountDue),
-          amountPaid: Number(context.amountPaid), status: context.paymentStatus,
-          outstandingBalance: (Math.round(Number(context.amountDue) * 100) - Math.round(Number(context.amountPaid) * 100)) / 100 },
+        payment: context.paymentId == null ? undefined : (() => {
+          const amountDue = Number(context.amountDue);
+          const amountPaid = Number(context.amountPaid);
+          const requiredDeposit = requiredReservationDeposit(amountDue);
+          return { id: Number(context.paymentId), amountDue, amountPaid, status: context.paymentStatus,
+            requiredDeposit,
+            remainingDeposit: Math.max(0, Math.round((requiredDeposit - amountPaid) * 100) / 100),
+            outstandingBalance: (Math.round(amountDue * 100) - Math.round(amountPaid * 100)) / 100 };
+        })(),
         invoice: context.invoiceId == null ? undefined : { id: Number(context.invoiceId), number: context.invoiceNumber,
           totalAmount: Number(context.invoiceTotal), status: context.invoiceStatus } };
     },

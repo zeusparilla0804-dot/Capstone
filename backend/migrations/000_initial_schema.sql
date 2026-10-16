@@ -148,6 +148,11 @@ DECLARE @violations TABLE (
   violation nvarchar(1000) NOT NULL
 );
 
+DECLARE @package_pricing_v2 bit = CASE
+  WHEN COL_LENGTH('dbo.PACKAGE', 'pricing_type') IS NULL THEN 0
+  ELSE 1
+END;
+
 DECLARE @expected_columns TABLE (
   table_name sysname NOT NULL,
   column_name sysname NOT NULL,
@@ -184,9 +189,6 @@ INSERT @expected_columns(table_name,column_name,type_name,max_length,precision_v
   ('PACKAGE','event_id','int',4,10,0,0,0),
   ('PACKAGE','package_name','nvarchar',300,0,0,0,0),
   ('PACKAGE','description','nvarchar',2000,0,0,1,0),
-  ('PACKAGE','price_per_head','decimal',9,12,2,0,0),
-  ('PACKAGE','min_guest','int',4,10,0,0,0),
-  ('PACKAGE','max_guest','int',4,10,0,0,0),
   ('MENU_ITEM','menu_item_id','int',4,10,0,0,1),
   ('MENU_ITEM','package_id','int',4,10,0,0,0),
   ('MENU_ITEM','item_name','nvarchar',300,0,0,0,0),
@@ -218,6 +220,17 @@ INSERT @expected_columns(table_name,column_name,type_name,max_length,precision_v
   ('NOTIFICATION','message','nvarchar',-1,0,0,0,0),
   ('NOTIFICATION','status','nvarchar',60,0,0,0,0),
   ('NOTIFICATION','sent_at','datetime2',6,19,0,1,0);
+
+IF @package_pricing_v2 = 0
+  INSERT @expected_columns(table_name,column_name,type_name,max_length,precision_value,scale_value,is_nullable,is_identity) VALUES
+    ('PACKAGE','price_per_head','decimal',9,12,2,0,0),
+    ('PACKAGE','min_guest','int',4,10,0,0,0),
+    ('PACKAGE','max_guest','int',4,10,0,0,0);
+ELSE
+  INSERT @expected_columns(table_name,column_name,type_name,max_length,precision_value,scale_value,is_nullable,is_identity) VALUES
+    ('PACKAGE','price_per_head','decimal',9,12,2,1,0),
+    ('PACKAGE','min_guest','int',4,10,0,1,0),
+    ('PACKAGE','max_guest','int',4,10,0,1,0);
 
 INSERT @violations(violation)
 SELECT CONCAT('dbo.', expected.table_name, '.', expected.column_name, ': missing or incompatible column')
@@ -375,9 +388,6 @@ WHERE NOT EXISTS (
 DECLARE @expected_checks TABLE(table_name sysname NOT NULL, constraint_name sysname NOT NULL PRIMARY KEY(table_name,constraint_name));
 INSERT @expected_checks(table_name,constraint_name) VALUES
   ('ADMIN','CK_ADMIN_status'),
-  ('PACKAGE','CK_PACKAGE_price_per_head'),
-  ('PACKAGE','CK_PACKAGE_min_guest'),
-  ('PACKAGE','CK_PACKAGE_max_guest'),
   ('RESERVATION','CK_RESERVATION_guest_count'),
   ('RESERVATION','CK_RESERVATION_status'),
   ('PAYMENT','CK_PAYMENT_amount_due'),
@@ -386,6 +396,17 @@ INSERT @expected_checks(table_name,constraint_name) VALUES
   ('PAYMENT','CK_PAYMENT_status'),
   ('NOTIFICATION','CK_NOTIFICATION_recipient_type'),
   ('NOTIFICATION','CK_NOTIFICATION_status');
+
+IF @package_pricing_v2 = 0
+  INSERT @expected_checks(table_name,constraint_name) VALUES
+    ('PACKAGE','CK_PACKAGE_price_per_head'),
+    ('PACKAGE','CK_PACKAGE_min_guest'),
+    ('PACKAGE','CK_PACKAGE_max_guest');
+
+IF @package_pricing_v2 = 1
+  INSERT @expected_checks(table_name,constraint_name) VALUES
+    ('PACKAGE','CK_PACKAGE_pricing_model'),
+    ('PACKAGE','CK_PACKAGE_guest_limits');
 
 INSERT @violations(violation)
 SELECT CONCAT('dbo.', expected.table_name, '.', expected.constraint_name, ': missing or untrusted check constraint')

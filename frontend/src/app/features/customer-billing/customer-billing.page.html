@@ -1,8 +1,8 @@
-<main class="billing-layout">
+<main class="billing-layout portal-surface">
   <app-dashboard-sidebar
     [title]="auth.user()?.fullName ?? 'Customer'"
     subtitle="Customer"
-    [navItems]="navItems"
+    [navItems]="navItems()"
     (navAction)="handleNavAction($event)"
   />
 

@@ -19,14 +19,14 @@
       <p class="page-kicker">Administration</p>
       <h2 id="admin-login-title">Welcome back</h2>
       <p>Sign in to manage LA Chef operations.</p>
-      <form [formGroup]="form" (ngSubmit)="submit()">
+      <form [formGroup]="form" (ngSubmit)="submit()" autocomplete="off">
         <div class="form-field">
           <label for="identity">Email or username</label
           ><input
             id="identity"
             formControlName="identity"
-            autocomplete="username"
-            placeholder="admin@lachef.com"
+            autocomplete="off"
+            placeholder="Enter email or username"
           />
         </div>
         <div class="form-field">
@@ -36,7 +36,7 @@
               id="adminPassword"
               [type]="showPassword() ? 'text' : 'password'"
               formControlName="password"
-              autocomplete="current-password"
+              autocomplete="off"
             /><button type="button" (click)="showPassword.set(!showPassword())">
               {{ showPassword() ? 'Hide' : 'Show' }}
             </button>

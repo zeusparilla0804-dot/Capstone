@@ -66,23 +66,80 @@ describe('BookingService cancellation', () => {
   it('submits GCash as the backend e-wallet payment method', async () => {
     const draft: BookingDraft = {
       eventType: 'wedding', eventDate: '2026-12-10', eventTime: '2:00 PM', venue: 'Venue',
-      guestCount: 50, packageId: '1', selectedAddOnIds: [], paymentMethod: 'gcash',
+      guestCount: 50, packageId: '1', selectedAddOnIds: [], paymentMethod: 'gcash', specialRequest: 'No shellfish.',
     };
     const pkg: CateringPackage = {
       id: '1', name: 'Wedding Package', category: 'wedding', description: 'Package',
-      pricePerGuest: 500, imageUrl: 'assets/images/packages/premium-package.webp', features: [],
+      pricingType: 'PER_HEAD', pricePerGuest: 500, basePrice: null, includedGuests: null,
+      excessGuestPrice: null, minGuests: null, maxGuests: null,
+      imageUrl: 'assets/images/packages/premium-package.webp', features: [],
     };
 
     const pending = service.submitDraft(draft, pkg, []);
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings`);
     expect(request.request.body.paymentMethod).toBe('e-wallet');
+    expect(request.request.body.specialRequest).toBe('No shellfish.');
     request.flush({ success: true, data: {
       id: 27, reference: 'BK-2026-TEST', total: 25000, eventName: 'Wedding Event', eventType: 'wedding',
       eventDate: draft.eventDate, eventTime: '14:00', venue: draft.venue, guestCount: draft.guestCount,
-      package: { packageId: 1, packageName: pkg.name, pricePerGuest: 500 }, addOns: [], discount: 0,
+      package: { packageId: 1, packageName: pkg.name, pricingType: 'PER_HEAD', pricePerGuest: 500,
+        basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 25000 }, addOns: [], discount: 0,
       status: 'pending', amountPaid: 0, createdAt: '2026-10-04T00:00:00Z',
     } });
     await expect(pending).resolves.toBe('BK-2026-TEST');
+  });
+
+  it('updates pending booking details and replaces the matching local record', async () => {
+    const draft: BookingDraft = {
+      eventType: 'wedding', eventDate: '2026-12-11', eventTime: '3:00 PM', venue: 'New venue',
+      guestCount: 60, packageId: '1', selectedAddOnIds: ['5'], paymentMethod: 'bank-transfer',
+      specialRequest: 'White linens.',
+    };
+    const pkg: CateringPackage = {
+      id: '1', name: 'Wedding Package', category: 'wedding', description: 'Package',
+      pricingType: 'PER_HEAD', pricePerGuest: 500, basePrice: null, includedGuests: null,
+      excessGuestPrice: null, minGuests: null, maxGuests: null,
+      imageUrl: 'assets/images/packages/premium-package.webp', features: [],
+    };
+
+    const pending = service.updatePendingBooking('27', draft, pkg, [{ id: '5', name: 'Coffee Bar', price: 15_000 }]);
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings/27/details`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toEqual({
+      eventType: 'wedding', eventDate: '2026-12-11', eventTime: '15:00', venue: 'New venue',
+      guestCount: 60, packageId: 1, addOnIds: [5], paymentMethod: 'bank-transfer', specialRequest: 'White linens.',
+    });
+    request.flush({ success: true, data: {
+      id: 27, reference: 'BK-2026-TEST', total: 45000, eventName: 'Wedding Event', eventType: 'wedding',
+      eventDate: draft.eventDate, eventTime: '15:00', venue: draft.venue, guestCount: draft.guestCount,
+      specialRequest: draft.specialRequest,
+      package: { packageId: 1, packageName: pkg.name, pricingType: 'PER_HEAD', pricePerGuest: 500,
+        basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 30000 },
+      addOns: [{ id: 5, name: 'Coffee Bar', price: 15000 }], discount: 0,
+      status: 'pending', amountPaid: 0, createdAt: '2026-10-04T00:00:00Z',
+    } });
+
+    await expect(pending).resolves.toMatchObject({ id: '27', total: 45000, specialRequest: 'White linens.' });
+  });
+
+  it('loads one owner-scoped booking so an edit survives a page refresh', async () => {
+    const pending = firstValueFrom(service.loadBookingById('27'));
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings/27`);
+    expect(request.request.method).toBe('GET');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush({ success: true, data: {
+      id: 27, reference: 'BK-2026-TEST', total: 45000, eventName: 'Wedding Event', eventType: 'wedding',
+      eventDate: '2026-12-11', eventTime: '15:00', venue: 'New venue', guestCount: 60,
+      specialRequest: 'White linens.',
+      package: { packageId: 1, packageName: 'Wedding Package', pricingType: 'PER_HEAD', pricePerGuest: 500,
+        basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 30000 },
+      addOns: [{ id: 5, name: 'Coffee Bar', price: 15000 }], discount: 0,
+      status: 'pending', amountPaid: 0, createdAt: '2026-10-04T00:00:00Z',
+    } });
+
+    await expect(pending).resolves.toMatchObject({ id: '27', specialRequest: 'White linens.' });
+    expect(service.getBookingById('27')).toMatchObject({ id: '27', guestCount: 60 });
   });
 
   it('checks typed availability with encoded query values and customer credentials', async () => {

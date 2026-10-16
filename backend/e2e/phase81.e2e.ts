@@ -125,9 +125,9 @@ try {
   assert.equal(customerLogin.body.data.phone, '09171234567', 'Login must return the customer phone for the profile.');
 
   await request(base, '/admin/dashboard', { headers: { cookie: customerACookie } }, 401);
-  const packageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable E2E package', pricePerGuest: 123.45, minGuests: 10, maxGuests: 50, isActive: true }) }, 201);
+  const packageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable E2E package', pricingType: 'PER_HEAD', pricePerGuest: 123.45, basePrice: null, includedGuests: null, excessGuestPrice: null, minGuests: 10, maxGuests: 50, isActive: true }) }, 201);
   created.package = Number(packageCreate.body.data.id);
-  const capacityPackageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Capacity Package`, description: 'Disposable capacity E2E package', pricePerGuest: 100, minGuests: 1, maxGuests: 1000, isActive: true }) }, 201);
+  const capacityPackageCreate = await request(base, '/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ eventId: Number(event.event_id), name: `${marker} Capacity Package`, description: 'Disposable capacity E2E package', pricingType: 'PER_HEAD', pricePerGuest: 100, basePrice: null, includedGuests: null, excessGuestPrice: null, minGuests: 1, maxGuests: 1000, isActive: true }) }, 201);
   created.capacityPackage = Number(capacityPackageCreate.body.data.id);
   const addOnCreate = await request(base, '/admin/add-ons', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ name: `${marker} Add-on`, description: 'Disposable E2E add-on', price: 45.67, isActive: true }) }, 201);
   created.addOn = Number(addOnCreate.body.data.id);
@@ -281,7 +281,11 @@ try {
   await closeDatabase();
   const reconnected = await getDbPool();
   const persisted = await reconnected.request().input('id', sql.Int, created.booking).query('SELECT status FROM dbo.RESERVATION WHERE reservation_id=@id');
-  assert.equal(persisted.recordset[0]?.status, 'PAYMENT_VERIFIED');
+  assert.equal(
+    persisted.recordset[0]?.status,
+    'AWAITING_PAYMENT',
+    'A payment below the required 50% deposit must not verify the reservation.',
+  );
   console.log('Phase 8.1 SQL-backed E2E verification passed.');
 } finally {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));

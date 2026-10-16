@@ -9,6 +9,7 @@ const adminEmail = 'browser.admin@example.test';
 const customerEmail = 'browser.customer@example.test';
 const password = 'Browser-QA-2026!';
 const packageName = 'Browser QA Package';
+const basePackageName = 'Browser Debut Package';
 const mediumPackageName = 'Browser Medium Capacity Package';
 const uploadRoot = resolve('var/uploads/browser-e2e');
 const receiptJpeg = Buffer.from(
@@ -33,11 +34,16 @@ async function cleanup(): Promise<void> {
     .input('customerEmail', sql.NVarChar(255), customerEmail)
     .input('adminEmail', sql.NVarChar(255), adminEmail)
     .input('packageName', sql.NVarChar(150), packageName)
+    .input('basePackageName', sql.NVarChar(150), basePackageName)
     .input('mediumPackageName', sql.NVarChar(150), mediumPackageName)
     .query(`
       DECLARE @customerId int=(SELECT customer_id FROM dbo.CUSTOMER WHERE email=@customerEmail);
       DECLARE @adminId int=(SELECT admin_id FROM dbo.ADMIN WHERE email=@adminEmail);
-      DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient=@customerEmail;
+      DELETE eo FROM dbo.EMAIL_OUTBOX eo WHERE eo.recipient IN(@customerEmail,@adminEmail)
+        OR (eo.related_entity_type='CUSTOM_EVENT_REQUEST' AND eo.related_entity_id IN(
+          SELECT q.request_id FROM dbo.CUSTOM_EVENT_REQUEST q JOIN dbo.RESERVATION r ON r.reservation_id=q.reservation_id
+          WHERE r.customer_id=@customerId
+        ));
       DELETE pp FROM dbo.PAYMENT_PROOF pp JOIN dbo.RESERVATION r ON r.reservation_id=pp.reservation_id WHERE r.customer_id=@customerId;
       DELETE h FROM dbo.BOOKING_STATUS_HISTORY h JOIN dbo.RESERVATION r ON r.reservation_id=h.reservation_id WHERE r.customer_id=@customerId;
       DELETE FROM dbo.ADMIN_AUDIT_LOG WHERE admin_id=@adminId OR (entity_type='BOOKING' AND entity_id IN(SELECT reservation_id FROM dbo.RESERVATION WHERE customer_id=@customerId));
@@ -45,9 +51,17 @@ async function cleanup(): Promise<void> {
       DELETE i FROM dbo.INVOICE i JOIN dbo.RESERVATION r ON r.reservation_id=i.reservation_id WHERE r.customer_id=@customerId;
       DELETE pt FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id WHERE r.customer_id=@customerId;
       DELETE p FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id WHERE r.customer_id=@customerId;
+      UPDATE dbo.RESERVATION SET accepted_quote_id=NULL WHERE customer_id=@customerId;
+      DELETE qi FROM dbo.CUSTOM_QUOTE_ITEM qi JOIN dbo.CUSTOM_QUOTE cq ON cq.quote_id=qi.quote_id
+        JOIN dbo.CUSTOM_EVENT_REQUEST q ON q.request_id=cq.request_id JOIN dbo.RESERVATION r ON r.reservation_id=q.reservation_id
+        WHERE r.customer_id=@customerId;
+      DELETE cq FROM dbo.CUSTOM_QUOTE cq JOIN dbo.CUSTOM_EVENT_REQUEST q ON q.request_id=cq.request_id
+        JOIN dbo.RESERVATION r ON r.reservation_id=q.reservation_id WHERE r.customer_id=@customerId;
+      DELETE q FROM dbo.CUSTOM_EVENT_REQUEST q JOIN dbo.RESERVATION r ON r.reservation_id=q.reservation_id
+        WHERE r.customer_id=@customerId;
       DELETE ra FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.RESERVATION r ON r.reservation_id=ra.reservation_id WHERE r.customer_id=@customerId;
       DELETE FROM dbo.RESERVATION WHERE customer_id=@customerId;
-      DELETE FROM dbo.PACKAGE WHERE package_name IN(@packageName,@mediumPackageName);
+      DELETE FROM dbo.PACKAGE WHERE package_name IN(@packageName,@basePackageName,@mediumPackageName);
       DELETE FROM dbo.AUTH_SESSION WHERE customer_id=@customerId;
       DELETE FROM dbo.CUSTOMER WHERE customer_id=@customerId;
       DELETE FROM dbo.ADMIN_SESSION WHERE admin_id=@adminId;
@@ -103,11 +117,18 @@ const adminLogin = await api('/auth/admin/login', { method: 'POST', body: JSON.s
 const adminCookie = cookie(adminLogin.response);
 const packageResult = await api('/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
   eventId: Number(event.event_id), name: packageName, description: 'Disposable browser QA package',
-  pricePerGuest: 250, minGuests: 10, maxGuests: 50, isActive: true
+  pricingType: 'PER_HEAD', pricePerGuest: 250, basePrice: null, includedGuests: null,
+  excessGuestPrice: null, minGuests: 10, maxGuests: 50, isActive: true
+}) }, 201);
+await api('/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
+  eventId: Number(event.event_id), name: basePackageName, description: 'Disposable base-plus-excess browser QA package',
+  pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 85_888, includedGuests: 50,
+  excessGuestPrice: 650, minGuests: null, maxGuests: null, isActive: true
 }) }, 201);
 const mediumPackageResult = await api('/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
   eventId: Number(event.event_id), name: mediumPackageName, description: 'Disposable browser medium-capacity package',
-  pricePerGuest: 400, minGuests: 150, maxGuests: 499, isActive: true
+  pricingType: 'PER_HEAD', pricePerGuest: 400, basePrice: null, includedGuests: null,
+  excessGuestPrice: null, minGuests: 150, maxGuests: 499, isActive: true
 }) }, 201);
 const eventDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 const bookingResult = await api('/bookings', { method: 'POST', headers: { cookie: customerCookie }, body: JSON.stringify({
@@ -120,7 +141,7 @@ await api(`/admin/bookings/${bookingId}/invoice`, { method: 'POST', headers: { c
 await api(`/admin/bookings/${bookingId}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'AWAITING_PAYMENT' }) });
 const proof = new FormData();
 proof.set('method', 'E_WALLET');
-proof.set('claimedAmount', '500.00');
+proof.set('claimedAmount', '1250.00');
 proof.set('transactionReference', 'BROWSER-QA-REFERENCE');
 proof.set('paymentDate', eventDate);
 proof.set('proof', new Blob([receiptJpeg], { type: 'image/jpeg' }), 'browser-proof.jpg');

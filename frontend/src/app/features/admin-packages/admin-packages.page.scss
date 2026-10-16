@@ -1,0 +1,46 @@
+.package-editor { margin-bottom: 22px; padding: 22px; }
+.package-editor > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; margin-bottom: 22px; border-bottom: 1px solid var(--color-border); padding-bottom: 18px; }
+.package-editor > header p { color: var(--color-primary-dark); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.package-editor h2 { margin-top: 4px; font-family: var(--font-sans); font-size: 1.15rem; }
+.pricing-mode { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; border: 0; padding: 0; }
+.pricing-mode legend { margin-bottom: 8px; font-size: .82rem; font-weight: 700; }
+.pricing-mode label { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 11px; min-height: 76px; border: 1px solid var(--color-border); border-radius: 7px; cursor: pointer; padding: 14px; }
+.pricing-mode label.is-selected { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 5%, #fff); }
+.pricing-mode input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--color-primary); }
+.pricing-mode span, .pricing-mode small, .visibility-field span, .visibility-field small { display: block; }
+.pricing-mode small, .visibility-field small, .guest-limits > div span { margin-top: 4px; color: var(--color-text-muted); font-size: .8125rem; line-height: 1.5; }
+.guest-limits { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, .55fr)); align-items: end; gap: 16px; border-block: 1px solid var(--color-border); padding-block: 18px; }
+.guest-limits > div p { font-size: .875rem; font-weight: 700; }
+.guest-limits label > span { color: var(--color-text-muted); font-weight: 400; }
+.visibility-field { display: flex !important; align-items: center; gap: 12px; }
+.visibility-field input { width: 18px; height: 18px; accent-color: var(--color-primary); }
+.form-error { border: 1px solid color-mix(in srgb, var(--color-danger) 46%, #fff); border-radius: 5px; background: #fff7f5; color: var(--color-danger); padding: 10px 12px; font-size: .875rem; }
+.form-actions { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--color-border); padding-top: 18px; }
+.package-list { overflow: hidden; }
+.package-list .admin-table { min-width: 920px; }
+.package-list td:first-child strong, .package-list td:first-child small { display: block; }
+.package-list td:first-child small { max-width: 42ch; margin-top: 4px; color: var(--color-text-muted); line-height: 1.4; }
+.pricing-summary { display: inline-block; max-width: 36ch; line-height: 1.45; }
+.package-status { color: var(--color-success); font-size: .8125rem; font-weight: 700; }
+.package-status.is-inactive { color: var(--color-text-muted); }
+.row-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+@media (max-width: 900px) {
+  .guest-limits { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .guest-limits > div { grid-column: 1 / -1; }
+}
+@media (max-width: 767px) {
+  .package-editor { padding: 18px 16px; }
+  .pricing-mode, .guest-limits { grid-template-columns: minmax(0, 1fr); }
+  .guest-limits > div { grid-column: auto; }
+  .form-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .package-list { overflow: visible; border: 0; background: transparent; }
+  .package-list .table-scroll { overflow: visible; }
+  .package-list table, .package-list tbody, .package-list tr, .package-list td { display: block; width: 100%; }
+  .package-list .admin-table { min-width: 0; }
+  .package-list thead { display: none; }
+  .package-list tr { margin-bottom: 12px; border: 1px solid var(--color-border); border-radius: 7px; background: #fff; padding: 15px; }
+  .package-list td { display: grid; grid-template-columns: 94px minmax(0, 1fr); gap: 12px; border: 0; padding: 7px 0; text-align: left; }
+  .package-list td::before { color: var(--color-text-muted); content: attr(data-label); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+  .row-actions { margin-top: -5px; }
+}
+@media (pointer: coarse) { .package-editor input, .package-editor select, .package-editor textarea { font-size: 16px; } }

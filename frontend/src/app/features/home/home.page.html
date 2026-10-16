@@ -129,7 +129,6 @@
       <div class="popular__grid">
         @for (cateringPackage of popularPackages(); track cateringPackage.id) {
           <app-package-card
-            variant="featured"
             [cateringPackage]="cateringPackage"
             (viewDetails)="viewPackage(cateringPackage)"
           />

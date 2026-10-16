@@ -1,4 +1,4 @@
-import type { NextFunction,Request,Response } from 'express'; import { bookingService } from '../services/booking.service.js'; import { AppError } from '../utils/app-error.js'; import type { CreateBookingDto } from '../types/domain.types.js';
+import type { NextFunction,Request,Response } from 'express'; import { bookingService } from '../services/booking.service.js'; import { AppError } from '../utils/app-error.js'; import type { CreateBookingDto, UpdatePendingBookingDto } from '../types/domain.types.js';
 import { identifier, isoDate, text, time24 } from '../utils/validation.js';
 
 export function parseBooking(body: Record<string, unknown>): CreateBookingDto {
@@ -9,6 +9,10 @@ export function parseBooking(body: Record<string, unknown>): CreateBookingDto {
   if (addOnIds.length > 50 || new Set(addOnIds).size !== addOnIds.length) throw new AppError(400, 'Add-ons contain duplicate or excessive entries.');
   const paymentMethod = body['paymentMethod'] === undefined ? undefined : text(body['paymentMethod'], 'Payment method', { max: 30 });
   if (paymentMethod && !['cash', 'bank-transfer', 'e-wallet'].includes(paymentMethod)) throw new AppError(400, 'Payment method is invalid.');
+  const rawSpecialRequest = body['specialRequest'];
+  const specialRequest = rawSpecialRequest === undefined || rawSpecialRequest === null || rawSpecialRequest === ''
+    ? undefined
+    : text(rawSpecialRequest, 'Special request', { max: 2_000 });
   return {
     eventType: text(body['eventType'], 'Event type', { max: 100 }),
     eventDate: isoDate(body['eventDate'], 'Event date', true),
@@ -17,8 +21,12 @@ export function parseBooking(body: Record<string, unknown>): CreateBookingDto {
     guestCount,
     packageId: identifier(body['packageId'], 'Package identifier'),
     addOnIds,
-    paymentMethod
+    paymentMethod,
+    specialRequest,
   };
+}
+export function parsePendingBookingUpdate(body: Record<string, unknown>): UpdatePendingBookingDto {
+  return parseBooking(body);
 }
 export function parseAvailabilityQuery(query: Record<string, unknown>): { date: string; guestCount: number } {
   const rawGuestCount = query['guestCount'];
@@ -35,6 +43,7 @@ export function parseAvailabilityQuery(query: Record<string, unknown>): { date: 
   };
 }
 export async function create(req:Request,res:Response,next:NextFunction){try{res.status(201).json({success:true,data:await bookingService.create(req.customer!.id,parseBooking(req.body))});}catch(e){next(e);}}
+export async function updateDetails(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.updateDetails(req.customer!.id,identifier(req.params['id']),parsePendingBookingUpdate(req.body))});}catch(e){next(e);}}
 export async function availability(req:Request,res:Response,next:NextFunction){try{const input=parseAvailabilityQuery(req.query);res.json({success:true,data:await bookingService.availability(input.date,input.guestCount)});}catch(e){next(e);}}
 export async function mine(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.list(req.customer!.id)});}catch(e){next(e);}}
 export async function one(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.byId(req.customer!.id,identifier(req.params['id']))});}catch(e){next(e);}}

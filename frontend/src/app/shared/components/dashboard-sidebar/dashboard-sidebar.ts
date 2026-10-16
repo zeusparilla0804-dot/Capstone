@@ -1,14 +1,21 @@
-import { Component, computed, ElementRef, HostListener, ViewChild, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, ElementRef, HostListener, ViewChild, inject, input, output, signal, ChangeDetectionStrategy } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
+import { PortalNavigationStateService } from '../../../core/services/portal-navigation-state.service';
 import { initialsForName } from '../../utils/user-display';
 
 export interface DashboardNavItem {
   readonly label: string;
   readonly route: string;
-  readonly icon?: 'dashboard' | 'calendar' | 'wallet' | 'profile' | 'mail' | 'audit' | 'catalog' | 'logout';
+  readonly icon?: 'dashboard' | 'calendar' | 'wallet' | 'profile' | 'mail' | 'audit' | 'catalog' | 'reports' | 'logout';
   readonly isAction?: boolean;
   readonly showActiveState?: boolean;
+  readonly disabled?: boolean;
+  readonly busy?: boolean;
+  readonly busyLabel?: string;
+  readonly confirmationMessage?: string;
+  readonly badge?: number;
+  readonly badgeLabel?: string;
 }
 
 @Component({
@@ -25,9 +32,18 @@ export class DashboardSidebarComponent {
   readonly subtitle = input.required<string>();
   readonly navItems = input.required<readonly DashboardNavItem[]>();
   readonly navAction = output<DashboardNavItem>();
+  protected readonly navigationState = inject(PortalNavigationStateService);
   protected readonly initials = computed(() => initialsForName(this.title()));
+  protected readonly brandRoute = computed(
+    () => this.navItems().find(item => item.icon === 'dashboard' && !item.isAction)?.route ?? '/',
+  );
   protected readonly isOpen = signal(false);
   protected readonly mobileViewport = signal(typeof window !== 'undefined' && window.innerWidth <= 767);
+  protected readonly collapsed = computed(() => this.navigationState.collapsed() && !this.mobileViewport());
+
+  protected toggleCollapsed(): void {
+    this.navigationState.toggle();
+  }
 
   protected toggleMenu(): void {
     if (this.isOpen()) this.closeMenu(true);
@@ -44,6 +60,8 @@ export class DashboardSidebarComponent {
   }
 
   protected runAction(item: DashboardNavItem): void {
+    if (item.disabled) return;
+    if (item.confirmationMessage && !window.confirm(item.confirmationMessage)) return;
     this.navAction.emit(item);
     this.closeMenu();
   }

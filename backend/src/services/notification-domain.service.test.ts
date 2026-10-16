@@ -11,6 +11,8 @@ process.env.DB_PASSWORD ??= 'test';
 const { createBooking } = await import('../repositories/booking.repository.js');
 const { createInvoice } = await import('../repositories/invoice.repository.js');
 const { closeDatabase } = await import('../config/database.js');
+const templateModule = await import('../templates/email-templates.js');
+const notificationModule = await import('./notification.service.js');
 
 for (const kind of ['booking', 'invoice'] as const) {
   for (const failQueue of [false, true]) {
@@ -31,8 +33,9 @@ for (const kind of ['booking', 'invoice'] as const) {
           if (failQueue) throw new Error('outbox insert failed');
           outbox.push({ templateKey: p.templateKey, payload: p.payload, status: 'PENDING', attempts: 0 }); return result([{ id: '9007199254740993' }]);
         }
-        if (/FROM dbo.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Wedding Package', event_type: 'Wedding',
-          price_per_head: 100, min_guest: 1, max_guest: 200 }]);
+        if (/FROM dbo.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Wedding Package',
+          description: 'Wedding package', event_type: 'Wedding', pricing_type: 'PER_HEAD', price_per_head: 100,
+          base_price: null, included_guests: null, excess_guest_price: null, min_guest: 1, max_guest: 200 }]);
         if (/COUNT_BIG\s*\(\s*\*\s*\).*FROM dbo\.RESERVATION/is.test(command)) {
           assert.match(command, /WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
           return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
@@ -67,3 +70,27 @@ for (const kind of ['booking', 'invoice'] as const) {
     });
   }
 }
+
+test('custom event templates render safe customer and admin action links', () => {
+  assert.equal(notificationModule.customEventActionUrl(12, false), 'http://localhost:4200/custom-events/12');
+  assert.equal(notificationModule.customEventActionUrl(12, true), 'http://localhost:4200/admin/custom-events/12');
+  const base = { customerName: 'Customer', bookingReference: 'CQ-2026-ABCDEF12', eventDate: '2098-10-20',
+    actionUrl: 'http://localhost:4200/custom-events/12' };
+  for (const [key, additions] of [
+    ['CUSTOM_REQUEST_RECEIVED', {}],
+    ['CUSTOM_REQUEST_RECEIVED_ADMIN', {}],
+    ['CUSTOM_CLARIFICATION_REQUESTED', { reason: 'Please confirm dietary needs.' }],
+    ['CUSTOM_QUOTE_SENT', { quoteTotal: '2600.00', validUntil: '2098-12-31' }],
+    ['CUSTOM_QUOTE_ACCEPTED', { quoteTotal: '2600.00' }],
+    ['CUSTOM_QUOTE_DECLINED', {}],
+    ['CUSTOM_QUOTE_EXPIRED', {}],
+  ] as const) {
+    const rendered = templateModule.renderEmail(key, { ...base, ...additions });
+    assert.match(rendered.subject, /LA Chef/);
+    assert.match(rendered.text, /CQ-2026-ABCDEF12/);
+    assert.match(rendered.text, /http:\/\/localhost:4200\/custom-events\/12/);
+    assert.equal(/<script|javascript:/i.test(rendered.html), false);
+  }
+  assert.throws(() => templateModule.validateEmailPayload('CUSTOM_QUOTE_SENT', { ...base,
+    actionUrl: 'javascript:alert(1)', quoteTotal: '2600.00', validUntil: '2098-12-31' }));
+});

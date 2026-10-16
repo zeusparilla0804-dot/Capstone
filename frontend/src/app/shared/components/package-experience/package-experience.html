@@ -1,0 +1,60 @@
+<article class="package-experience" [class.package-experience--reverse]="isReverse()">
+  <div
+    class="package-experience__media"
+    [class.is-reduced-motion]="reducedMotion"
+    role="group"
+    tabindex="0"
+    [attr.aria-label]="cateringPackage().name + ' design gallery'"
+    (keydown)="onGalleryKeydown($event)"
+    (touchstart)="onTouchStart($event)"
+    (touchend)="onTouchEnd($event)"
+  >
+    <img [src]="currentImage()" [alt]="currentImageAlt()" loading="lazy" />
+    @if (galleryImages().length > 1) {
+      <button class="gallery-zone gallery-zone--previous" type="button" aria-label="Previous design image" (click)="showPreviousImage()"></button>
+      <button class="gallery-zone gallery-zone--next" type="button" aria-label="Next design image" (click)="showNextImage()"></button>
+      <div class="gallery-dots" aria-hidden="true">
+        @for (image of galleryImages(); track image; let index = $index) {
+          <span [class.is-active]="index === currentImageIndex()"></span>
+        }
+      </div>
+      <span class="visually-hidden" aria-live="polite">Design image {{ currentImageIndex() + 1 }} of {{ galleryImages().length }}</span>
+    }
+  </div>
+
+  <div class="package-experience__content">
+    <p class="package-experience__category">{{ cateringPackage().category }} catering</p>
+    <h3>{{ cateringPackage().name }}</h3>
+    <p class="package-experience__story">{{ cateringPackage().description }}</p>
+    <div class="package-experience__pricing">
+      <span>Planning rate</span>
+      <strong>{{ pricingExplanation() }}</strong>
+      <small>Final details are confirmed by the LA Chef team.</small>
+    </div>
+
+    @if (cateringPackage().features.length) {
+      <div class="package-experience__inclusions">
+        <p>Selected inclusions</p>
+        <ul>
+          @if (inclusionsExpanded()) {
+            @for (feature of cateringPackage().features; track feature.label) {
+              <li data-testid="full-inclusion">{{ feature.label }}</li>
+            }
+          } @else {
+            @for (feature of cateringPackage().features.slice(0, 3); track feature.label) {
+              <li>{{ feature.label }}</li>
+            }
+          }
+        </ul>
+        <button class="text-action" data-testid="view-inclusions" type="button" [attr.aria-expanded]="inclusionsExpanded()" (click)="toggleInclusions()">
+          {{ inclusionsExpanded() ? 'Show fewer inclusions' : 'View full inclusions' }}
+        </button>
+      </div>
+    }
+
+    <div class="package-experience__actions">
+      <button class="btn btn-primary" data-testid="plan-package" type="button" (click)="requestPlanning()">Plan with this package</button>
+      <button class="text-action" data-testid="customize-package" type="button" (click)="requestCustomization()">Customize this package <span aria-hidden="true">&rarr;</span></button>
+    </div>
+  </div>
+</article>

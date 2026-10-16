@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import sql from 'mssql';
 import { AppError } from '../utils/app-error.js';
@@ -136,6 +137,12 @@ test('admin operations queries fetch customer history directly by customer_id wi
   await paymentsRepository['customerPayments'](77, { page: 1, pageSize: 20 });
   assert.match(paymentsRecorder.calls[0]!.command, /pt\.payment_transaction_id/i);
   assert.doesNotMatch(paymentsRecorder.calls[0]!.command, /pt\.transaction_id\b/i);
+});
+
+test('admin customer list and detail include account status without credential data', async () => {
+  const source = readFileSync(new URL('../repositories/admin.repository.ts', import.meta.url), 'utf8');
+  assert.match(source, /customer_id\s+id[\s\S]*status[\s\S]*FROM\s+dbo\.CUSTOMER/i);
+  assert.doesNotMatch(source, /SELECT[^;`]*\bpassword\b[^;`]*FROM\s+dbo\.CUSTOMER/i);
 });
 
 test('admin operations queries bind outbox and audit filters and preserve bigint identifiers', async () => {

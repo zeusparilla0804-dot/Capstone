@@ -1,12 +1,13 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingCalculationService } from '../../core/services/booking-calculation.service';
 import { BookingService } from '../../core/services/booking.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
-import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
+import { customerNavItems } from '../../shared/navigation/customer-navigation';
 
 interface BillingRecord {
   readonly id: string;
@@ -33,7 +34,8 @@ export class CustomerBillingPageComponent {
   private readonly calculationService = inject(BookingCalculationService);
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
-  protected readonly navItems = CUSTOMER_NAV_ITEMS;
+  private readonly badgeState = inject(PortalBadgeStateService);
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
 
   protected readonly records = computed<readonly BillingRecord[]>(() => this.bookingService.bookings().map((booking) => {
     const total = this.calculationService.calculateTotals(booking).total;
@@ -58,6 +60,7 @@ export class CustomerBillingPageComponent {
   protected readonly outstandingBalance = computed(() => this.records().reduce((sum, item) => sum + item.balance, 0));
 
   constructor() {
+    effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     this.bookingService.loadMine();
   }
 

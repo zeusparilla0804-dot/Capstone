@@ -1,92 +1,15 @@
-<article
-  class="package-card"
-  [class.package-card--catalog]="variant() === 'catalog'"
-  [class.package-card--featured]="variant() === 'featured'"
->
-  <div
-    class="package-card__media"
-    (touchstart)="onTouchStart($event)"
-    (touchend)="onTouchEnd($event)"
-  >
-    <img [src]="currentImage()" [alt]="currentImageAlt()" loading="lazy" />
-    @if (variant() === 'catalog') {
-      <button
-        class="package-card__gallery-control package-card__gallery-control--previous"
-        type="button"
-        aria-label="Previous design image"
-        (click)="showPreviousImage()"
-      >
-      </button>
-      <button
-        class="package-card__gallery-control package-card__gallery-control--next"
-        type="button"
-        aria-label="Next design image"
-        (click)="showNextImage()"
-      >
-      </button>
-      <span class="package-card__gallery-dots" aria-hidden="true">
-        @for (image of galleryImages(); track image; let index = $index) {
-          <span
-            class="package-card__gallery-dot"
-            [class.is-active]="index === currentImageIndex()"
-          ></span>
-        }
-      </span>
-      <span class="package-card__gallery-status" aria-live="polite">
-        Design image {{ currentImageIndex() + 1 }} of {{ galleryImages().length }}
-      </span>
-    }
-  </div>
-
+<article class="package-card">
+  <img class="package-card__image" [src]="cateringPackage().imageUrl" [alt]="cateringPackage().name + ' catering setup'" loading="lazy" />
   <div class="package-card__body">
     <div>
       <p class="package-card__category">{{ cateringPackage().category }} catering</p>
       <h3>{{ cateringPackage().name }}</h3>
       <p class="package-card__description">{{ cateringPackage().description }}</p>
     </div>
-
-    @if (variant() === 'catalog') {
-      <div class="package-card__planning-data">
-        @if (cateringPackage().minGuests && cateringPackage().maxGuests) {
-          <div>
-            <span>Guests</span>
-            <strong
-              >{{ cateringPackage().minGuests }}-{{ cateringPackage().maxGuests }}</strong
-            >
-          </div>
-        }
-        @if (cateringPackage().features[0]; as feature) {
-          <div>
-            <span>Menu highlight</span>
-            <strong>{{ feature.label }}</strong>
-          </div>
-        }
-      </div>
-      <div class="package-card__rate">
-        <span>Starting at</span>
-        <strong>{{ priceLabel() }}</strong>
-      </div>
-      <div class="package-card__actions">
-        <button class="btn btn-tertiary" type="button" (click)="onViewDetails()">
-          View package</button
-        ><button class="package-card__plan" type="button" (click)="onSelectPackage()">
-          Plan this event <span aria-hidden="true">&rarr;</span>
-        </button>
-      </div>
-    } @else {
-      <p class="package-card__price">{{ priceLabel() }}</p>
-      @if (cateringPackage().minGuests && cateringPackage().maxGuests) {
-        <p class="package-card__capacity">
-          {{ cateringPackage().minGuests }}-{{ cateringPackage().maxGuests }} guests
-        </p>
-      }
-      <button
-        class="btn btn-tertiary package-card__details"
-        type="button"
-        (click)="onViewDetails()"
-      >
-        View Details <span aria-hidden="true">&rarr;</span>
-      </button>
+    <p class="package-card__price">{{ priceLabel() }}</p>
+    @if (cateringPackage().minGuests !== null && cateringPackage().maxGuests !== null) {
+      <p class="package-card__capacity">{{ cateringPackage().minGuests }}-{{ cateringPackage().maxGuests }} guests</p>
     }
+    <button class="btn btn-tertiary package-card__details" data-testid="view-package" type="button" (click)="openPackage()">View package <span aria-hidden="true">&rarr;</span></button>
   </div>
 </article>

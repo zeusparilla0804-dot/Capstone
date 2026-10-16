@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import type { AdminDashboard } from '../../core/models';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminService } from '../../core/services/admin.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { AdminDashboardPageComponent } from './admin-dashboard.page';
 
 const dashboard: AdminDashboard = {
@@ -38,6 +39,18 @@ describe('AdminDashboardPageComponent', () => {
     expect(fixture.nativeElement.querySelector('a[href*="payments"]')).not.toBeNull();
   });
 
+  it('publishes real priority counts to matching sidebar navigation badges', () => {
+    expect(TestBed.inject(PortalBadgeStateService).adminBadges()).toEqual({
+      bookings: 4,
+      payments: 3,
+      emails: 1,
+    });
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('a[href="/admin/bookings"] .dashboard-sidebar__badge')?.textContent?.trim()).toBe('4');
+    expect(root.querySelector('a[href="/admin/payments"] .dashboard-sidebar__badge')?.textContent?.trim()).toBe('3');
+    expect(root.querySelector('a[href="/admin/email-outbox"]')).toBeNull();
+  });
+
   it('renders the editorial revenue ledger with distinct verified and submitted values and no generic chart', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Confirmed revenue');
@@ -46,6 +59,14 @@ describe('AdminDashboardPageComponent', () => {
     expect(text).toContain('₱45,000');
     expect(fixture.nativeElement.querySelector('canvas')).toBeNull();
     expect(fixture.nativeElement.querySelector('[data-chart]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('input[type="search"]')).toBeNull();
+  });
+
+  it('keeps the priority balance as one stable numeric value without decorative section numbers', () => {
+    const balance = fixture.nativeElement.querySelector('.balance-priority__value') as HTMLElement | null;
+    expect(balance).not.toBeNull();
+    expect(balance?.textContent?.replace(/\s/g, '')).toContain('125,000');
+    expect(fixture.nativeElement.querySelector('.section-number')).toBeNull();
   });
 });
 

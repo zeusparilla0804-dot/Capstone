@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import type { AdminAttentionItem, AdminDashboard } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 
 @Component({
@@ -16,6 +17,7 @@ import { AdminShellComponent } from '../../shared/components/admin-shell/admin-s
 })
 export class AdminDashboardPageComponent {
   private readonly api = inject(AdminService);
+  private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly data = signal<AdminDashboard | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
@@ -29,7 +31,10 @@ export class AdminDashboardPageComponent {
     this.loading.set(true);
     this.error.set('');
     this.api.dashboard(this.period).pipe(finalize(() => this.loading.set(false))).subscribe({
-      next: (response) => this.data.set(response.data),
+      next: (response) => {
+        this.data.set(response.data);
+        this.badgeState.setAdminDashboard(response.data);
+      },
       error: () => this.error.set('Unable to load the admin dashboard.'),
     });
   }

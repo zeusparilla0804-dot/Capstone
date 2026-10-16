@@ -1,0 +1,34 @@
+SET ANSI_NULLS ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET XACT_ABORT ON;
+
+BEGIN TRY
+  BEGIN TRANSACTION;
+
+  IF EXISTS (
+    SELECT 1
+    FROM sys.columns c
+    JOIN sys.types t ON t.user_type_id=c.user_type_id
+    WHERE c.object_id=OBJECT_ID('dbo.INVOICE_ITEM')
+      AND c.name='quantity'
+      AND t.name<>'decimal'
+  )
+  BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name='CK_INVOICE_ITEM_values')
+      ALTER TABLE dbo.INVOICE_ITEM DROP CONSTRAINT CK_INVOICE_ITEM_values;
+
+    ALTER TABLE dbo.INVOICE_ITEM ALTER COLUMN quantity decimal(12,2) NOT NULL;
+  END;
+
+  IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name='CK_INVOICE_ITEM_values')
+    ALTER TABLE dbo.INVOICE_ITEM ADD CONSTRAINT CK_INVOICE_ITEM_values CHECK(quantity>0 AND unit_price>=0 AND line_total>=0);
+
+  COMMIT;
+END TRY
+BEGIN CATCH
+  IF XACT_STATE() <> 0 ROLLBACK;
+  THROW;
+END CATCH;

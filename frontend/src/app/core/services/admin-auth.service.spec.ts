@@ -41,4 +41,16 @@ describe('AdminAuthService password recovery', () => {
     request.flush({ success: true, message: 'Your password has been changed. Please sign in again.' });
     await expect(result).resolves.toBeUndefined();
   });
+
+  it('signs out every administrator session through the protected endpoint', async () => {
+    const logoutAll = (service as unknown as { logoutAll?: () => Promise<void> }).logoutAll;
+    expect(typeof logoutAll).toBe('function');
+    const result = logoutAll!.call(service);
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/admin/logout-all`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush(null);
+    await expect(result).resolves.toBeUndefined();
+    expect(service.user()).toBeNull();
+  });
 });

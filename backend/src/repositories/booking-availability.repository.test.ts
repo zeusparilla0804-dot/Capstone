@@ -73,3 +73,17 @@ test('capacity snapshot adds serializable lock hints only to a supplied write re
 
   assert.match(request.command, /dbo\.RESERVATION\s+WITH\s*\(\s*UPDLOCK\s*,\s*HOLDLOCK\s*\)/i);
 });
+
+test('capacity snapshot excludes the booking currently being edited', async () => {
+  const request = new FakeRequest();
+
+  await readCapacitySnapshot('2026-12-10', {
+    request: request as unknown as sql.Request,
+    lock: true,
+    excludeReservationId: 42,
+  });
+
+  const excluded = request.inputs.find((input) => input.name === 'excludeReservationId');
+  assert.equal(excluded?.value, 42);
+  assert.match(request.command, /reservation_id\s*<>\s*@excludeReservationId/i);
+});

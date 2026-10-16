@@ -1,1 +1,76 @@
-<app-admin-shell title="Packages" description="Manage customer-facing catering packages and availability."><button admin-actions class="btn btn-primary" (click)="create()">Create Package</button>@if(message()){<p class="admin-feedback">{{message()}}</p>}@if(showForm()){<section class="admin-panel" style="padding:18px;margin-bottom:18px"><form class="admin-form" [formGroup]="form" (ngSubmit)="save()"><label>Event type<select formControlName="eventId"><option [ngValue]="0">Select event type</option>@for(event of events();track event.id){<option [ngValue]="event.id">{{event.name}}</option>}</select></label><label>Package name<input formControlName="name"/></label><label class="wide">Description<textarea formControlName="description" rows="3"></textarea></label><label>Price per guest<input type="number" min="0" formControlName="pricePerGuest"/></label><label>Minimum guests<input type="number" min="1" formControlName="minGuests"/></label><label>Maximum guests<input type="number" min="1" formControlName="maxGuests"/></label><label><span>Available publicly</span><input type="checkbox" formControlName="isActive"/></label><div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Save Changes</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div></form></section>}@if(loading()){<p class="data-state">Loading packages...</p>}@else if(error()){<p class="data-state data-state--error">{{error()}}</p>}@else{<section class="admin-panel">@if(items().length){<div class="table-scroll"><table class="admin-table"><thead><tr><th>Package</th><th>Event Type</th><th>Price / Guest</th><th>Guests</th><th>Status</th><th>Actions</th></tr></thead><tbody>@for(item of items();track item.id){<tr><td><strong>{{item.name}}</strong><br><small>{{item.description}}</small></td><td>{{item.eventType}}</td><td>{{item.pricePerGuest|currency:'PHP':'symbol-narrow':'1.0-0'}}</td><td>{{item.minGuests}}-{{item.maxGuests}}</td><td>{{item.isActive?'Active':'Inactive'}}</td><td><button class="btn btn-tertiary" (click)="edit(item)">Edit</button> <button class="btn btn-tertiary" (click)="toggle(item)">{{item.isActive?'Deactivate':'Activate'}}</button></td></tr>}</tbody></table></div>}@else{<p class="data-state">No packages found.</p>}</section>}</app-admin-shell>
+<app-admin-shell title="Packages & Menu" description="Manage customer-facing catering packages, menu options, pricing, and availability.">
+  <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Package</button>
+
+  <nav class="admin-toolbar" aria-label="Packages and menu sections">
+    <a class="btn btn-primary btn-sm" routerLink="/admin/packages" aria-current="page">Packages</a>
+    <a class="btn btn-secondary btn-sm" routerLink="/admin/add-ons">Add-ons</a>
+  </nav>
+
+  @if (message()) { <p class="admin-feedback" role="status">{{ message() }}</p> }
+
+  @if (showForm()) {
+    <section class="package-editor admin-panel" aria-labelledby="package-editor-title">
+      <header>
+        <div><p>{{ editing() ? 'Catalog update' : 'New catalog entry' }}</p><h2 id="package-editor-title">{{ editing() ? 'Edit package' : 'Create package' }}</h2></div>
+        <button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="closeForm()">Close</button>
+      </header>
+      <form class="admin-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <label>Event type<select formControlName="eventId"><option [ngValue]="0">Select event type</option>@for (event of events(); track event.id) { <option [ngValue]="event.id">{{ event.name }}</option> }</select></label>
+        <label>Package name<input formControlName="name" maxlength="150" /></label>
+        <label class="wide">Description<textarea formControlName="description" maxlength="1000" rows="3"></textarea></label>
+
+        <fieldset class="pricing-mode wide">
+          <legend>Pricing model</legend>
+          <label [class.is-selected]="form.controls.pricingType.value === 'PER_HEAD'"><input type="radio" formControlName="pricingType" value="PER_HEAD" /><span>Per guest<small>A fixed amount for every estimated guest.</small></span></label>
+          <label [class.is-selected]="form.controls.pricingType.value === 'BASE_PLUS_EXCESS'"><input type="radio" formControlName="pricingType" value="BASE_PLUS_EXCESS" /><span>Package plus excess<small>A base amount with an additional rate above included guests.</small></span></label>
+        </fieldset>
+
+        @if (form.controls.pricingType.value === 'PER_HEAD') {
+          <label>Price per guest<input type="number" inputmode="decimal" min="0.01" step="0.01" formControlName="pricePerGuest" /></label>
+        } @else {
+          <label>Base package price<input type="number" inputmode="decimal" min="0.01" step="0.01" formControlName="basePrice" /></label>
+          <label>Included guests<input type="number" inputmode="numeric" min="1" step="1" formControlName="includedGuests" /></label>
+          <label>Each additional guest<input type="number" inputmode="decimal" min="0.01" step="0.01" formControlName="excessGuestPrice" /></label>
+        }
+
+        <div class="guest-limits wide">
+          <div><p>Confirmed guest limits</p><span>Leave either field empty until LA Chef confirms an official limit.</span></div>
+          <label>Minimum guests <span>(optional)</span><input type="number" inputmode="numeric" min="1" step="1" formControlName="minGuests" /></label>
+          <label>Maximum guests <span>(optional)</span><input type="number" inputmode="numeric" min="1" step="1" formControlName="maxGuests" /></label>
+        </div>
+
+        <label class="visibility-field wide"><input type="checkbox" formControlName="isActive" /><span><strong>Available publicly</strong><small>Customers can discover and select this package.</small></span></label>
+        @if (formError()) { <p class="form-error wide" role="alert">{{ formError() }}</p> }
+        <div class="form-actions wide"><button class="btn btn-secondary" type="button" [disabled]="saving()" (click)="closeForm()">Cancel</button><button class="btn btn-primary" type="submit" [disabled]="form.invalid || saving()">{{ saving() ? 'Saving package...' : 'Save Package' }}</button></div>
+      </form>
+    </section>
+  }
+
+  @if (loading()) {
+    <p class="data-state" role="status">Loading packages...</p>
+  } @else if (loadError()) {
+    <p class="data-state data-state--error" role="alert">{{ loadError() }} <button class="btn btn-tertiary" type="button" (click)="load()">Try again</button></p>
+  } @else {
+    <section class="admin-panel package-list" aria-label="Package catalog">
+      @if (items().length) {
+        <div class="table-scroll">
+          <table class="admin-table">
+            <thead><tr><th>Package</th><th>Event type</th><th>Pricing</th><th>Guest limits</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              @for (item of items(); track item.id) {
+                <tr>
+                  <td data-label="Package"><strong>{{ item.name }}</strong><small>{{ item.description }}</small></td>
+                  <td data-label="Event type">{{ item.eventType }}</td>
+                  <td data-label="Pricing"><span class="pricing-summary">{{ pricingSummary(item) }}</span></td>
+                  <td data-label="Guest limits">{{ guestRange(item) }}</td>
+                  <td data-label="Status"><span class="package-status" [class.is-inactive]="!item.isActive">{{ item.isActive ? 'Active' : 'Inactive' }}</span></td>
+                  <td data-label="Actions"><div class="row-actions"><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="edit(item)">Edit</button><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="toggle(item)">{{ item.isActive ? 'Deactivate' : 'Activate' }}</button></div></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else { <p class="data-state">No packages found.</p> }
+    </section>
+  }
+</app-admin-shell>

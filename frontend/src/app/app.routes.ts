@@ -22,6 +22,17 @@ export const routes: Routes = [
     title: 'Book an Event | LA Chef',
   },
   {
+    path: 'custom-event',
+    redirectTo: 'packages',
+    pathMatch: 'full',
+  },
+  {
+    path: 'custom-events/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/custom-event-detail/custom-event-detail.page').then((m) => m.CustomEventDetailPage),
+    title: 'Custom Event Request | LA Chef',
+  },
+  {
     path: 'events',
     loadComponent: () => import('./features/events/events.page').then((m) => m.EventsPageComponent),
     title: 'Events | LA Chef',
@@ -55,7 +66,7 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () =>
       import('./features/my-bookings/my-bookings.page').then((m) => m.MyBookingsPageComponent),
-    title: 'My Bookings | LA Chef',
+    title: 'My Reservations | LA Chef',
   },
   {
     path: 'my-bookings/:id/payment',
@@ -123,7 +134,7 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     loadComponent: () =>
       import('./features/admin-bookings/admin-bookings.page').then((m) => m.AdminBookingsPage),
-    title: 'Bookings | LA Chef Admin',
+    title: 'Reservations | LA Chef Admin',
   },
   {
     path: 'admin/bookings/:id',
@@ -132,7 +143,19 @@ export const routes: Routes = [
       import('./features/admin-booking-detail/admin-booking-detail.page').then(
         (m) => m.AdminBookingDetailPage,
       ),
-    title: 'Booking Detail | LA Chef Admin',
+    title: 'Reservation Detail | LA Chef Admin',
+  },
+  {
+    path: 'admin/custom-events',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-custom-events/admin-custom-events.page').then((m) => m.AdminCustomEventsPage),
+    title: 'Custom Quotations | LA Chef Admin',
+  },
+  {
+    path: 'admin/custom-events/:id',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-custom-event-detail/admin-custom-event-detail.page').then((m) => m.AdminCustomEventDetailPage),
+    title: 'Quotation Workspace | LA Chef Admin',
   },
   {
     path: 'admin/customers',
@@ -152,14 +175,14 @@ export const routes: Routes = [
     canActivate: [adminGuard],
     loadComponent: () =>
       import('./features/admin-packages/admin-packages.page').then((m) => m.AdminPackagesPage),
-    title: 'Packages | LA Chef Admin',
+    title: 'Packages & Menu | LA Chef Admin',
   },
   {
     path: 'admin/add-ons',
     canActivate: [adminGuard],
     loadComponent: () =>
       import('./features/admin-addons/admin-addons.page').then((m) => m.AdminAddOnsPage),
-    title: 'Add-ons | LA Chef Admin',
+    title: 'Packages & Menu | LA Chef Admin',
   },
   {
     path: 'admin/payments',
@@ -167,6 +190,13 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/admin-payments/admin-payments.page').then((m) => m.AdminPaymentsPage),
     title: 'Payments | LA Chef Admin',
+  },
+  {
+    path: 'admin/reports',
+    canActivate: [adminGuard],
+    loadComponent: () =>
+      import('./features/admin-reports/admin-reports.page').then((m) => m.AdminReportsPage),
+    title: 'Reports | LA Chef Admin',
   },
   {
     path: 'admin/payments/proofs/:id',

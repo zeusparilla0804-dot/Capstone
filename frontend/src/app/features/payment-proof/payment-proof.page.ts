@@ -1,6 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, ElementRef, inject, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -8,8 +8,9 @@ import { MAX_PAYMENT_PROOF_BYTES, PaymentProof, PaymentProofMethod, PaymentProof
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PaymentProofService } from '../../core/services/payment-proof.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
-import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
+import { customerNavItems } from '../../shared/navigation/customer-navigation';
 
 @Component({
   selector: 'app-payment-proof-page',
@@ -25,12 +26,13 @@ export class PaymentProofPageComponent {
   protected readonly auth = inject(AuthService);
   protected readonly bookingService = inject(BookingService);
   private readonly proofService = inject(PaymentProofService);
+  private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly bookingId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly booking = computed(() => this.bookingService.bookings().find(item => item.id === this.bookingId));
   protected readonly eligible = computed(() => ['awaiting_payment', 'payment_submitted'].includes(this.booking()?.status ?? ''));
   protected readonly estimatedTotal = computed(() => {
     const item = this.booking();
-    return item ? item.package.pricePerGuest * item.guestCount + item.addOns.reduce((sum, addOn) => sum + addOn.price, 0) - item.discount : 0;
+    return item ? item.package.packageTotal + item.addOns.reduce((sum, addOn) => sum + addOn.price, 0) - item.discount : 0;
   });
   protected readonly outstandingBalance = computed(() => Math.max(this.estimatedTotal() - (this.booking()?.amountPaid ?? 0), 0));
   protected readonly proofs = signal<readonly PaymentProof[]>([]);
@@ -48,9 +50,10 @@ export class PaymentProofPageComponent {
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
     paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
   });
-  protected readonly navItems = CUSTOMER_NAV_ITEMS;
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
 
   constructor() {
+    effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     if (!this.booking()) this.bookingService.loadMine();
     this.loadProofs();
     if (this.booking()) this.form.controls.claimedAmount.setValue(this.outstandingBalance() || null);

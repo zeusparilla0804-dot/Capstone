@@ -1,5 +1,5 @@
-<main class="payment-layout">
-  <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems" (navAction)="handleNavAction($event)" />
+<main class="payment-layout portal-surface">
+  <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
   <section class="payment-content"><div class="payment-container">
     <a class="back-link" routerLink="/my-bookings">&larr; My bookings</a>
     <header class="payment-header"><p class="page-kicker">Billing & payments</p><h1>Submit payment proof</h1><p>Your payment will be reviewed by LA Chef before it is applied to your booking.</p></header>

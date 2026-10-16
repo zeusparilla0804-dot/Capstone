@@ -218,6 +218,31 @@ for (const [amount, wantPaid, wantStatus] of [[90, 100, 'PAID'], [40.25, 50.25, 
   });
 }
 
+test('payment proof below the half-deposit threshold remains awaiting payment while the proof is verified', async () => {
+  const db = new ReviewDb();
+  db.proofs[0]!.claimedAmount = 39.99;
+
+  const reviewed = await db.service().verifyProof(2, proof.id, 39.99);
+
+  assert.equal(reviewed.status, 'VERIFIED');
+  assert.equal(db.payment!.amountPaid, 49.99);
+  assert.equal(db.booking!.status, 'AWAITING_PAYMENT');
+  assert.equal(db.history[0]!['nextStatus'], 'AWAITING_PAYMENT');
+});
+
+test('payment proof uses cumulative paid amount and advances at the exact half-deposit threshold', async () => {
+  const db = new ReviewDb();
+  db.payment!.amountPaid = 30;
+  db.proofs[0]!.claimedAmount = 20;
+
+  const reviewed = await db.service().verifyProof(2, proof.id, 20);
+
+  assert.equal(reviewed.status, 'VERIFIED');
+  assert.equal(db.payment!.amountPaid, 50);
+  assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
+  assert.equal(db.history[0]!['nextStatus'], 'PAYMENT_VERIFIED');
+});
+
 test('corrected amount requires reason and preserves it in history/audit', async () => {
   for (const reason of [undefined, '', '   ']) { const db = new ReviewDb(); await assert.rejects(db.service().verifyProof(2, proof.id, 40, reason), status(400)); unchanged(db); }
   const db = new ReviewDb(); await db.service().verifyProof(2, proof.id, 40, '  Actual receipt amount  ');
@@ -509,6 +534,7 @@ test('detail supplies authorized metadata, booking/customer/payment/invoice/bala
   assert.equal(detail.proof.id, proof.id); assert.equal(detail.proof.fileUrl, `/api/payment-proofs/${proof.id}/file`);
   assert.equal(detail.booking.id, 5); assert.equal(detail.booking.status, 'PAYMENT_SUBMITTED'); assert.equal(detail.customer.id, 7);
   assert.equal(detail.payment.amountDue, 100); assert.equal(detail.payment.amountPaid, 10); assert.equal(detail.payment.outstandingBalance, 90);
+  assert.equal(detail.payment.requiredDeposit, 50); assert.equal(detail.payment.remainingDeposit, 40);
   assert.equal(detail.invoice.id, 8); assert.equal(detail.invoice.status, 'ISSUED'); assert.equal(detail.proof.originalFilename, 'receipt.png');
   assert.equal(JSON.stringify(detail).includes('private'), false); assert.equal('storageKey' in detail.proof, false);
   await assert.rejects(db.service().getProofForReview(99), status(404));

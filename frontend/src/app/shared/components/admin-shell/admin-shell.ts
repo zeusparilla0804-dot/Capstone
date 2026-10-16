@@ -1,3 +1,69 @@
-import {Component, inject, input, ChangeDetectionStrategy} from '@angular/core';import {Router} from '@angular/router';import {AdminAuthService} from '../../../core/services/admin-auth.service';import {DashboardNavItem,DashboardSidebarComponent} from '../dashboard-sidebar/dashboard-sidebar';
-@Component({selector:'app-admin-shell',imports:[DashboardSidebarComponent],templateUrl:'./admin-shell.html',changeDetection: ChangeDetectionStrategy.Eager,
-styleUrl:'./admin-shell.scss'})export class AdminShellComponent{readonly title=input.required<string>();readonly description=input.required<string>();protected readonly auth=inject(AdminAuthService);private readonly router=inject(Router);protected readonly nav:readonly DashboardNavItem[]=[{label:'Overview',route:'/admin/dashboard',icon:'dashboard'},{label:'Bookings',route:'/admin/bookings',icon:'calendar'},{label:'Customers',route:'/admin/customers',icon:'profile'},{label:'Payments',route:'/admin/payments',icon:'wallet'},{label:'Email operations',route:'/admin/email-outbox',icon:'mail'},{label:'Audit log',route:'/admin/audit-log',icon:'audit'},{label:'Packages',route:'/admin/packages',icon:'catalog'},{label:'Add-ons',route:'/admin/add-ons',icon:'catalog'},{label:'Logout',route:'/admin/login',icon:'logout',isAction:true}];protected async action(item:DashboardNavItem){if(item.isAction){await this.auth.logout();await this.router.navigate([item.route]);}}}
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { AdminAuthService } from '../../../core/services/admin-auth.service';
+import { PortalBadgeStateService } from '../../../core/services/portal-badge-state.service';
+import { DashboardNavItem, DashboardSidebarComponent } from '../dashboard-sidebar/dashboard-sidebar';
+
+@Component({
+  selector: 'app-admin-shell',
+  imports: [DashboardSidebarComponent],
+  templateUrl: './admin-shell.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
+  styleUrl: './admin-shell.scss',
+})
+export class AdminShellComponent {
+  readonly title = input.required<string>();
+  readonly description = input.required<string>();
+  protected readonly auth = inject(AdminAuthService);
+  protected readonly badgeState = inject(PortalBadgeStateService);
+  private readonly router = inject(Router);
+  protected readonly signingOutAll = signal(false);
+  protected readonly sessionError = signal('');
+  protected readonly nav = computed<readonly DashboardNavItem[]>(() => [
+    { label: 'Overview', route: '/admin/dashboard', icon: 'dashboard' },
+    { label: 'Reservations', route: '/admin/bookings', icon: 'calendar', badge: this.badgeState.adminBadges().bookings, badgeLabel: 'pending reservation reviews' },
+    { label: 'Customers', route: '/admin/customers', icon: 'profile' },
+    { label: 'Billing & Payments', route: '/admin/payments', icon: 'wallet', badge: this.badgeState.adminBadges().payments, badgeLabel: 'payments awaiting review' },
+    { label: 'Reports', route: '/admin/reports', icon: 'reports' },
+    { label: 'Packages & Menu', route: '/admin/packages', icon: 'catalog' },
+    {
+      label: 'Sign out all devices',
+      busyLabel: 'Signing out...',
+      route: '/admin/login',
+      icon: 'logout',
+      isAction: true,
+      disabled: this.signingOutAll(),
+      busy: this.signingOutAll(),
+    },
+    {
+      label: 'Logout',
+      route: '/admin/login',
+      icon: 'logout',
+      isAction: true,
+      confirmationMessage: 'Are you sure you want to log out of the administrator dashboard?',
+    },
+  ]);
+
+  protected async action(item: DashboardNavItem): Promise<void> {
+    if (!item.isAction) return;
+    if (item.label !== 'Sign out all devices') {
+      await this.auth.logout();
+      await this.router.navigate([item.route]);
+      return;
+    }
+    if (this.signingOutAll() || !window.confirm(
+      'Sign out this administrator account on every device? Unsaved form changes will be lost.',
+    )) return;
+
+    this.signingOutAll.set(true);
+    this.sessionError.set('');
+    try {
+      await this.auth.logoutAll();
+      await this.router.navigate(['/admin/login']);
+    } catch {
+      this.sessionError.set('Unable to sign out all devices. Please try again.');
+    } finally {
+      this.signingOutAll.set(false);
+    }
+  }
+}

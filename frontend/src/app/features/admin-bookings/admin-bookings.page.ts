@@ -111,7 +111,7 @@ export class AdminBookingsPage {
         this.pendingAction.set(null);
         this.actionReason = '';
         this.actionError.set('');
-        this.message.set('Booking status updated.');
+        this.message.set('Reservation status updated.');
         this.load();
       },
       error: (error) => {
@@ -121,7 +121,7 @@ export class AdminBookingsPage {
           this.actionError.set(error?.error?.message || 'Date capacity changed. Review the refreshed availability.');
           this.load();
         } else {
-          this.actionError.set('Unable to update this booking. Refresh the list and try again.');
+          this.actionError.set('Unable to update this reservation. Refresh the list and try again.');
         }
       }
     });
@@ -130,7 +130,7 @@ export class AdminBookingsPage {
   protected issue(item: AdminBooking) {
     this.api.issueInvoice(item.id).subscribe({
       next: response => this.router.navigate(['/admin/invoices', response.data.invoiceId]),
-      error: () => this.error.set('Invoice can only be issued for an approved booking.')
+      error: () => this.error.set('Invoice can only be issued for an approved reservation.')
     });
   }
 

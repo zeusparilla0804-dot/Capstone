@@ -1,1 +1,50 @@
-<app-admin-shell title="Add-ons" description="Manage optional services available during booking."><button admin-actions class="btn btn-primary" (click)="create()">Create Add-on</button>@if(message()){<p class="admin-feedback">{{message()}}</p>}@if(showForm()){<section class="admin-panel" style="padding:18px;margin-bottom:18px"><form class="admin-form" [formGroup]="form" (ngSubmit)="save()"><label>Name<input formControlName="name"/></label><label>Price<input type="number" min="0" formControlName="price"/></label><label class="wide">Description<textarea rows="3" formControlName="description"></textarea></label><label><span>Available publicly</span><input type="checkbox" formControlName="isActive"/></label><div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Save Changes</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div></form></section>}@if(loading()){<p class="data-state">Loading add-ons...</p>}@else if(error()){<p class="data-state data-state--error">{{error()}}</p>}@else{<section class="admin-panel">@if(items().length){<table class="admin-table"><thead><tr><th>Add-on</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead><tbody>@for(item of items();track item.id){<tr><td><strong>{{item.name}}</strong><br><small>{{item.description}}</small></td><td>{{item.price|currency:'PHP':'symbol-narrow':'1.0-0'}}</td><td>{{item.isActive?'Active':'Inactive'}}</td><td><button class="btn btn-tertiary" (click)="edit(item)">Edit</button> <button class="btn btn-tertiary" (click)="toggle(item)">{{item.isActive?'Deactivate':'Activate'}}</button></td></tr>}</tbody></table>}@else{<p class="data-state">No add-ons found.</p>}</section>}</app-admin-shell>
+<app-admin-shell title="Packages & Menu" description="Manage optional menu and event services available during reservation.">
+  <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Add-on</button>
+
+  <nav class="admin-toolbar" aria-label="Packages and menu sections">
+    <a class="btn btn-secondary btn-sm" routerLink="/admin/packages">Packages</a>
+    <a class="btn btn-primary btn-sm" routerLink="/admin/add-ons" aria-current="page">Add-ons</a>
+  </nav>
+
+  @if (message()) { <p class="admin-feedback">{{ message() }}</p> }
+
+  @if (showForm()) {
+    <section class="admin-panel admin-form-panel">
+      <form class="admin-form" [formGroup]="form" (ngSubmit)="save()">
+        <label>Name<input formControlName="name" /></label>
+        <label>Price<input type="number" min="0" formControlName="price" /></label>
+        <label class="wide">Description<textarea rows="3" formControlName="description"></textarea></label>
+        <label><span>Available publicly</span><input type="checkbox" formControlName="isActive" /></label>
+        <div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Save Changes</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div>
+      </form>
+    </section>
+  }
+
+  @if (loading()) {
+    <p class="data-state">Loading add-ons...</p>
+  } @else if (error()) {
+    <p class="data-state data-state--error">{{ error() }}</p>
+  } @else {
+    <section class="admin-panel admin-record-table addon-records">
+      @if (items().length) {
+        <div class="table-scroll">
+          <table class="admin-table admin-table--addons">
+            <thead><tr><th>Add-on</th><th>Price</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              @for (item of items(); track item.id) {
+                <tr>
+                  <td data-label="Add-on" data-card-wide="true"><strong>{{ item.name }}</strong><br /><small>{{ item.description }}</small></td>
+                  <td data-label="Price" class="is-number">{{ item.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
+                  <td data-label="Status">{{ item.isActive ? 'Active' : 'Inactive' }}</td>
+                  <td data-label="Actions" data-card-wide="true"><div class="admin-row-actions"><button class="btn btn-tertiary" type="button" (click)="edit(item)">Edit</button><button class="btn btn-tertiary" type="button" (click)="toggle(item)">{{ item.isActive ? 'Deactivate' : 'Activate' }}</button></div></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="data-state">No add-ons found.</p>
+      }
+    </section>
+  }
+</app-admin-shell>

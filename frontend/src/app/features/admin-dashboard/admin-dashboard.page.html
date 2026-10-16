@@ -5,18 +5,18 @@
   @else if (error()) { <p class="data-state data-state--error" role="alert">{{ error() }} <button class="btn btn-tertiary" type="button" (click)="load()">Try again</button></p> }
   @else if (data(); as summary) {
     <section class="priority-band" aria-labelledby="priority-title">
-      <header><p class="section-number">01</p><div><h2 id="priority-title">Priority queues</h2><p>Live work that should be reviewed before routine administration.</p></div></header>
+      <header><div><h2 id="priority-title">Priority queues</h2><p>Live work that should be reviewed before routine administration.</p></div></header>
       <div class="priority-grid">
         @for (queue of summary.actionQueues; track queue.key) {
           <a [routerLink]="queueRoute(queue.key)" [queryParams]="queueParams(queue.key)" [class.is-critical]="queue.key === 'failedEmails' && queue.count > 0"><span>{{ queueLabel(queue.key) }}</span><strong>{{ queue.count }}</strong><small>Open queue <span aria-hidden="true">&rarr;</span></small></a>
         }
-        <div class="balance-priority"><span>Outstanding balance</span><strong>{{ summary.priority.outstandingBalanceTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong><small>Across active bookings</small></div>
+        <div class="balance-priority"><span>Outstanding balance</span><strong class="balance-priority__value">{{ summary.priority.outstandingBalanceTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong><small>Across active reservations</small></div>
       </div>
     </section>
 
     <div class="workspace-grid">
       <section class="attention-list" aria-labelledby="attention-title">
-        <header class="section-header"><div><p class="section-number">02</p><h2 id="attention-title">Needs attention</h2></div><span>{{ summary.attention.length }} records</span></header>
+        <header class="section-header"><div><h2 id="attention-title">Needs attention</h2></div><span>{{ summary.attention.length }} records</span></header>
         <ol>
           @for (item of summary.attention; track item.type + item.id) {
             <li><a [routerLink]="attentionRoute(item)"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div><time>{{ item.eventDate + 'T00:00:00Z' | date:'MMM d':'UTC' }}</time><span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
@@ -25,7 +25,7 @@
       </section>
 
       <section class="revenue-ledger" aria-labelledby="ledger-title">
-        <header class="section-header"><div><p class="section-number">03</p><h2 id="ledger-title">Revenue Ledger</h2></div><span>{{ summary.period }}</span></header>
+        <header class="section-header"><div><h2 id="ledger-title">Revenue Ledger</h2></div><span>{{ summary.period }}</span></header>
         <dl>
           <div class="ledger-primary"><dt>Confirmed revenue</dt><dd>{{ summary.ledger.confirmedRevenue | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Verified payment transactions in this period</p></div>
           <div><dt>Submitted proof value</dt><dd>{{ summary.ledger.submittedProofValue | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Awaiting manual verification, not revenue</p></div>

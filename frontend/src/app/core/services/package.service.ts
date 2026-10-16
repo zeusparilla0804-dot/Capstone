@@ -7,10 +7,11 @@ import { environment } from '../../../environments/environment';
 const PACKAGE_IMAGE_ROOT = 'assets/images/packages';
 type EventCategory = Exclude<PackageCategory, 'all'>;
 type PackageApiItem = Omit<CateringPackage, 'imageUrl' | 'galleryImageUrls' | 'category'> & {
-  readonly category: EventCategory | 'other';
+  readonly category: string;
 };
 
 const PACKAGE_GALLERIES: Record<EventCategory, readonly string[]> = {
+  standard: ['custom-wide', 'custom-buffet', 'custom-table'],
   wedding: ['wedding-wide', 'wedding-buffet', 'wedding-table'],
   birthday: ['birthday-wide', 'birthday-buffet', 'birthday-table'],
   corporate: ['corporate-wide', 'corporate-buffet', 'corporate-table'],
@@ -20,9 +21,17 @@ const PACKAGE_GALLERIES: Record<EventCategory, readonly string[]> = {
 };
 
 function galleryFor(category: EventCategory): readonly string[] {
+  const directory = category === 'standard' ? 'custom' : category;
   return PACKAGE_GALLERIES[category].map(
-    (fileName) => `${PACKAGE_IMAGE_ROOT}/${category}/${fileName}.png`,
+    (fileName) => `${PACKAGE_IMAGE_ROOT}/${directory}/${fileName}.png`,
   );
+}
+
+function categoryFor(value: string): EventCategory {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'standard catering') return 'standard';
+  if (normalized === 'other') return 'custom';
+  return (Object.hasOwn(PACKAGE_GALLERIES, normalized) ? normalized : 'custom') as EventCategory;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -49,7 +58,7 @@ export class PackageService {
           this.packagesState.set(
             response.data.map(
               (item) => {
-                const category: EventCategory = item.category === 'other' ? 'custom' : item.category;
+                const category = categoryFor(item.category);
                 const galleryImageUrls = galleryFor(category);
                 return {
                   ...item,

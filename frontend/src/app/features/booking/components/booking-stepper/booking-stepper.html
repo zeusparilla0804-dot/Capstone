@@ -1,4 +1,4 @@
-<nav class="stepper" aria-label="Booking progress">
+<nav class="stepper" aria-label="Reservation progress">
   <p class="stepper__mobile">Step {{ currentStep() }} of {{ steps.length }} <strong>{{ steps[currentStep() - 1] }}</strong></p>
   <ol>
     @for (step of steps; track step; let stepIndex = $index) {

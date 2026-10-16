@@ -3,8 +3,8 @@ import { ChangeDetectionStrategy, Component, computed, DestroyRef, ElementRef, i
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, combineLatest, debounceTime, distinctUntilChanged, filter, map, merge, of, startWith, Subject, switchMap, tap } from 'rxjs';
-import { BookingAvailability, EventType, PaymentMethod } from '../../core/models';
+import { catchError, combineLatest, debounceTime, distinctUntilChanged, filter, finalize, map, merge, of, startWith, Subject, switchMap, tap } from 'rxjs';
+import { Booking, BookingAvailability, CateringPackage, EventType, PaymentMethod } from '../../core/models';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PackageService } from '../../core/services/package.service';
@@ -38,6 +38,9 @@ export class BookingPageComponent {
   protected readonly packageService = inject(PackageService);
 
   protected readonly currentStep = signal<BookingStep>(1);
+  protected readonly editingBookingId = signal<string | null>(null);
+  protected readonly editingLoading = signal(false);
+  protected readonly editingError = signal('');
   protected readonly isSubmitting = signal(false);
   protected readonly submissionError = signal('');
   protected readonly availabilityConflictMessage = signal('');
@@ -69,8 +72,9 @@ export class BookingPageComponent {
     eventDate: new FormControl('', { nonNullable: true, validators: [Validators.required, this.futureDateValidator.bind(this)] }),
     eventTime: new FormControl('', { nonNullable: true, validators: Validators.required }),
     venue: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(3)] }),
-    guestCount: new FormControl(1, { nonNullable: true, validators: [Validators.required, Validators.min(1)] }),
+    guestCount: new FormControl(1, { nonNullable: true, validators: [Validators.required, Validators.min(1), Validators.max(10_000)] }),
     packageId: new FormControl('', { nonNullable: true, validators: Validators.required }),
+    specialRequest: new FormControl('', { nonNullable: true, validators: Validators.maxLength(2_000) }),
   });
 
   constructor() {
@@ -83,26 +87,38 @@ export class BookingPageComponent {
     this.eventForm.setValue({
       eventType: draft.eventType ?? existing.eventType ?? '', eventDate: draft.eventDate,
       eventTime: draft.eventTime, venue: draft.venue, guestCount: draft.guestCount,
-      packageId: draft.packageId ?? '',
+      packageId: draft.packageId ?? '', specialRequest: draft.specialRequest ?? '',
     });
     const requestedStep = Number(this.route.snapshot.queryParamMap.get('step'));
     if (draft.packageId && requestedStep >= 2 && requestedStep <= 4) {
       this.currentStep.set(requestedStep as BookingStep);
     }
     this.watchAvailability();
+    const requestedBooking = this.route.snapshot.queryParamMap.get('booking');
+    if (requestedBooking) this.loadPendingBooking(requestedBooking);
   }
 
   protected continueToAddOns(): void {
     const value = this.eventForm.getRawValue();
     const selectedPackage = this.packageService.getPackageById(value.packageId);
+    const guestControl = this.eventForm.controls.guestCount;
+    if (guestControl.errors?.['packageRange']) {
+      const { packageRange: _packageRange, ...remainingErrors } = guestControl.errors;
+      guestControl.setErrors(Object.keys(remainingErrors).length ? remainingErrors : null);
+    }
     if (selectedPackage && (
-      value.guestCount < (selectedPackage.minGuests ?? 1) ||
-      value.guestCount > (selectedPackage.maxGuests ?? Number.MAX_SAFE_INTEGER)
+      (selectedPackage.minGuests !== null && value.guestCount < selectedPackage.minGuests) ||
+      (selectedPackage.maxGuests !== null && value.guestCount > selectedPackage.maxGuests)
     )) {
-      this.eventForm.controls.guestCount.setErrors({ packageRange: true });
+      guestControl.setErrors({ ...guestControl.errors, packageRange: true });
     }
     if (this.eventForm.invalid || !this.canContinueToAddOns()) { this.eventForm.markAllAsTouched(); return; }
-    this.draftService.update({ ...value, eventType: value.eventType as EventType, packageId: value.packageId });
+    this.draftService.update({
+      ...value,
+      eventType: value.eventType as EventType,
+      packageId: value.packageId,
+      specialRequest: value.specialRequest.trim() || undefined,
+    });
     this.currentStep.set(2);
   }
 
@@ -123,7 +139,13 @@ export class BookingPageComponent {
     this.isSubmitting.set(true);
     this.submissionError.set('');
     try {
-      this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns()));
+      const editingId = this.editingBookingId();
+      if (editingId) {
+        const updated = await this.bookingService.updatePendingBooking(editingId, draft, selectedPackage, this.draftService.selectedAddOns());
+        this.bookingReference.set(updated.reference);
+      } else {
+        this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns()));
+      }
       this.draftService.reset();
     } catch (error) {
       const message = bookingSubmissionMessage(error);
@@ -146,6 +168,93 @@ export class BookingPageComponent {
 
   protected selectedFormPackage() {
     return this.packageService.getPackageById(this.eventForm.controls.packageId.value);
+  }
+
+  protected packagePricingLabel(pkg: CateringPackage): string {
+    if (pkg.pricingType === 'BASE_PLUS_EXCESS') {
+      return `${pkg.name} - PHP ${this.formatAmount(pkg.basePrice)} package`;
+    }
+    return `${pkg.name} - PHP ${this.formatAmount(pkg.pricePerGuest)} per guest`;
+  }
+
+  protected packagePricingExplanation(pkg: CateringPackage): string {
+    if (pkg.pricingType === 'BASE_PLUS_EXCESS') {
+      return `PHP ${this.formatAmount(pkg.basePrice)} includes ${pkg.includedGuests ?? 0} guests, then PHP ${this.formatAmount(pkg.excessGuestPrice)} for each additional guest.`;
+    }
+    return `PHP ${this.formatAmount(pkg.pricePerGuest)} for each estimated guest.`;
+  }
+
+  protected packageGuestGuidance(pkg: CateringPackage): string {
+    if (pkg.minGuests !== null && pkg.maxGuests !== null) {
+      return `This package accommodates ${pkg.minGuests}-${pkg.maxGuests} guests.`;
+    }
+    if (pkg.minGuests !== null) return `This package requires at least ${pkg.minGuests} guests.`;
+    if (pkg.maxGuests !== null) return `This package accommodates up to ${pkg.maxGuests} guests.`;
+    return 'Enter your best estimate. LA Chef will confirm final capacity during review.';
+  }
+
+  protected packageGuestError(pkg: CateringPackage): string {
+    if (pkg.minGuests !== null && pkg.maxGuests !== null) {
+      return `Guest count must be between ${pkg.minGuests} and ${pkg.maxGuests}.`;
+    }
+    if (pkg.minGuests !== null) return `Guest count must be at least ${pkg.minGuests}.`;
+    if (pkg.maxGuests !== null) return `Guest count must not exceed ${pkg.maxGuests}.`;
+    return 'Enter a guest estimate between 1 and 10,000.';
+  }
+
+  private formatAmount(value: number | null): string {
+    return new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 }).format(value ?? 0);
+  }
+
+  private loadPendingBooking(bookingId: string): void {
+    this.editingBookingId.set(bookingId);
+    this.editingLoading.set(true);
+    this.editingError.set('');
+    this.bookingService.loadBookingById(bookingId).pipe(
+      finalize(() => this.editingLoading.set(false)),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: (booking) => this.hydratePendingBooking(booking),
+      error: (error) => this.editingError.set(bookingSubmissionMessage(error)),
+    });
+  }
+
+  private hydratePendingBooking(booking: Booking): void {
+    if (booking.status !== 'pending') {
+      this.editingError.set('This booking can no longer be edited online. Contact LA Chef for assistance.');
+      return;
+    }
+    const draft = {
+      eventType: booking.eventType,
+      eventDate: booking.eventDate,
+      eventTime: this.toDisplayTime(booking.eventTime),
+      venue: booking.venue,
+      guestCount: booking.guestCount,
+      packageId: booking.package.packageId,
+      selectedAddOnIds: booking.addOns.map((addOn) => addOn.id),
+      paymentMethod: booking.paymentMethod ?? this.draftService.draft().paymentMethod,
+      specialRequest: booking.specialRequest ?? '',
+    };
+    this.draftService.update(draft);
+    this.eventForm.setValue({
+      eventType: draft.eventType,
+      eventDate: draft.eventDate,
+      eventTime: draft.eventTime,
+      venue: draft.venue,
+      guestCount: draft.guestCount,
+      packageId: draft.packageId,
+      specialRequest: draft.specialRequest,
+    });
+    this.currentStep.set(1);
+  }
+
+  private toDisplayTime(value: string): string {
+    const match = value.match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return value;
+    const hour = Number(match[1]);
+    const suffix = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    return `${displayHour}:${match[2]} ${suffix}`;
   }
 
   private futureDateValidator(control: FormControl<string>): ValidationErrors | null {

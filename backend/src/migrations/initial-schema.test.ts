@@ -92,6 +92,15 @@ test('baseline validates compatible existing objects and throws on violations', 
   assert.match(sql, /THROW\s+51000/i);
 });
 
+test('baseline validation accepts the package pricing schema introduced by migration 012', () => {
+  const sql = migrationSql();
+
+  assert.match(sql, /DECLARE\s+@package_pricing_v2\s+bit/i);
+  assert.match(sql, /COL_LENGTH\('dbo\.PACKAGE',\s*'pricing_type'\)/i);
+  assert.match(sql, /IF\s+@package_pricing_v2\s*=\s*0[\s\S]*CK_PACKAGE_price_per_head/i);
+  assert.match(sql, /IF\s+@package_pricing_v2\s*=\s*1[\s\S]*CK_PACKAGE_pricing_model[\s\S]*CK_PACKAGE_guest_limits/i);
+});
+
 test('baseline contains no business inserts or later-migration objects', () => {
   const sql = migrationSql();
 

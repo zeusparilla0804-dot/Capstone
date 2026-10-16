@@ -176,3 +176,21 @@ test('existing booking summary reuses its request without adding another propose
   assert.equal(result.remainingRequestSlots, 4);
   assert.deepEqual(calls, [['2026-12-10', { request }]]);
 });
+
+test('pending edit excludes its current reservation from the locked capacity snapshot', async () => {
+  const request = { transaction: true };
+  const calls: unknown[][] = [];
+  const service = createBookingAvailabilityService({
+    readCapacitySnapshot: async (...args) => {
+      calls.push(args);
+      return { activeBookingCount: 2, largestGuestCount: 120, hasMediumEvent: false };
+    },
+  });
+
+  await service.assertCanAccept('2026-12-10', 120, request as never, 42);
+
+  assert.deepEqual(calls, [[
+    '2026-12-10',
+    { request, lock: true, excludeReservationId: 42 },
+  ]]);
+});

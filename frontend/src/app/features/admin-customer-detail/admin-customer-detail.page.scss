@@ -1,3 +1,139 @@
-:host{display:block}.admin-back-link{display:inline-flex;align-items:center;min-height:44px;color:var(--color-text);font-size:.82rem;font-weight:700;text-decoration:none}.section-label{color:var(--color-accent);font-size:.68rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}.customer-lead{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;border-block:1px solid var(--color-border);padding:26px 0}.customer-lead h2{margin-top:6px;font-size:clamp(2rem,4vw,3.3rem);font-weight:600}.customer-lead div>p:last-child{margin-top:7px;color:var(--color-text-muted);font-size:.8rem}.customer-lead address{display:grid;gap:5px;max-width:380px;font-size:.8rem;font-style:normal;text-align:right}.customer-lead address a{font-weight:700;text-decoration:none;overflow-wrap:anywhere}.customer-lead address span{color:var(--color-text-muted)}.history-section{margin-top:48px}.section-header{display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:1px solid var(--color-border);padding-bottom:16px}.section-header>div{display:flex;gap:13px}.section-header>div>span{color:var(--color-accent);font-size:.7rem;font-weight:800}.section-header h2{font-family:var(--font-sans);font-size:1.03rem}.section-header p{margin-top:4px;color:var(--color-text-muted);font-size:.76rem}.section-header>strong{font-size:.7rem}.record-list article{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(140px,.55fr) auto minmax(145px,.5fr);align-items:center;gap:24px;border-bottom:1px solid var(--color-border);padding:20px 0}.record-reference{color:var(--color-accent);font-size:.67rem;font-weight:800}.record-main h3{margin-top:4px;font-family:var(--font-sans);font-size:.9rem}.record-main>p:last-child{margin-top:4px;color:var(--color-text-muted);font-size:.72rem}.record-money span,.record-money small{display:block;color:var(--color-text-muted);font-size:.67rem}.record-money strong{display:block;margin:3px 0;font-size:.88rem;font-variant-numeric:tabular-nums}.record-actions{display:grid;justify-items:end;gap:6px}.record-actions a{min-height:32px;color:var(--color-primary-dark);font-size:.72rem;font-weight:750}.payment-list article{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(120px,.6fr));gap:20px;border-bottom:1px solid var(--color-border);padding:17px 0}.payment-list article div{min-width:0}.payment-list span,.payment-list strong{display:block;overflow-wrap:anywhere}.payment-list span{color:var(--color-text-muted);font-size:.67rem}.payment-list strong{margin-top:4px;font-size:.78rem}.payment-amount{text-align:right}.payment-amount strong{font-size:.9rem}.history-state{color:var(--color-text-muted);padding:28px 0;font-size:.8rem}.admin-action-error{margin-bottom:16px}
-@media(max-width:900px){.record-list article{grid-template-columns:minmax(0,1fr) auto}.record-money{grid-column:1}.record-actions{grid-column:2;grid-row:2;align-self:end}.payment-list article{grid-template-columns:repeat(2,1fr)}.payment-amount{text-align:left}}
-@media(max-width:767px){.customer-lead{align-items:flex-start;flex-direction:column}.customer-lead address{text-align:left}.section-header{align-items:flex-start}.record-list article{grid-template-columns:1fr;gap:12px}.record-money,.record-actions{grid-column:auto;grid-row:auto}.record-actions{justify-items:start;display:flex;gap:18px}.payment-list article{grid-template-columns:1fr 1fr;gap:15px}.payment-list article div:first-child{grid-column:1/-1}.history-section{margin-top:40px}}
+:host { display: block; }
+
+.admin-back-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--color-text);
+  font-size: .875rem;
+  font-weight: 700;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.customer-lead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  border-block: 1px solid var(--portal-gold-divider);
+  padding: 28px 0;
+}
+
+.customer-meta { display: flex; align-items: center; gap: 12px; }
+.customer-meta > span { color: var(--color-accent); font-size: .75rem; font-weight: 700; text-transform: uppercase; }
+.customer-lead h2 { margin-top: 10px; font-size: clamp(2rem, 4vw, 3.25rem); font-weight: 600; line-height: 1.05; }
+.customer-identity > p { margin-top: 8px; color: var(--color-text-muted); font-size: .875rem; }
+
+.account-action { display: grid; justify-items: end; gap: 8px; }
+.account-action > span { color: var(--color-text-muted); font-size: .75rem; font-weight: 700; }
+
+.profile-section,
+.history-section { margin-top: 48px; }
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 16px;
+}
+
+.section-header h2 { font-family: var(--font-sans); font-size: 1.0625rem; font-weight: 700; }
+.section-header p { max-width: 65ch; margin-top: 5px; color: var(--color-text-muted); font-size: .8125rem; line-height: 1.5; }
+.section-header > strong { font-size: .75rem; }
+
+.profile-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 24px;
+  padding-top: 24px;
+}
+
+.profile-form label { display: grid; gap: 8px; color: var(--color-text); font-size: .8125rem; font-weight: 700; }
+.profile-form input {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--portal-surface, #fff);
+  color: var(--color-text);
+  padding: 0 13px;
+  font: inherit;
+  font-size: 1rem;
+}
+.profile-form input:focus-visible { border-color: var(--color-accent); outline: 3px solid color-mix(in srgb, var(--color-accent) 20%, transparent); outline-offset: 1px; }
+.profile-form label small { color: var(--color-danger); font-size: .75rem; font-weight: 600; }
+.profile-form__footer { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; gap: 24px; border-top: 1px solid var(--color-border); margin-top: 4px; padding-top: 20px; }
+.profile-form__footer > div { min-width: 0; }
+.form-message { font-size: .8125rem; font-weight: 700; }
+.form-message--error,
+.history-state--error { color: var(--color-danger); }
+.form-message--success { color: var(--color-success); }
+
+.record-list article { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(150px, .55fr) auto minmax(145px, .5fr); align-items: center; gap: 24px; border-bottom: 1px solid var(--color-border); padding: 22px 0; }
+.record-reference { color: var(--color-accent); font-size: .75rem; font-weight: 700; }
+.record-main h3 { margin-top: 5px; font-family: var(--font-sans); font-size: .9375rem; font-weight: 700; }
+.record-main > p:last-child { margin-top: 5px; color: var(--color-text-muted); font-size: .8125rem; }
+.record-money span,
+.record-money small { display: block; color: var(--color-text-muted); font-size: .75rem; }
+.record-money strong { display: block; margin: 4px 0; font-size: .9375rem; font-variant-numeric: tabular-nums; }
+.record-actions { display: grid; justify-items: end; gap: 8px; }
+.record-actions a { min-height: 36px; color: var(--color-primary-dark); font-size: .8125rem; font-weight: 700; text-underline-offset: 3px; }
+
+.payment-list article { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(110px, .6fr)) minmax(120px, .6fr); gap: 22px; border-bottom: 1px solid var(--color-border); padding: 19px 0; }
+.payment-list article div { min-width: 0; }
+.payment-list span,
+.payment-list strong { display: block; overflow-wrap: anywhere; }
+.payment-list span { color: var(--color-text-muted); font-size: .75rem; }
+.payment-list strong { margin-top: 5px; font-size: .875rem; font-variant-numeric: tabular-nums; }
+.payment-amount { text-align: right; }
+.payment-amount strong { font-size: .9375rem; }
+.history-state { color: var(--color-text-muted); padding: 28px 0; font-size: .875rem; }
+
+.dialog-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; background: rgb(20 20 17 / 58%); padding: 20px; }
+.status-dialog { width: min(100%, 480px); border-radius: 8px; background: #fff; box-shadow: 0 22px 60px rgb(20 20 17 / 22%); padding: 28px; }
+.status-dialog h2 { margin-top: 18px; font-family: var(--font-sans); font-size: 1.35rem; font-weight: 750; }
+.status-dialog > p { margin-top: 10px; color: var(--color-text-muted); font-size: .9rem; line-height: 1.65; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--color-border); margin-top: 24px; padding-top: 20px; }
+
+@media (hover: hover) and (pointer: fine) {
+  .admin-back-link:hover,
+  .record-actions a:hover { color: var(--color-accent); }
+}
+
+@media (max-width: 1000px) {
+  .record-list article { grid-template-columns: minmax(0, 1fr) auto; }
+  .record-money { grid-column: 1; }
+  .record-actions { grid-column: 2; grid-row: 2; align-self: end; }
+  .payment-list article { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-list article div:first-child { grid-column: 1 / -1; }
+  .payment-amount { text-align: left; }
+}
+
+@media (max-width: 767px) {
+  .customer-lead { align-items: flex-start; flex-direction: column; gap: 22px; }
+  .account-action { width: 100%; justify-items: stretch; }
+  .account-action .btn { width: 100%; }
+  .profile-section,
+  .history-section { margin-top: 40px; }
+  .profile-form { grid-template-columns: 1fr; gap: 18px; }
+  .profile-form__footer { grid-column: auto; align-items: stretch; flex-direction: column; gap: 14px; }
+  .profile-form__footer .btn { width: 100%; }
+  .record-list article { grid-template-columns: 1fr; gap: 13px; }
+  .record-money,
+  .record-actions { grid-column: auto; grid-row: auto; }
+  .record-actions { display: flex; justify-items: start; gap: 18px; }
+  .payment-list article { grid-template-columns: 1fr 1fr; gap: 16px; }
+  .payment-list article div:first-child { grid-column: 1 / -1; }
+  .status-dialog { padding: 24px 20px; }
+  .dialog-actions { flex-direction: column-reverse; }
+  .dialog-actions .btn { width: 100%; }
+}
+
+@media (max-width: 420px) {
+  .customer-meta { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .payment-list article { grid-template-columns: 1fr; }
+  .payment-list article div:first-child { grid-column: auto; }
+}

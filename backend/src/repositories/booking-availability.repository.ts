@@ -11,6 +11,7 @@ interface CapacitySnapshotRow {
 export interface CapacitySnapshotOptions {
   request?: sql.Request;
   lock?: boolean;
+  excludeReservationId?: number;
 }
 
 export async function readCapacitySnapshot(
@@ -19,9 +20,14 @@ export async function readCapacitySnapshot(
 ): Promise<CapacitySnapshot> {
   const request = options?.request ?? (await getDbPool()).request();
   const lockHint = options?.lock && options.request ? ' WITH(UPDLOCK,HOLDLOCK)' : '';
-  const result = await request
-    .input('eventDate', sql.Date, new Date(`${eventDate}T00:00:00.000Z`))
-    .query<CapacitySnapshotRow>(`
+  const exclusion = options?.excludeReservationId === undefined
+    ? ''
+    : ' AND reservation_id <> @excludeReservationId';
+  request.input('eventDate', sql.Date, new Date(`${eventDate}T00:00:00.000Z`));
+  if (options?.excludeReservationId !== undefined) {
+    request.input('excludeReservationId', sql.Int, options.excludeReservationId);
+  }
+  const result = await request.query<CapacitySnapshotRow>(`
       SELECT
         COUNT_BIG(*) AS activeBookingCount,
         COALESCE(MAX(guest_count), 0) AS largestGuestCount,
@@ -35,7 +41,7 @@ export async function readCapacitySnapshot(
           'PAYMENT_SUBMITTED',
           'PAYMENT_VERIFIED',
           'CONFIRMED'
-        );
+        )${exclusion};
     `);
   const row = result.recordset[0];
 

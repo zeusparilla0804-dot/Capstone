@@ -3,12 +3,14 @@ import {
   adminForgotPassword,
   adminLogin,
   adminLogout,
+  adminLogoutAll,
   adminMe,
   adminResetPassword,
   customerForgotPassword,
   customerResetPassword,
   login,
   logout,
+  logoutAll,
   me,
   register,
 } from '../controllers/auth.controller.js';
@@ -21,8 +23,10 @@ export default Router()
   .post('/password/reset', customerResetPassword)
   .get('/me', requireCustomer, me)
   .post('/logout', requireCustomer, logout)
+  .post('/logout-all', requireCustomer, logoutAll)
   .post('/admin/login', adminLogin)
   .post('/admin/password/forgot', adminForgotPassword)
   .post('/admin/password/reset', adminResetPassword)
   .get('/admin/me', requireAdmin, adminMe)
-  .post('/admin/logout', requireAdmin, adminLogout);
+  .post('/admin/logout', requireAdmin, adminLogout)
+  .post('/admin/logout-all', requireAdmin, adminLogoutAll);

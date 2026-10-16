@@ -14,7 +14,10 @@ const review: AdminPaymentProofDetail = {
     status: 'SUBMITTED', createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z', fileUrl: 'http://localhost:3000/api/payment-proofs/1/file' },
   booking: { id: 42, reference: 'LC-0042', status: 'PAYMENT_SUBMITTED', eventDate: '2026-12-10' },
   customer: { id: 7, name: 'Klint Charles', email: 'klint@example.test' },
-  payment: { id: 5, amountDue: 85000, amountPaid: 10000, status: 'PARTIALLY_PAID', outstandingBalance: 75000 },
+  payment: {
+    id: 5, amountDue: 85000, amountPaid: 10000, status: 'PARTIALLY_PAID',
+    requiredDeposit: 42500, remainingDeposit: 32500, outstandingBalance: 75000
+  },
   invoice: { id: 8, number: 'INV-2026-000008', totalAmount: 85000, status: 'ISSUED' }
 };
 
@@ -55,6 +58,16 @@ describe('AdminPaymentReviewPage', () => {
     expect(fixture.nativeElement.querySelector('[aria-label="Zoom in"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[aria-label="Zoom out"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[aria-label="Reset zoom"]')).toBeTruthy();
+  });
+
+  it('distinguishes the required deposit from the full outstanding balance', () => {
+    const content = fixture.nativeElement.textContent as string;
+    expect(content).toContain('Required deposit');
+    expect(content).toContain('Remaining to secure reservation');
+    expect(content).toContain('₱42,500.00');
+    expect(content).toContain('₱32,500.00');
+    expect(content).toContain('Outstanding balance');
+    expect(content).toContain('₱75,000.00');
   });
 
   it('provides bounded keyboard-accessible proof zoom controls', () => {

@@ -1,5 +1,5 @@
 import type sql from 'mssql';
-import { validEmailAddress } from '../config/environment.js';
+import { environment, validEmailAddress } from '../config/environment.js';
 import {
   emailOutboxRepository,
   type BookingNotificationContext,
@@ -25,7 +25,7 @@ function queueInput(raw: QueueNotificationInput): QueueNotificationInput {
   if (!validEmailAddress(recipient)) throw new AppError(400, 'Invalid notification recipient.');
   const paired = raw.relatedEntityType !== undefined && raw.relatedEntityId !== undefined;
   if ((raw.relatedEntityType === undefined) !== (raw.relatedEntityId === undefined) ||
-      (raw.relatedEntityType !== undefined && !['BOOKING', 'INVOICE', 'PAYMENT_PROOF'].includes(raw.relatedEntityType))) {
+      (raw.relatedEntityType !== undefined && !['BOOKING', 'INVOICE', 'PAYMENT_PROOF', 'CUSTOM_EVENT_REQUEST'].includes(raw.relatedEntityType))) {
     throw new AppError(400, 'Invalid notification relation.');
   }
   return {
@@ -85,4 +85,56 @@ export async function queueBookingNotification(
     relatedEntityType,
     relatedEntityId
   }, request);
+}
+
+type CustomEventTemplateKey = Extract<EmailTemplateKey,
+  | 'CUSTOM_REQUEST_RECEIVED'
+  | 'CUSTOM_REQUEST_RECEIVED_ADMIN'
+  | 'CUSTOM_CLARIFICATION_REQUESTED'
+  | 'CUSTOM_QUOTE_SENT'
+  | 'CUSTOM_QUOTE_ACCEPTED'
+  | 'CUSTOM_QUOTE_DECLINED'
+  | 'CUSTOM_QUOTE_EXPIRED'>;
+
+export function customEventActionUrl(requestId: number, admin: boolean): string {
+  if (!Number.isSafeInteger(requestId) || requestId < 1) throw new AppError(400, 'Invalid custom event request identifier.');
+  return new URL(admin ? `/admin/custom-events/${requestId}` : `/custom-events/${requestId}`, environment.frontendOrigin).toString();
+}
+
+export async function queueCustomEventNotification(
+  reservationId: number,
+  requestId: number,
+  templateKey: Exclude<CustomEventTemplateKey, 'CUSTOM_REQUEST_RECEIVED_ADMIN'>,
+  request: sql.Request,
+  additions: Record<string, string> = {},
+): Promise<string> {
+  const context = await notificationService.bookingContext(reservationId, request);
+  if (!context) throw new AppError(404, 'Booking notification context not found.');
+  return queueNotification({
+    recipient: context.customerEmail,
+    templateKey,
+    payload: { customerName: context.customerName, bookingReference: context.bookingReference,
+      eventDate: context.eventDate, ...additions, actionUrl: customEventActionUrl(requestId, false) },
+    relatedEntityType: 'CUSTOM_EVENT_REQUEST',
+    relatedEntityId: String(requestId),
+  }, request);
+}
+
+export async function queueCustomEventReceipt(
+  reservationId: number,
+  requestId: number,
+  request: sql.Request,
+): Promise<void> {
+  const context = await notificationService.bookingContext(reservationId, request);
+  if (!context) throw new AppError(404, 'Booking notification context not found.');
+  await queueNotification({ recipient: context.customerEmail, templateKey: 'CUSTOM_REQUEST_RECEIVED',
+    payload: { customerName: context.customerName, bookingReference: context.bookingReference,
+      eventDate: context.eventDate, actionUrl: customEventActionUrl(requestId, false) },
+    relatedEntityType: 'CUSTOM_EVENT_REQUEST', relatedEntityId: String(requestId) }, request);
+  for (const recipient of await emailOutboxRepository.activeAdminEmails(request)) {
+    await queueNotification({ recipient, templateKey: 'CUSTOM_REQUEST_RECEIVED_ADMIN',
+      payload: { customerName: 'LA Chef team', bookingReference: context.bookingReference,
+        eventDate: context.eventDate, actionUrl: customEventActionUrl(requestId, true) },
+      relatedEntityType: 'CUSTOM_EVENT_REQUEST', relatedEntityId: String(requestId) }, request);
+  }
 }

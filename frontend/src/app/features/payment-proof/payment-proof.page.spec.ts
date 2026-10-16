@@ -12,7 +12,8 @@ import { PaymentProofPageComponent } from './payment-proof.page';
 const booking: Booking = {
   id: '42', reference: 'LC-0042', customerId: '7', eventName: 'Wedding reception', eventType: 'wedding',
   eventDate: '2026-12-10', eventTime: '18:00', venue: 'Santa Rosa, Laguna', guestCount: 100,
-  package: { packageId: '3', packageName: 'Premium', pricePerGuest: 850 }, addOns: [], discount: 0,
+  package: { packageId: '3', packageName: 'Premium', pricingType: 'PER_HEAD', pricePerGuest: 850,
+    basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 85000 }, addOns: [], discount: 0,
   status: 'awaiting_payment', amountPaid: 10000, createdAt: '2026-10-01', thumbnailUrl: 'assets/test.webp'
 };
 

@@ -23,6 +23,7 @@ if (environment.isProduction) throw new Error('E2E verification is disabled in p
 const marker = `OPS-${randomUUID().slice(0, 8)}`;
 const password = `Ops-${randomUUID()}!aA1`;
 const customerAEmail = `${marker.toLowerCase()}-a@example.test`;
+const customerAUpdatedEmail = `${marker.toLowerCase()}-a-updated@example.test`;
 const customerBEmail = `${marker.toLowerCase()}-b@example.test`;
 const adminEmail = `${marker.toLowerCase()}-admin@example.test`;
 const created: Record<string, number> = {};
@@ -96,7 +97,7 @@ async function cleanup(): Promise<void> {
       if (!packageId) continue;
       await pool.request().input('id', sql.Int, packageId).query('DELETE FROM dbo.PACKAGE WHERE package_id=@id');
     }
-    for (const email of [customerAEmail, customerBEmail]) {
+    for (const email of [customerAEmail, customerAUpdatedEmail, customerBEmail]) {
       await pool.request().input('email', sql.NVarChar(255), email).query(`
         DELETE s FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE c.email=@email;
         DELETE FROM dbo.CUSTOMER WHERE email=@email;
@@ -152,14 +153,16 @@ try {
   const packageCreate = await api(base, '/admin/packages', {
     method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
       eventId: Number(event.event_id), name: `${marker} Package`, description: 'Disposable operations E2E package',
-      pricePerGuest: 250, minGuests: 10, maxGuests: 50, isActive: true
+      pricingType: 'PER_HEAD', pricePerGuest: 250, basePrice: null, includedGuests: null,
+      excessGuestPrice: null, minGuests: 10, maxGuests: 50, isActive: true
     })
   }, 201);
   created.package = Number(packageCreate.body.data.id);
   const capacityPackageCreate = await api(base, '/admin/packages', {
     method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({
       eventId: Number(event.event_id), name: `${marker} Capacity Package`, description: 'Disposable admin capacity package',
-      pricePerGuest: 100, minGuests: 1, maxGuests: 1000, isActive: true
+      pricingType: 'PER_HEAD', pricePerGuest: 100, basePrice: null, includedGuests: null,
+      excessGuestPrice: null, minGuests: 1, maxGuests: 1000, isActive: true
     })
   }, 201);
   created.capacityPackage = Number(capacityPackageCreate.body.data.id);
@@ -173,6 +176,8 @@ try {
   }, 201);
   created.booking = Number(bookingCreate.body.data.id);
   createdBookingIds.push(created.booking);
+  assert.equal(bookingCreate.body.data.total, 2500);
+  const requiredDeposit = 1250;
 
   const capacityMonth = String((Number.parseInt(marker.slice(-2), 16) % 10) + 1).padStart(2, '0');
   const mediumDate = `2097-${capacityMonth}-20`;
@@ -274,13 +279,13 @@ try {
   assert.equal(booking.body.data.status, 'AWAITING_PAYMENT');
 
   const secondSubmission = await api(base, `/bookings/${created.booking}/payment-proofs`, {
-    method: 'POST', headers: { cookie: customerACookie }, body: await proofForm(`${marker}-FIRST`, 500, eventDate)
+    method: 'POST', headers: { cookie: customerACookie }, body: await proofForm(`${marker}-FIRST`, requiredDeposit, eventDate)
   }, 201);
   const secondProofId = Number(secondSubmission.body.data.id);
   await api(base, `/admin/payment-proofs/${secondProofId}`, { headers: { cookie: adminCookie } });
 
   const verifyRequest = () => api(base, `/admin/payment-proofs/${secondProofId}/verify`, {
-    method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: 500 })
+    method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: requiredDeposit })
   }, 200);
   const concurrent = await Promise.allSettled([verifyRequest(), verifyRequest()]);
   const fulfilled = concurrent.filter(result => result.status === 'fulfilled');
@@ -294,7 +299,7 @@ try {
   });
   booking = await api(base, `/admin/bookings/${created.booking}`, { headers: { cookie: adminCookie } });
   assert.equal(booking.body.data.status, 'CONFIRMED');
-  assert.equal(booking.body.data.amountPaid, 500);
+  assert.equal(booking.body.data.amountPaid, requiredDeposit);
   assert.ok(booking.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'AWAITING_PAYMENT'));
   assert.ok(booking.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'PAYMENT_VERIFIED'));
 
@@ -317,11 +322,11 @@ try {
       SELECT status,template_key templateKey FROM dbo.EMAIL_OUTBOX WHERE recipient=@email;
     `);
   assert.equal(state.recordsets[0]![0]!.bookingStatus, 'CONFIRMED');
-  assert.equal(Number(state.recordsets[0]![0]!.amountPaid), 500);
+  assert.equal(Number(state.recordsets[0]![0]!.amountPaid), requiredDeposit);
   assert.equal(state.recordsets[0]![0]!.paymentStatus, 'PARTIALLY_PAID');
   assert.equal(state.recordsets[0]![0]!.invoiceStatus, 'PARTIALLY_PAID');
   assert.equal(state.recordsets[1]![0]!.proofStatus, 'VERIFIED');
-  assert.equal(Number(state.recordsets[1]![0]!.verifiedAmount), 500);
+  assert.equal(Number(state.recordsets[1]![0]!.verifiedAmount), requiredDeposit);
   assert.equal(Number(state.recordsets[1]![0]!.transactionCount), 1);
   const history = state.recordsets[2]!.map(row => row.nextStatus);
   for (const expected of ['APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED']) {
@@ -331,6 +336,122 @@ try {
   assert.ok(state.recordsets[3]!.every(row => row.status === 'PENDING'), 'SMTP-disabled notifications must remain pending.');
   assert.ok(state.recordsets[3]!.some(row => row.templateKey === 'PAYMENT_PROOF_REJECTED'));
   assert.ok(state.recordsets[3]!.some(row => row.templateKey === 'PAYMENT_PROOF_VERIFIED'));
+
+  const customerId = Number(registeredA.body.data.id);
+  const updatedCustomer = await api(base, `/admin/customers/${customerId}`, {
+    method: 'PATCH',
+    headers: { cookie: adminCookie },
+    body: JSON.stringify({
+      firstName: 'Updated',
+      lastName: 'Customer',
+      email: customerAUpdatedEmail,
+      phone: '09179998888',
+    }),
+  });
+  assert.equal(updatedCustomer.body.data.email, customerAUpdatedEmail);
+  assert.equal(updatedCustomer.body.data.firstName, 'Updated');
+  assert.equal(updatedCustomer.body.data.lastName, 'Customer');
+
+  const duplicateEmail = await api(base, `/admin/customers/${customerId}`, {
+    method: 'PATCH',
+    headers: { cookie: adminCookie },
+    body: JSON.stringify({
+      firstName: 'Updated',
+      lastName: 'Customer',
+      email: customerBEmail,
+      phone: '09179998888',
+    }),
+  }, 409);
+  assert.equal(duplicateEmail.body.message, 'Email is already in use.');
+
+  const deactivated = await api(base, `/admin/customers/${customerId}/status`, {
+    method: 'PATCH',
+    headers: { cookie: adminCookie },
+    body: JSON.stringify({ status: 'INACTIVE' }),
+  });
+  assert.equal(deactivated.body.data.status, 'INACTIVE');
+  await api(base, `/bookings/${created.booking}`, { headers: { cookie: customerACookie } }, 401);
+  await api(base, '/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: customerAUpdatedEmail, password }),
+  }, 401);
+
+  const preservedHistory = await api(base, `/admin/customers/${customerId}`, { headers: { cookie: adminCookie } });
+  assert.equal(preservedHistory.body.data.status, 'INACTIVE');
+  const preservedBookings = await api(base, `/admin/customers/${customerId}/bookings`, { headers: { cookie: adminCookie } });
+  const preservedPayments = await api(base, `/admin/customers/${customerId}/payments`, { headers: { cookie: adminCookie } });
+  assert.ok(preservedBookings.body.data.items.some((item: { id: number }) => Number(item.id) === created.booking));
+  assert.ok(preservedPayments.body.data.items.some((item: { bookingId: number }) => Number(item.bookingId) === created.booking));
+
+  const reactivated = await api(base, `/admin/customers/${customerId}/status`, {
+    method: 'PATCH',
+    headers: { cookie: adminCookie },
+    body: JSON.stringify({ status: 'ACTIVE' }),
+  });
+  assert.equal(reactivated.body.data.status, 'ACTIVE');
+  await api(base, '/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: customerAUpdatedEmail, password }),
+  });
+
+  const reportFixture = await pool.request()
+    .input('bookingId', sql.Int, created.booking)
+    .input('adminId', sql.Int, created.admin)
+    .input('reference', sql.NVarChar(150), `${marker}-REPORT`)
+    .query(`
+      DECLARE @paymentId int=(SELECT payment_id FROM dbo.PAYMENT WHERE reservation_id=@bookingId);
+      INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
+        VALUES(@paymentId,@adminId,100,'BANK_TRANSFER',@reference,CONVERT(datetime2,'2099-12-31T00:00:00'));
+      UPDATE dbo.PAYMENT SET amount_paid=amount_paid+100,payment_method='BANK_TRANSFER',transaction_ref=@reference,
+        payment_date=CONVERT(datetime2,'2099-12-31T00:00:00'),status='PARTIALLY_PAID' WHERE payment_id=@paymentId;
+      UPDATE dbo.INVOICE SET status='PARTIALLY_PAID' WHERE reservation_id=@bookingId;
+      SELECT CONVERT(varchar(10),i.issued_at,23) reportDate,i.invoice_number invoiceNumber,r.booking_reference bookingReference
+        FROM dbo.INVOICE i JOIN dbo.RESERVATION r ON r.reservation_id=i.reservation_id WHERE r.reservation_id=@bookingId;
+    `);
+  const reportDate = String(reportFixture.recordset[0].reportDate);
+  const invoiceNumber = String(reportFixture.recordset[0].invoiceNumber);
+  const bookingReference = String(reportFixture.recordset[0].bookingReference);
+
+  await api(base, `/admin/reports/reservations?dateFrom=${eventDate}&dateTo=${eventDate}`, {}, 401);
+  const reservationFilters = new URLSearchParams({ dateFrom: eventDate, dateTo: eventDate, status: 'CONFIRMED', eventType: String(event.event_type) });
+  const reservationReport = await api(base, `/admin/reports/reservations?${reservationFilters}`, { headers: { cookie: adminCookie } });
+  assert.ok(reservationReport.body.data.items.some((item: { reference: string }) => item.reference === bookingReference));
+  assert.equal(reservationReport.body.data.summary.reservationCount, reservationReport.body.data.items.length);
+  assert.equal(reservationReport.body.data.summary.totalGuests,
+    reservationReport.body.data.items.reduce((total: number, item: { guestCount: number }) => total + Number(item.guestCount), 0));
+
+  const paymentFilters = new URLSearchParams({ dateFrom: reportDate, dateTo: reportDate, status: 'PARTIALLY_PAID', method: 'BANK_TRANSFER' });
+  const paymentReport = await api(base, `/admin/reports/payments?${paymentFilters}`, { headers: { cookie: adminCookie } });
+  const invoiceRows = paymentReport.body.data.items.filter((item: { invoiceNumber: string }) => item.invoiceNumber === invoiceNumber);
+  assert.equal(invoiceRows.length, 1, 'Multiple transactions must not duplicate a billing report row.');
+  assert.equal(invoiceRows[0].amountDue, 2500);
+  assert.equal(invoiceRows[0].amountPaid, requiredDeposit + 100);
+  assert.equal(invoiceRows[0].outstandingBalance, 2500 - requiredDeposit - 100);
+  assert.equal(paymentReport.body.data.summary.totalBilled,
+    paymentReport.body.data.items.reduce((total: number, item: { amountDue: number }) => total + Number(item.amountDue), 0));
+  assert.equal(paymentReport.body.data.summary.verifiedPayments,
+    paymentReport.body.data.items.reduce((total: number, item: { amountPaid: number }) => total + Number(item.amountPaid), 0));
+
+  const emptyReport = await api(base, '/admin/reports/reservations?dateFrom=2098-01-01&dateTo=2098-01-01', { headers: { cookie: adminCookie } });
+  assert.deepEqual(emptyReport.body.data.summary, { reservationCount: 0, totalGuests: 0 });
+  assert.deepEqual(emptyReport.body.data.items, []);
+
+  const reservationCsv = await api(base, `/admin/reports/reservations/export?${reservationFilters}`, { headers: { cookie: adminCookie } });
+  assert.match(reservationCsv.response.headers.get('content-disposition') ?? '', /^attachment; filename="la-chef-reservations-\d{4}-\d{2}-\d{2}\.csv"$/);
+  assert.deepEqual(Array.from(new Uint8Array(reservationCsv.body as ArrayBuffer).slice(0, 3)), [0xef, 0xbb, 0xbf]);
+  const csvText = new TextDecoder().decode(reservationCsv.body as ArrayBuffer);
+  assert.ok(csvText.startsWith('Reference,Customer,Event date,Event time,Event type,Guests,Venue,Package,Status\r\n'));
+  assert.ok(csvText.includes(bookingReference));
+
+  const customerAudit = await pool.request()
+    .input('adminId', sql.Int, created.admin)
+    .input('customerId', sql.Int, customerId)
+    .query(`SELECT action FROM dbo.ADMIN_AUDIT_LOG
+      WHERE admin_id=@adminId AND entity_type='CUSTOMER' AND entity_id=@customerId`);
+  const customerAuditActions = customerAudit.recordset.map(row => row.action);
+  for (const expected of ['CUSTOMER_UPDATED', 'CUSTOMER_DEACTIVATED', 'CUSTOMER_ACTIVATED']) {
+    assert.ok(customerAuditActions.includes(expected), `Missing customer audit action: ${expected}`);
+  }
 
   console.log('Admin operations SQL-backed E2E verification passed.');
 } finally {

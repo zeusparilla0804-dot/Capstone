@@ -9,7 +9,8 @@ import { CustomerBillingPageComponent } from './customer-billing.page';
 const booking: Booking = {
   id: '17', invoiceId: 9, reference: 'LAC-0017', customerId: '42', eventName: 'Birthday Celebration',
   eventType: 'birthday', eventDate: '2027-02-12', eventTime: '14:00', venue: 'Santa Rosa', guestCount: 20,
-  package: { packageId: '3', packageName: 'Classic Package', pricePerGuest: 500 }, addOns: [], discount: 0,
+  package: { packageId: '3', packageName: 'Classic Package', pricingType: 'PER_HEAD', pricePerGuest: 500,
+    basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 10000 }, addOns: [], discount: 0,
   status: 'awaiting_payment', paymentMethod: 'cash', amountPaid: 3000, createdAt: '2026-10-04T00:00:00Z',
   thumbnailUrl: 'assets/images/packages/basic-package.webp',
 };

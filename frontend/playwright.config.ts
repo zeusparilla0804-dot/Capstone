@@ -4,6 +4,7 @@ const executablePath = process.env['PLAYWRIGHT_EXECUTABLE_PATH'] ??
   (process.platform === 'win32'
     ? 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'
     : undefined);
+const nodeExecutable = `"${process.execPath}"`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -19,7 +20,7 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: 'node --import tsx e2e/browser-fixture.ts',
+      command: `${nodeExecutable} --import tsx e2e/browser-fixture.ts`,
       cwd: '../backend',
       url: 'http://localhost:3000/api/health',
       env: {
@@ -32,7 +33,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: 'npm run start -- --host 127.0.0.1 --port 4200',
+      command: `${nodeExecutable} node_modules/@angular/cli/bin/ng.js serve --host 127.0.0.1 --port 4200`,
       url: 'http://localhost:4200',
       env: {
         PORT: '4200',

@@ -24,6 +24,7 @@ export interface EmailOutboxRepository {
   finish(claimed: ClaimedEmail, outcome: EmailFinishOutcome, now: Date): Promise<boolean>;
   findById(id: string): Promise<EmailOutboxRecord | undefined>;
   bookingContext(reservationId: number, request: sql.Request): Promise<BookingNotificationContext | undefined>;
+  activeAdminEmails(request: sql.Request): Promise<string[]>;
 }
 
 export type EmailFinishOutcome =
@@ -142,6 +143,12 @@ export function createEmailOutboxRepository(deps: Dependencies): EmailOutboxRepo
           LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
           WHERE r.reservation_id=@notificationReservationId`);
       return result.recordset[0];
+    },
+
+    async activeAdminEmails(request) {
+      const result = await request.query<{ email: string }>(`SELECT email FROM dbo.ADMIN
+        WHERE status='ACTIVE' AND email IS NOT NULL AND LTRIM(RTRIM(email))<>'' ORDER BY admin_id`);
+      return result.recordset.map(row => String(row.email));
     }
   };
 }

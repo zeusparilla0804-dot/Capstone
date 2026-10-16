@@ -1,1 +1,18 @@
-<main class="admin-layout"><app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Administrator'" subtitle="Administrator" [navItems]="nav" (navAction)="action($event)"/><section class="admin-main"><header class="admin-page-header"><div><p class="page-kicker">LA Chef administration</p><h1>{{title()}}</h1><p>{{description()}}</p></div><ng-content select="[admin-actions]"/></header><ng-content/></section></main>
+<main class="admin-layout portal-surface">
+  <app-dashboard-sidebar
+    [title]="auth.user()?.fullName ?? 'Administrator'"
+    subtitle="Administrator"
+    [navItems]="nav()"
+    (navAction)="action($event)"
+  />
+  <section class="admin-main">
+    @if (sessionError()) {
+      <p class="admin-session-error" role="alert">{{ sessionError() }}</p>
+    }
+    <header class="admin-page-header">
+      <div><p class="page-kicker">LA Chef administration</p><h1>{{title()}}</h1><p>{{description()}}</p></div>
+      <ng-content select="[admin-actions]"/>
+    </header>
+    <ng-content/>
+  </section>
+</main>

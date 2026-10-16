@@ -48,18 +48,18 @@ describe('AdminBookingDetailPage', () => {
 
   it('shows only valid actions for the current booking status and renders history', () => {
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Approve booking');
-    expect(text).toContain('Reject booking');
-    expect(text).toContain('Cancel booking');
-    expect(text).not.toContain('Confirm booking');
+    expect(text).toContain('Approve reservation');
+    expect(text).toContain('Reject reservation');
+    expect(text).toContain('Cancel reservation');
+    expect(text).not.toContain('Confirm reservation');
     expect(text).toContain('Submitted by customer');
   });
 
   it('shows the current date capacity as operational context', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Date capacity');
-    expect(text).toContain('2 active bookings');
-    expect(text).toContain('6 booking limit');
+    expect(text).toContain('2 active reservations');
+    expect(text).toContain('6 reservation limit');
     expect(text).toContain('4 slots remaining');
     expect(text).toContain('Available');
   });
@@ -97,7 +97,7 @@ describe('AdminBookingDetailPage', () => {
         capacity: { ...detail.capacity, guestCount, requiresAdminConfirmation: false },
       });
       expect(component.availableActions().find((action: { status: string }) => action.status === 'APPROVED').label)
-        .toBe('Approve booking');
+        .toBe('Approve reservation');
     }
   });
 

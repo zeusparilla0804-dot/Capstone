@@ -10,10 +10,66 @@ process.env.DB_DATABASE ??= 'test';
 process.env.DB_USER ??= 'test';
 process.env.DB_PASSWORD ??= 'test';
 
-const [{ availability, parseAvailabilityQuery }, { bookingService }] = await Promise.all([
+const [{ availability, parseAvailabilityQuery, parseBooking, parsePendingBookingUpdate, updateDetails }, { bookingService }] = await Promise.all([
   import('./booking.controller.js'),
   import('../services/booking.service.js'),
 ]);
+
+const validBookingBody = {
+  eventType: 'Wedding',
+  eventDate: '2098-06-15',
+  eventTime: '12:30',
+  venue: 'Panorama Ville, Santa Rosa',
+  guestCount: 120,
+  packageId: 3,
+  addOnIds: [4, 7],
+  paymentMethod: 'cash',
+};
+
+test('booking input preserves a trimmed optional special request', () => {
+  assert.deepEqual(parseBooking({ ...validBookingBody, specialRequest: '  Vegetarian table for six.  ' }), {
+    ...validBookingBody,
+    specialRequest: 'Vegetarian table for six.',
+  });
+});
+
+test('pending booking update uses the same validated details contract', () => {
+  assert.deepEqual(parsePendingBookingUpdate({ ...validBookingBody, specialRequest: '' }), {
+    ...validBookingBody,
+    specialRequest: undefined,
+  });
+});
+
+test('booking input rejects an excessive special request', () => {
+  assert.throws(
+    () => parseBooking({ ...validBookingBody, specialRequest: 'x'.repeat(2_001) }),
+    (error: unknown) => typeof error === 'object' && error !== null && 'statusCode' in error && error.statusCode === 400,
+  );
+});
+
+test('pending details endpoint dispatches the authenticated owner and validated identifiers', async (t) => {
+  const expected = { id: 31, status: 'pending' } as never;
+  const calls: unknown[][] = [];
+  t.mock.method(bookingService, 'updateDetails', async (...args: unknown[]) => {
+    calls.push(args);
+    return expected;
+  });
+  let responseBody: unknown;
+  const response = {
+    json(value: unknown) { responseBody = value; return this; },
+  } as unknown as Response;
+  let forwarded: unknown;
+
+  await updateDetails(
+    { params: { id: '31' }, body: validBookingBody, customer: { id: 7 } } as unknown as Request,
+    response,
+    ((error?: unknown) => { forwarded = error; }) as NextFunction,
+  );
+
+  assert.equal(forwarded, undefined);
+  assert.deepEqual(calls, [[7, 31, { ...validBookingBody, specialRequest: undefined }]]);
+  assert.deepEqual(responseBody, { success: true, data: expected });
+});
 
 test('availability parses a future ISO date and integer guest count before dispatch', async t => {
   const expected = {
@@ -76,4 +132,9 @@ test('availability route is declared before the dynamic booking identifier route
 
   assert.ok(availabilityIndex >= 0, 'availability route must exist');
   assert.ok(identifierIndex > availabilityIndex, 'availability route must be matched before /:id');
+});
+
+test('booking routes expose owner-only pending details updates', () => {
+  const source = readFileSync(new URL('../routes/booking.routes.ts', import.meta.url), 'utf8');
+  assert.match(source, /\.patch\('\/:id\/details',\s*updateDetails\)/);
 });

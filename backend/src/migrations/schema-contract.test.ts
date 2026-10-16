@@ -85,7 +85,7 @@ test('missing keys constraints indexes defaults and sequence produce named viola
   ]);
 });
 
-test('fresh migration history requires 000-006 and 008-011 without 007', () => {
+test('fresh migration history requires 000-006 and 008-015 without 007', () => {
   const snapshot = validSnapshot();
   snapshot.migrations.push('007_starter_catalog.sql');
   assert.deepEqual(findSchemaContractViolations(snapshot, { migrationHistory: 'fresh' }), [
@@ -97,6 +97,22 @@ test('fresh migration history requires 000-006 and 008-011 without 007', () => {
     'dbo.SCHEMA_MIGRATION.007_starter_catalog.sql: unexpected migration',
     'dbo.SCHEMA_MIGRATION.011_password_recovery.sql: missing migration',
   ]);
+});
+
+test('schema contract includes active customer account state from migration 015', () => {
+  assert.equal(EXPECTED_MIGRATIONS.at(-1), '015_customer_account_status.sql');
+  assert.ok(EXPECTED_SCHEMA_CONTRACT.columns.some((column) =>
+    column.table === 'CUSTOMER' && column.name === 'status' && column.type === 'nvarchar' && !column.nullable,
+  ));
+  assert.ok(EXPECTED_SCHEMA_CONTRACT.constraints.some((constraint) =>
+    constraint.table === 'CUSTOMER' && constraint.name === 'DF_CUSTOMER_status' && constraint.type === 'D',
+  ));
+  assert.ok(EXPECTED_SCHEMA_CONTRACT.constraints.some((constraint) =>
+    constraint.table === 'CUSTOMER' && constraint.name === 'CK_CUSTOMER_status' && constraint.type === 'C',
+  ));
+  assert.ok(EXPECTED_SCHEMA_CONTRACT.indexes.some((index) =>
+    index.table === 'CUSTOMER' && index.name === 'IX_CUSTOMER_status' && index.keys.join(',') === 'status',
+  ));
 });
 
 test('compatible migration history permits historical 007 but requires tracked migrations', () => {

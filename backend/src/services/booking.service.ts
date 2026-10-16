@@ -1,11 +1,12 @@
 import type sql from 'mssql';
-import { createBooking, findCustomerBookings } from '../repositories/booking.repository.js';
-import type { CreateBookingDto } from '../types/domain.types.js';
+import { createBooking, findCustomerBookings, updatePendingBooking } from '../repositories/booking.repository.js';
+import type { CreateBookingDto, UpdatePendingBookingDto } from '../types/domain.types.js';
 import { AppError } from '../utils/app-error.js';
 import { transitionBooking } from './booking-status.service.js';
 import { bookingAvailabilityService } from './booking-availability.service.js';
 export const bookingService={
   create(customerId:number,dto:CreateBookingDto){ return createBooking(customerId,dto); },
+  updateDetails(customerId:number,id:number,dto:UpdatePendingBookingDto){ return updatePendingBooking(customerId,id,dto); },
   availability(date:string,guestCount:number){ return bookingAvailabilityService.preview(date,guestCount); },
   list(customerId:number){ return findCustomerBookings(customerId); },
   async byId(customerId:number,id:number){ const item=(await findCustomerBookings(customerId)).find(b=>b.id===id); if(!item) throw new AppError(404,'Booking not found.'); return item; },

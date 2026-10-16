@@ -1,4 +1,4 @@
-.bookings-layout { display: grid; grid-template-columns: 252px minmax(0, 1fr); min-height: 100vh; background: var(--color-background); }
+.bookings-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 100dvh; background: var(--portal-canvas, #fff); }
 .bookings-content { min-width: 0; padding: 38px 40px 60px; }
 .bookings-container { width: min(100%, 1100px); margin-inline: auto; }
 .bookings-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; }

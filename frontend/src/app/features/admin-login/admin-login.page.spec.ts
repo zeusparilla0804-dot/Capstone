@@ -24,4 +24,17 @@ describe('AdminLoginPage', () => {
     expect(link).not.toBeNull();
     expect(link.textContent).toContain('Forgot password');
   });
+
+  it('starts without application-supplied administrator credentials', () => {
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    const identity = fixture.nativeElement.querySelector('#identity') as HTMLInputElement;
+    const password = fixture.nativeElement.querySelector('#adminPassword') as HTMLInputElement;
+
+    expect(form.getAttribute('autocomplete')).toBe('off');
+    expect(identity.value).toBe('');
+    expect(identity.getAttribute('autocomplete')).toBe('off');
+    expect(identity.placeholder).not.toContain('@');
+    expect(password.value).toBe('');
+    expect(password.getAttribute('autocomplete')).toBe('off');
+  });
 });

@@ -1,17 +1,22 @@
-import { Component, computed, inject, ChangeDetectionStrategy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { BookingService } from '../../core/services/booking.service';
-import { BookingCalculationService } from '../../core/services/booking-calculation.service';
+import type { Booking, BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { CustomerActivity, StatCard } from '../../core/models';
+import { BookingCalculationService } from '../../core/services/booking-calculation.service';
+import { BookingService } from '../../core/services/booking.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
-import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
-import { StatCardComponent } from '../../shared/components/stat-card/stat-card';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
+import { customerNavItems } from '../../shared/navigation/customer-navigation';
+
+interface PlanningProgress {
+  readonly currentStep: 1 | 2 | 3 | null;
+  readonly completedThrough: 0 | 1 | 2 | 3;
+}
 
 @Component({
   selector: 'app-customer-dashboard-page',
-  imports: [DashboardSidebarComponent, RouterLink, StatCardComponent, StatusBadgeComponent],
+  imports: [DashboardSidebarComponent, RouterLink, StatusBadgeComponent],
   templateUrl: './customer-dashboard.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './customer-dashboard.page.scss',
@@ -19,53 +24,54 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
 export class CustomerDashboardPageComponent {
   protected readonly bookingService = inject(BookingService);
   private readonly calculationService = inject(BookingCalculationService);
+  protected readonly badgeState = inject(PortalBadgeStateService);
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
 
   protected readonly bookings = this.bookingService.bookings;
-  protected readonly upcomingBookings = computed(() => this.bookingService.getBookingsByTab('upcoming').slice(0, 2));
+  protected readonly upcomingBookings = computed(() => this.bookingService.getBookingsByTab('upcoming').slice(0, 4));
+  protected readonly nextBooking = computed(() => this.upcomingBookings()[0]);
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly planningProgress = computed<PlanningProgress>(() => this.progressFor(this.nextBooking()?.status));
   protected readonly paymentSummary = computed(() => {
-    return this.bookings().map((booking) => {
-      const totals = this.calculationService.calculateTotals(booking);
-      return { bookingId: booking.id, invoiceId: booking.invoiceId, eventName: booking.eventName, total: totals.total, paid: booking.amountPaid, balance: Math.max(totals.total - booking.amountPaid, 0) };
-    }).find((payment) => payment.balance > 0);
+    const booking = this.nextBooking();
+    if (!booking) return undefined;
+    const totals = this.calculationService.calculateTotals(booking);
+    return {
+      bookingId: booking.id,
+      invoiceId: booking.invoiceId,
+      eventName: booking.eventName,
+      total: totals.total,
+      paid: booking.amountPaid,
+      balance: Math.max(totals.total - booking.amountPaid, 0),
+    };
   });
-  protected readonly paymentProgress = computed(() => {
-    const payment = this.paymentSummary();
-    return payment?.total ? Math.round((payment.paid / payment.total) * 100) : 0;
-  });
-  protected readonly dashboardStats = computed<readonly StatCard[]>(() => {
-    const upcoming = this.upcomingBookings();
-    const payment = this.paymentSummary();
-    return [
-      { label: 'Upcoming Events', value: String(upcoming.length), supportingText: upcoming[0] ? `Next event ${this.shortDate(upcoming[0].eventDate)}` : 'No events scheduled', tone: 'gold' },
-      { label: 'Total Bookings', value: String(this.bookings().length), supportingText: 'Across all events', tone: 'dark' },
-      { label: 'Outstanding Balance', value: this.formatCurrency(payment?.balance ?? 0), supportingText: payment?.eventName ?? 'No balance due', tone: payment ? 'red' : 'green' },
-    ];
-  });
-  protected readonly recentActivity = computed<readonly CustomerActivity[]>(() => {
-    const activities: CustomerActivity[] = this.bookings().map((booking) => ({
-      id: `created-${booking.id}`, title: booking.status === 'confirmed' ? 'Booking confirmed' : booking.status === 'cancelled' ? 'Booking cancelled' : 'Booking created',
-      description: booking.eventName, dateLabel: this.shortDate(booking.cancelledAt ?? booking.createdAt),
-      type: booking.status === 'confirmed' ? 'confirmation' : 'booking',
-    }));
-    const paidBooking = this.bookings().find((booking) => booking.amountPaid > 0);
-    if (paidBooking) activities.push({ id: `payment-${paidBooking.id}`, title: 'Payment recorded', description: `${this.formatCurrency(paidBooking.amountPaid)} down payment`, dateLabel: this.shortDate(paidBooking.createdAt), type: 'payment' });
-    return activities.slice(0, 3);
-  });
-  protected readonly navItems = CUSTOMER_NAV_ITEMS;
-  constructor() { this.bookingService.loadMine(); }
+
+  constructor() {
+    effect(() => this.badgeState.setCustomerBookings(this.bookings()));
+    this.bookingService.loadMine();
+  }
+
+  protected isStepComplete(step: 1 | 2 | 3): boolean {
+    return this.planningProgress().completedThrough >= step;
+  }
+
+  protected isCurrentStep(step: 1 | 2 | 3): boolean {
+    return this.planningProgress().currentStep === step;
+  }
 
   protected formatCurrency(value: number): string {
-    return `PHP ${value.toLocaleString('en-PH')}`;
+    return `PHP ${value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   }
 
   protected formatEventDate(value: string): string {
-    return new Intl.DateTimeFormat('en-PH', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
+    return new Intl.DateTimeFormat('en-PH', {
+      month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+    }).format(new Date(`${value}T00:00:00Z`));
   }
 
-  private shortDate(value: string): string {
-    return new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', year: value.includes('T') ? undefined : 'numeric', timeZone: 'UTC' }).format(new Date(value.includes('T') ? value : `${value}T00:00:00Z`));
+  protected firstName(): string {
+    return this.auth.user()?.fullName.trim().split(/\s+/)[0] || 'Customer';
   }
 
   protected async handleNavAction(item: DashboardNavItem): Promise<void> {
@@ -73,5 +79,17 @@ export class CustomerDashboardPageComponent {
       await this.auth.logout();
       await this.router.navigate([item.route]);
     }
+  }
+
+  private progressFor(status?: BookingStatus): PlanningProgress {
+    if (!status) return { currentStep: null, completedThrough: 0 };
+    if (['payment_verified', 'confirmed', 'completed'].includes(status)) {
+      return { currentStep: null, completedThrough: 3 };
+    }
+    if (['approved', 'awaiting_payment', 'payment_submitted'].includes(status)) {
+      return { currentStep: 3, completedThrough: 2 };
+    }
+    if (status === 'pending') return { currentStep: 2, completedThrough: 1 };
+    return { currentStep: 1, completedThrough: 0 };
   }
 }

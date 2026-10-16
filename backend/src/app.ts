@@ -15,6 +15,7 @@ import invoiceRoutes from './routes/invoice.routes.js';
 import { environment } from './config/environment.js';
 import { isAllowedFrontendOrigin } from './config/cors.js';
 import { paymentProofRoutes, proofFileRoutes } from './routes/payment-proof.routes.js';
+import customEventRoutes from './routes/custom-event.routes.js';
 
 const app = express();
 
@@ -83,6 +84,7 @@ app.use('/api/packages', packageRoutes);
 app.use('/api/add-ons', addOnRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/bookings', paymentProofRoutes);
+app.use('/api/custom-events', customEventRoutes);
 app.use('/api/payment-proofs', proofFileRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/invoices', invoiceRoutes);

@@ -16,6 +16,7 @@ const EMPTY_DRAFT: BookingDraft = {
   packageId: null,
   selectedAddOnIds: [],
   paymentMethod: null,
+  specialRequest: '',
 };
 
 @Injectable({ providedIn: 'root' })
@@ -38,11 +39,12 @@ export class BookingDraftService {
     const selectedIds = new Set(this.draftState().selectedAddOnIds);
     return this.addOns().filter((addOn) => selectedIds.has(addOn.id));
   });
-  readonly pricing = computed(() => this.calculationService.calculatePricing(
-    this.selectedPackage()?.pricePerGuest ?? 0,
-    this.draftState().guestCount,
-    this.selectedAddOns(),
-  ));
+  readonly pricing = computed(() => {
+    const pkg = this.selectedPackage();
+    return pkg
+      ? this.calculationService.calculatePackagePricing(pkg, this.draftState().guestCount, this.selectedAddOns())
+      : this.calculationService.calculatePricing(0, this.draftState().guestCount, this.selectedAddOns());
+  });
 
   update(values: Partial<BookingDraft>): void {
     this.draftState.update((draft) => ({ ...draft, ...values }));

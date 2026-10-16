@@ -82,8 +82,11 @@ export function createBookingAvailabilityService(deps: BookingAvailabilityDepend
       date: string,
       guestCount: number,
       request: sql.Request,
+      excludeReservationId?: number,
     ): Promise<BookingAvailability> {
-      const snapshot = await deps.readCapacitySnapshot(date, { request, lock: true });
+      const options: CapacitySnapshotOptions = { request, lock: true };
+      if (excludeReservationId !== undefined) options.excludeReservationId = excludeReservationId;
+      const snapshot = await deps.readCapacitySnapshot(date, options);
       const availability = assessDateAvailability({
         date,
         guestCount,

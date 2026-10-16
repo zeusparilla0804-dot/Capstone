@@ -41,9 +41,11 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 }
 export function me(req:Request,res:Response){res.json({success:true,data:req.customer});}
 export async function logout(req:Request,res:Response,next:NextFunction){try{const token=readCookie(req.headers.cookie,SESSION_COOKIE);if(token)await authService.logout(token);res.clearCookie(SESSION_COOKIE,cookieOptions()).status(204).send();}catch(e){next(e);}}
+export async function logoutAll(req:Request,res:Response,next:NextFunction){try{await authService.logoutAllCustomerSessions(req.customer!.id);res.clearCookie(SESSION_COOKIE,cookieOptions()).status(204).send();}catch(e){next(e);}}
 export async function adminLogin(req:Request,res:Response,next:NextFunction){try{const result=await authService.adminLogin(text(req.body?.identity,'Email or username',{max:255}),text(req.body?.password,'Password',{max:128}));res.cookie(ADMIN_SESSION_COOKIE,result.session.token,cookieOptions(result.session.expiresAt)).json({success:true,data:result.user});}catch(e){next(e);}}
 export function adminMe(req:Request,res:Response){res.json({success:true,data:req.admin});}
 export async function adminLogout(req:Request,res:Response,next:NextFunction){try{const token=readCookie(req.headers.cookie,ADMIN_SESSION_COOKIE);if(token)await authService.adminLogout(token);res.clearCookie(ADMIN_SESSION_COOKIE,cookieOptions()).status(204).send();}catch(e){next(e);}}
+export async function adminLogoutAll(req:Request,res:Response,next:NextFunction){try{await authService.logoutAllAdminSessions(req.admin!.id);res.clearCookie(ADMIN_SESSION_COOKIE,cookieOptions()).status(204).send();}catch(e){next(e);}}
 
 const genericRecoveryMessage = 'If an account uses that email, password reset instructions will arrive shortly.';
 

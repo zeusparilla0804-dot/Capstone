@@ -10,7 +10,8 @@ describe('MyBookingsPage cancellation', () => {
   const booking: Booking = {
     id: '5', reference: 'LC-5', customerId: '7', eventName: 'Wedding Event', eventType: 'wedding',
     eventDate: '2026-10-10', eventTime: '12:00', venue: 'Venue', guestCount: 50,
-    package: { packageId: '1', packageName: 'Package', pricePerGuest: 200 }, addOns: [],
+    package: { packageId: '1', packageName: 'Package', pricingType: 'PER_HEAD', pricePerGuest: 200,
+      basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 10000 }, addOns: [],
     discount: 0, status: 'pending', amountPaid: 0, createdAt: '2026-10-01', thumbnailUrl: 'test.png'
   };
   const rejectedBooking: Booking = { ...booking, id: '6', reference: 'LC-6', status: 'rejected' };
@@ -24,7 +25,7 @@ describe('MyBookingsPage cancellation', () => {
         provideRouter([]),
         { provide: AuthService, useValue: { user: signal({ fullName: 'Customer' }), logout: async () => {} } },
         { provide: BookingService, useValue: {
-          loading: signal(false), error: signal(''), loadMine: () => {},
+          bookings: signal([booking, rejectedBooking]), loading: signal(false), error: signal(''), loadMine: () => {},
           getBookingsByTab: (tab: string) => tab === 'upcoming' ? [booking] : tab === 'rejected' ? [rejectedBooking] : [],
           cancelBooking: async (id: string, reason?: string) => { calls.push({ id, reason }); return true; }
         } }
@@ -134,11 +135,11 @@ describe('MyBookingsPage cancellation', () => {
     expect(rejected).toBeTruthy();
     rejected?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('1 booking');
+    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('1 reservation');
     expect(fixture.nativeElement.querySelector('.booking-card .status-badge').textContent?.trim()).toBe('Rejected');
     tabs.find(tab => tab.textContent?.trim() === 'Cancelled')?.click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('0 bookings');
+    expect(fixture.nativeElement.querySelector('.booking-count').textContent?.trim()).toBe('0 reservations');
   });
 
   it('keeps only the selected tab in the Tab order and focuses click selections', async () => {
@@ -190,7 +191,7 @@ describe('MyBookingsPage cancellation', () => {
       } else if (label === 'Rejected') {
         expect(root.querySelector('.booking-card .status-badge')?.textContent?.trim()).toBe('Rejected');
       } else {
-        expect(root.querySelector('.booking-empty h2')?.textContent?.trim()).toBe('No past bookings');
+        expect(root.querySelector('.booking-empty h2')?.textContent?.trim()).toBe('No past reservations');
       }
     });
   }

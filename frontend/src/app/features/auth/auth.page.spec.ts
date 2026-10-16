@@ -62,4 +62,16 @@ describe('AuthPageComponent', () => {
     expect(link).not.toBeNull();
     expect(link.textContent).toContain('Forgot password');
   });
+
+  it('starts without application-supplied customer credentials', () => {
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    const email = fixture.nativeElement.querySelector('#email') as HTMLInputElement;
+    const password = fixture.nativeElement.querySelector('#password') as HTMLInputElement;
+
+    expect(form.getAttribute('autocomplete')).toBe('off');
+    expect(email.value).toBe('');
+    expect(email.getAttribute('autocomplete')).toBe('off');
+    expect(password.value).toBe('');
+    expect(password.getAttribute('autocomplete')).toBe('off');
+  });
 });

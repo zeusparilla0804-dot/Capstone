@@ -45,6 +45,14 @@ export class AdminAuthService {
     this.checked = true;
   }
 
+  async logoutAll(): Promise<void> {
+    await firstValueFrom(
+      this.http.post<void>(`${environment.apiBaseUrl}/auth/admin/logout-all`, {}, { withCredentials: true }),
+    );
+    this.user.set(null);
+    this.checked = true;
+  }
+
   async requestPasswordReset(email: string): Promise<void> {
     await firstValueFrom(
       this.http.post<{ success: boolean; message: string }>(

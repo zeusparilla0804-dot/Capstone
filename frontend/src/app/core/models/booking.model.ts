@@ -20,6 +20,7 @@ export interface BookingDraft {
   readonly packageId: CateringPackage['id'] | null;
   readonly selectedAddOnIds: readonly BookingAddOn['id'][];
   readonly paymentMethod: PaymentMethod | null;
+  readonly specialRequest?: string;
 }
 
 export interface BookingPricing {
@@ -35,7 +36,12 @@ export interface BookingPricing {
 export interface BookingPackageSummary {
   readonly packageId: CateringPackage['id'];
   readonly packageName: string;
-  readonly pricePerGuest: number;
+  readonly pricingType: CateringPackage['pricingType'];
+  readonly pricePerGuest: number | null;
+  readonly basePrice: number | null;
+  readonly includedGuests: number | null;
+  readonly excessGuestPrice: number | null;
+  readonly packageTotal: number;
 }
 
 export interface Booking {
@@ -49,6 +55,7 @@ export interface Booking {
   readonly eventTime: string;
   readonly venue: string;
   readonly guestCount: number;
+  readonly specialRequest?: string;
   readonly package: BookingPackageSummary;
   readonly addOns: readonly BookingAddOn[];
   readonly discount: number;

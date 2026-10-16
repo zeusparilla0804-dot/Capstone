@@ -57,6 +57,13 @@ export class AuthService {
     }
   }
 
+  async logoutAll(): Promise<void> {
+    await firstValueFrom(
+      this.http.post<void>(`${environment.apiBaseUrl}/auth/logout-all`, {}, { withCredentials: true }),
+    );
+    this.user.set(null);
+  }
+
   async requestPasswordReset(email: string): Promise<void> {
     await firstValueFrom(
       this.http.post<{ success: boolean; message: string }>(

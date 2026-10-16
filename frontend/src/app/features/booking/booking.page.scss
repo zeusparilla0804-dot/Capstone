@@ -10,7 +10,10 @@
 .booking-form-grid { gap: 20px; }
 .form-field--wide { grid-column: 1 / -1; }
 .form-field small { color: var(--color-danger); font-size: .78rem; }
-.guest-range { color: var(--color-text-muted); font-size: .78rem; }
+.form-field label span { color: var(--color-text-muted); font-weight: 400; }
+.form-field textarea { min-height: 112px; resize: vertical; }
+.guest-range, .field-note { color: var(--color-text-muted); font-size: .78rem; }
+.package-pricing-note { border-left: 2px solid color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); color: var(--color-text-muted); font-size: .82rem; line-height: 1.5; padding-left: 10px; }
 .choose-package { width: fit-content; font-size: .8rem; }
 .availability-status { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 72px; border-block: 1px solid var(--color-border); padding: 14px 2px; color: var(--color-text); outline: none; }
 .availability-status:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 20%, transparent); }
@@ -76,4 +79,5 @@
 .booking-actions { display: flex; justify-content: center; gap: 10px; margin-top: 26px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 767px) { .booking-page { padding-top: 30px; } .booking-surface { padding: 22px 18px; } .booking-form-grid, .review-grid, .payment-layout { grid-template-columns: minmax(0, 1fr); } .form-field--wide, .pricing-review { grid-column: auto; } .availability-status { grid-template-columns: 28px minmax(0, 1fr); } .availability-status__retry { grid-column: 2; justify-self: start; padding-inline: 0; } .availability-status__conflict { grid-column: 1 / -1; } .payment-summary { border-top: 1px solid var(--color-border); border-left: 0; padding: 22px 0 0; } .step-actions .btn { flex: 1; min-width: 0; padding-inline: 12px; } .selection-row { grid-template-columns: auto minmax(0, 1fr); } .selection-row b { grid-column: 2; } .booking-actions { flex-direction: column; } .booking-actions .btn { width: 100%; } }
+@media (pointer: coarse) { .booking-surface input, .booking-surface select, .booking-surface textarea { font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { .availability-status__mark--loading { animation-duration: 1.6s; } }

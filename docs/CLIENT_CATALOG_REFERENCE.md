@@ -152,11 +152,18 @@ The calculation service must snapshot all applicable values on the reservation. 
 
 ## Client Confirmation Checklist
 
-- Confirm that every listed price remains current.
-- Confirm whether the PHP 480, PHP 580, and PHP 680 tiers have official package names.
-- Confirm the maximum guest count for each standard and debut package.
-- Confirm whether add-ons are available for every event type.
-- Confirm whether "host or magician" is one combined option or two separately priced options.
-- Confirm whether debut package prices include taxes, delivery, venue fees, or geographic restrictions.
-- Confirm the official Facebook/Messenger URL and preferred public contact details.
-- Obtain web-ready original photos and logo files rather than using compressed flyer crops.
+- **Pending:** Confirm that every listed price remains current.
+- **Pending:** Confirm whether the PHP 480, PHP 580, and PHP 680 tiers have official package names. The controlled sync currently uses the literal labels `PHP 480 Per Head`, `PHP 580 Per Head`, and `PHP 680 Per Head`.
+- **Pending:** Confirm whether `Standard Catering` is the preferred website category name for the three general per-head tiers.
+- **Pending:** Confirm the minimum and maximum guest count for each standard and debut package. Both limits remain `NULL` until confirmed.
+- **Pending:** Confirm whether add-ons are available for every event type.
+- **Pending:** Confirm whether "host or magician" is one combined option or two separately priced options.
+- **Pending:** Confirm whether debut package prices include taxes, delivery, venue fees, or geographic restrictions.
+- **Pending:** Confirm the official Facebook/Messenger URL and preferred public contact details.
+- **Pending:** Obtain web-ready original photos and logo files rather than using compressed flyer crops.
+
+## Controlled Catalog Sync
+
+Run `npm.cmd run db:catalog:sync -- --dry-run` from `backend` to inspect the six packages, 86 inclusions, and 17 add-ons without changing data. The command defaults to dry-run when no flag is provided. Only an explicit `--apply` performs parameterized upserts. The optional `--deactivate-provisional` flag is valid only with `--apply`; it deactivates the known legacy sample entries without deleting reservations or financial history. Unrelated catalog rows remain untouched.
+
+Do not run `--apply` against production until every pending price, label, category, and guest-limit item above is confirmed by LA Chef.

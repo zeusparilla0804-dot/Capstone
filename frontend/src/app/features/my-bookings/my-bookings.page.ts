@@ -1,12 +1,13 @@
-import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Booking, BookingTab } from '../../core/models';
 import { BookingService } from '../../core/services/booking.service';
 import { AuthService } from '../../core/services/auth.service';
+import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { BookingCardComponent } from '../../shared/components/booking-card/booking-card';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
-import { CUSTOMER_NAV_ITEMS } from '../../shared/navigation/customer-navigation';
+import { customerNavItems } from '../../shared/navigation/customer-navigation';
 
 @Component({
   selector: 'app-my-bookings-page',
@@ -25,6 +26,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected readonly bookingService = inject(BookingService);
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
+  private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly activeFilter = signal<BookingTab>('upcoming');
   protected readonly bookingToCancel = signal<Booking | null>(null);
   protected readonly cancellationPending = signal(false);
@@ -34,8 +36,11 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected readonly filters: readonly { value: BookingTab; label: string }[] = [
     { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' },
   ];
-  protected readonly navItems = CUSTOMER_NAV_ITEMS;
-  constructor() { this.bookingService.loadMine(); }
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  constructor() {
+    effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
+    this.bookingService.loadMine();
+  }
 
   ngAfterViewChecked(): void {
     if (this.focusReasonOnOpen && this.cancellationReasonField) {
@@ -89,7 +94,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
     const cancelled = await this.bookingService.cancelBooking(booking.id, reason);
     this.cancellationPending.set(false);
     if (cancelled) { this.activeFilter.set('cancelled'); this.closeCancellation(false); this.focusCancelledTabOnCheck = true; }
-    else this.cancellationError.set('Unable to cancel this booking. Refresh and try again.');
+    else this.cancellationError.set('Unable to cancel this reservation. Refresh and try again.');
   }
   protected async handleNavAction(item: DashboardNavItem): Promise<void> { if (item.label === 'Logout') { await this.auth.logout(); await this.router.navigate([item.route]); } }
 

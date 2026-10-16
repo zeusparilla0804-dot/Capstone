@@ -1,1 +1,42 @@
-<app-admin-shell title="Customers" description="Customer contact details, booking activity, and verified payment history."><form class="admin-toolbar" (ngSubmit)="load(1)"><input name="search" [(ngModel)]="search" placeholder="Search name, email, or phone" aria-label="Search customers"/><button class="btn btn-secondary btn-sm">Search</button></form>@if(loading()){<p class="data-state">Loading customers...</p>}@else if(error()){<p class="data-state data-state--error">{{error()}}</p>}@else if(data();as result){<section class="admin-panel">@if(result.items.length){<div class="table-scroll"><table class="admin-table"><thead><tr><th>Customer</th><th>Email</th><th>Phone</th><th>Bookings</th><th>Upcoming event</th><th>Outstanding</th><th>History</th></tr></thead><tbody>@for(item of result.items;track item.id){<tr><td><strong>{{item.fullName}}</strong></td><td>{{item.email}}</td><td>{{item.phone}}</td><td>{{item.totalBookings}}</td><td>{{item.upcomingEvent?(item.upcomingEvent+'T00:00:00Z'|date:'mediumDate':'UTC'):'None'}}</td><td class="is-number">{{item.outstandingBalance|currency:'PHP':'symbol-narrow':'1.0-0'}}</td><td><a class="btn btn-tertiary" [routerLink]="['/admin/customers',item.id]">View customer</a></td></tr>}</tbody></table></div><footer class="admin-pagination"><span>Page {{result.page}} of {{result.totalPages}}</span><div><button class="btn btn-secondary btn-sm" [disabled]="result.page<=1" (click)="load(result.page-1)">Previous</button> <button class="btn btn-secondary btn-sm" [disabled]="result.page>=result.totalPages" (click)="load(result.page+1)">Next</button></div></footer>}@else{<p class="data-state">No customers found.</p>}</section>}</app-admin-shell>
+<app-admin-shell title="Customers" description="Customer contact details, booking activity, and verified payment history.">
+  <form class="admin-toolbar" (ngSubmit)="load(1)">
+    <input name="search" [(ngModel)]="search" placeholder="Search name, email, or phone" aria-label="Search customers" />
+    <button class="btn btn-secondary btn-sm">Search</button>
+  </form>
+
+  @if (loading()) {
+    <p class="data-state">Loading customers...</p>
+  } @else if (error()) {
+    <p class="data-state data-state--error">{{ error() }}</p>
+  } @else if (data(); as result) {
+    <section class="admin-panel admin-record-table customers-records">
+      @if (result.items.length) {
+        <div class="table-scroll">
+          <table class="admin-table admin-table--customers">
+            <thead><tr><th>Customer</th><th>Status</th><th>Email</th><th>Phone</th><th>Bookings</th><th>Upcoming event</th><th>Outstanding</th><th>History</th></tr></thead>
+            <tbody>
+              @for (item of result.items; track item.id) {
+                <tr>
+                  <td data-label="Customer" data-card-wide="true"><strong>{{ item.fullName }}</strong></td>
+                  <td data-label="Status"><app-status-badge [status]="item.status" /></td>
+                  <td data-label="Email" data-card-wide="true">{{ item.email }}</td>
+                  <td data-label="Phone">{{ item.phone }}</td>
+                  <td data-label="Bookings">{{ item.totalBookings }}</td>
+                  <td data-label="Upcoming event">{{ item.upcomingEvent ? (item.upcomingEvent | date:'mediumDate':'UTC') : 'None' }}</td>
+                  <td data-label="Outstanding" class="is-number">{{ item.outstandingBalance | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
+                  <td data-label="History"><a class="btn btn-tertiary" [routerLink]="['/admin/customers', item.id]">View customer</a></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <footer class="admin-pagination">
+          <span>Page {{ result.page }} of {{ result.totalPages }}</span>
+          <div><button class="btn btn-secondary btn-sm" [disabled]="result.page <= 1" (click)="load(result.page - 1)">Previous</button><button class="btn btn-secondary btn-sm" [disabled]="result.page >= result.totalPages" (click)="load(result.page + 1)">Next</button></div>
+        </footer>
+      } @else {
+        <p class="data-state">No customers found.</p>
+      }
+    </section>
+  }
+</app-admin-shell>

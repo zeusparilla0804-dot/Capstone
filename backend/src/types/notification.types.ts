@@ -14,7 +14,14 @@ export type EmailTemplateKey =
   | 'BOOKING_RESCHEDULED'
   | 'BOOKING_COMPLETED'
   | 'PASSWORD_RESET_REQUESTED'
-  | 'PASSWORD_CHANGED';
+  | 'PASSWORD_CHANGED'
+  | 'CUSTOM_REQUEST_RECEIVED'
+  | 'CUSTOM_REQUEST_RECEIVED_ADMIN'
+  | 'CUSTOM_CLARIFICATION_REQUESTED'
+  | 'CUSTOM_QUOTE_SENT'
+  | 'CUSTOM_QUOTE_ACCEPTED'
+  | 'CUSTOM_QUOTE_DECLINED'
+  | 'CUSTOM_QUOTE_EXPIRED';
 
 export interface EmailOutboxRecord {
   id: string;
@@ -37,7 +44,7 @@ export interface QueueNotificationInput {
   recipient: string;
   templateKey: EmailTemplateKey;
   payload: Record<string, unknown>;
-  relatedEntityType?: 'BOOKING' | 'INVOICE' | 'PAYMENT_PROOF';
+  relatedEntityType?: 'BOOKING' | 'INVOICE' | 'PAYMENT_PROOF' | 'CUSTOM_EVENT_REQUEST';
   relatedEntityId?: string;
 }
 

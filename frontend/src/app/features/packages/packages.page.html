@@ -48,62 +48,35 @@
         {{ filteredPackages().length }}
         {{ filteredPackages().length === 1 ? 'catering experience' : 'catering experiences' }}
       </p>
-      <div class="packages-grid">
-        @for (cateringPackage of filteredPackages(); track cateringPackage.id) {
-          <app-package-card
+      <div class="package-experiences">
+        @for (cateringPackage of filteredPackages(); track cateringPackage.id; let position = $index) {
+          <app-package-experience
+            [id]="'package-' + cateringPackage.id"
+            tabindex="-1"
             [cateringPackage]="cateringPackage"
-            (viewDetails)="viewPackage($event)"
-            (selectPackage)="selectPackage($event)"
+            [position]="position"
+            (planPackage)="planPackage($event)"
+            (customizePackage)="customizePackage($event)"
           />
         } @empty {
-          <p class="packages-empty">New packages for this category are coming soon.</p>
+          <p class="packages-empty">No published packages are available in this category yet.</p>
         }
       </div>
-      @if (selectedPackage(); as item) {
-        <section
-          id="package-detail"
-          class="package-detail"
-          tabindex="-1"
-          aria-labelledby="package-detail-title"
-        >
-          <img [src]="item.imageUrl" [alt]="item.name" />
-          <div>
-            <p class="page-kicker">{{ item.category }} catering</p>
-            <h2 id="package-detail-title">{{ item.name }}</h2>
-            <p>{{ item.description }}</p>
-            @if (item.features.length) {
-              <h3>Menu highlights</h3>
-              <ul>
-                @for (feature of item.features; track feature.label) {
-                  <li>{{ feature.label }}</li>
-                }
-              </ul>
-            }
-            <div class="package-detail__actions">
-              <button class="btn btn-primary" type="button" (click)="selectPackage(item.id)">
-                Plan this event</button
-              ><button class="btn btn-secondary" type="button" (click)="closeDetails()">
-                Close
-              </button>
-            </div>
-          </div>
-        </section>
-      }
     </div>
   </section>
   <section class="custom-event" aria-labelledby="custom-event-title">
     <div class="page-container custom-event__inner">
       <div>
-        <p class="custom-event__label">Need something different?</p>
-        <h2 id="custom-event-title">Planning something more personal?</h2>
+        <p class="custom-event__label">Need something adjusted?</p>
+        <h2 id="custom-event-title">Make the reservation fit your celebration.</h2>
       </div>
       <div>
         <p>
-          Tell us about your celebration and we'll shape a catering experience around your guest
-          count, menu preferences, and occasion.
+          Choose the closest package, enter your estimated guest count, and add menu, dietary, or
+          setup requests for the LA Chef team to review.
         </p>
         <a class="custom-event__link" routerLink="/book-event"
-          >Create a custom event <span aria-hidden="true">&rarr;</span></a
+          >Start a reservation <span aria-hidden="true">&rarr;</span></a
         >
       </div>
     </div>

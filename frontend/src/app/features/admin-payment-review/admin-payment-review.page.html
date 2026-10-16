@@ -25,7 +25,7 @@
       </section>
     </div>
 
-    <section class="balance-strip" aria-label="Payment and invoice position"><dl><div><dt>Invoice total</dt><dd>{{ (record.invoice?.totalAmount ?? record.payment?.amountDue ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.invoice?.number || 'No invoice' }}</span></div><div><dt>Already verified</dt><dd>{{ (record.payment?.amountPaid ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.payment?.status || 'No payments' }}</span></div><div class="balance"><dt>Outstanding balance</dt><dd>{{ (record.payment?.outstandingBalance ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Before this review</span></div></dl></section>
+    <section class="balance-strip" aria-label="Payment and deposit position"><dl><div><dt>Required deposit</dt><dd>{{ (record.payment?.requiredDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>50% to secure reservation</span></div><div><dt>Already verified</dt><dd>{{ (record.payment?.amountPaid ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.payment?.status || 'No payments' }}</span></div><div class="deposit"><dt>Remaining to secure reservation</dt><dd>{{ (record.payment?.remainingDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Deposit threshold only</span></div><div class="balance"><dt>Outstanding balance</dt><dd>{{ (record.payment?.outstandingBalance ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Full unpaid balance</span></div></dl></section>
 
     @if (canReview()) {
       <section class="review-actions" aria-labelledby="review-actions-title">

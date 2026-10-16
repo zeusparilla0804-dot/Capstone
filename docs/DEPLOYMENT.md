@@ -14,7 +14,18 @@ LA Chef uses an Angular 22 frontend, an Express API, and Microsoft SQL Server 20
 - Durable private storage for payment-proof files
 - A secret manager for database, password-recovery, and optional SMTP credentials
 
-Tracked migrations provision an empty SQL Server database in this exact order: `000_initial_schema.sql`, `001` through `006`, then `008` through `011`. The missing `007` filename is intentional: an old local starter-catalog migration was never approved or tracked, and fresh migration history must not invent it. Migration `006` inserts the five system event types; migration `011` adds password-reset state without seeding accounts. No administrator, customer, package, menu, reservation, payment, or other business record is seeded. The local `backend/fixtures/starter-catalog.provisional.sql`, when present, remains outside automatic migration discovery and is not approved for production.
+Tracked migrations provision an empty SQL Server database in this exact order: `000_initial_schema.sql`, `001` through `006`, then `008` through `015`. The missing `007` filename is intentional: an old local starter-catalog migration was never approved or tracked, and fresh migration history must not invent it. Migration `006` inserts the five system event types; later migrations add operational, recovery, pricing, custom-quotation, and customer-account-status structures without seeding accounts or business transactions. No administrator, customer, package, menu, reservation, payment, or other business record is seeded by migrations.
+
+## Client Catalog
+
+The client-approved poster catalog is maintained by `backend/src/scripts/sync-client-catalog.ts`, not by a migration. It contains six packages, 86 inclusions, and 17 published add-ons. Review without writing first:
+
+```powershell
+cd backend
+npm.cmd run db:catalog:sync -- --dry-run
+```
+
+Apply the controlled catalog with `--apply`. Use `--deactivate-provisional` only when intentionally retiring the exact legacy sample entries; it sets those rows inactive so historical reservations remain intact.
 
 ## Environment
 
@@ -38,6 +49,8 @@ Use the hosting platform's secret store. Committed `.env*.example` files contain
 `VERIFY_DB_*` values are verification-only credentials for a principal allowed to create and drop databases in CI or isolated staging. They must never be supplied to the application runtime. `VERIFY_DB_CONFIRM_DISPOSABLE` remains `false` by default and is set to `true` only for an intentional verifier run. A public domain routes HTTPS traffic to the frontend/API; it never receives SQL credentials.
 
 Authentication uses opaque random tokens whose hashes are stored in SQL Server. Session cookies are `HttpOnly`, `Secure` in production, and `SameSite=Lax`.
+
+Customer logout requires confirmation and ends the current session. The administrator portal additionally exposes **Sign out all devices**, which revokes every active session for that administrator, including the current browser. Session revocation deletes only matching session rows and does not remove profile, booking, invoice, payment, or other business data. The API also removes expired customer and administrator session rows once at startup and then every hour. Cleanup uses the SQL Server UTC clock, prevents overlapping runs within one process, fails safely, and waits for an active run during graceful shutdown. In a multi-instance deployment, monitor the small redundant cleanup query load or assign routine cleanup to a single scheduled worker before materially increasing instance count.
 
 ## Password Recovery
 
@@ -124,7 +137,7 @@ The optional `operations-e2e` CI job runs only when repository variable `LA_CHEF
 6. Promote the frontend/reverse proxy and verify security headers at the public edge.
 7. For a genuinely new environment, supply strong one-time `ADMIN_*` values from the secret manager and run `npm run admin:create`; remove those values immediately afterward.
 8. Run `STAGING_BASE_URL=https://staging.example.com node scripts/staging-smoke.mjs` in staging.
-9. Verify customer/admin password recovery, old-session revocation, customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, audit log, and logout.
+9. Verify customer/admin password recovery, all-device and ordinary logout, expired-session cleanup, customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, and audit log.
 
 Health endpoints:
 

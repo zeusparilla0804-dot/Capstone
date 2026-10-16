@@ -1,83 +1,115 @@
-<main class="dashboard-layout">
-  <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems" (navAction)="handleNavAction($event)" />
+<main class="dashboard-layout portal-surface">
+  <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
 
   <section class="dashboard-content">
     <div class="dashboard-container">
       <header class="dashboard-header">
         <div>
           <p class="page-kicker">Customer portal</p>
-          <h1>Welcome back, {{ auth.user()?.fullName?.split(' ')?.[0] ?? 'Customer' }}</h1>
-          <p>Here is an overview of your upcoming events and recent account activity.</p>
+          <h1>Welcome back, {{ firstName() }}</h1>
+          <p>Track your next reservation, review status, and payment in one place.</p>
         </div>
-        <a class="btn btn-primary" routerLink="/book-event">Book an Event</a>
+        <div class="dashboard-header__actions">
+          @if (badgeState.customerBookingCount() > 0) {
+            <a class="booking-alert" routerLink="/my-bookings" [attr.aria-label]="badgeState.customerBookingCount() + ' current reservations'">
+              <span aria-hidden="true">{{ badgeState.customerBookingCount() }}</span>
+              Current reservations
+            </a>
+          }
+          <a class="btn btn-primary" routerLink="/book-event">Plan another event</a>
+        </div>
       </header>
 
-      @if (bookingService.loading()) { <p class="data-state" role="status">Loading your dashboard...</p> }
-      @if (bookingService.error()) { <p class="data-state data-state--error" role="alert">{{ bookingService.error() }} <button class="btn btn-tertiary" type="button" (click)="bookingService.loadMine()">Try again</button></p> }
-      @if (bookings().length) {
-      <section class="summary-grid" aria-label="Account summary">
-        @for (stat of dashboardStats(); track stat.label) {
-          <app-stat-card [stat]="stat" />
-        }
-      </section>
-
-      <div class="dashboard-primary-grid">
-        <section class="dashboard-panel events-panel" aria-labelledby="upcoming-events-title">
-          <div class="panel-heading">
-            <div><p>Schedule</p><h2 id="upcoming-events-title">Upcoming Events</h2></div>
-            <a class="btn btn-tertiary" routerLink="/my-bookings">View all</a>
+      @if (bookingService.loading()) {
+        <p class="data-state dashboard-state" role="status">Loading your dashboard...</p>
+      } @else if (bookingService.error()) {
+        <p class="data-state data-state--error dashboard-state" role="alert">
+          {{ bookingService.error() }}
+          <button class="btn btn-tertiary" type="button" (click)="bookingService.loadMine()">Try again</button>
+        </p>
+      } @else if (nextBooking(); as next) {
+        <section class="next-event" aria-labelledby="next-event-title">
+          <div class="section-heading">
+            <div><p class="section-label">Your next event</p><h2 id="next-event-title">{{ next.eventName }}</h2></div>
+            <app-status-badge [status]="next.status" />
           </div>
 
-          <div class="event-list">
-            @for (booking of upcomingBookings(); track booking.id) {
-              <article class="event-row">
-                <img [src]="booking.thumbnailUrl" [alt]="booking.eventName + ' catering setup'" />
-                <div class="event-row__details">
-                  <div class="event-row__title"><h3>{{ booking.eventName }}</h3><app-status-badge [status]="booking.status" /></div>
-                  <p>{{ formatEventDate(booking.eventDate) }} <span aria-hidden="true">&bull;</span> {{ booking.eventTime }}</p>
-                  <p>{{ booking.venue }}</p>
-                  <span class="event-row__package">{{ booking.package.packageName }}</span>
-                </div>
-                @if (booking.invoiceId) { <a class="btn btn-tertiary" [routerLink]="['/invoice', booking.invoiceId]" [attr.aria-label]="'View invoice for ' + booking.eventName">View invoice</a> }
-              </article>
-            }
+          <div class="next-event__content">
+            <img [src]="next.thumbnailUrl" [alt]="next.eventName + ' catering setup'" />
+            <dl>
+              <div><dt>Event date</dt><dd>{{ formatEventDate(next.eventDate) }}<span>{{ next.eventTime }}</span></dd></div>
+              <div><dt>Venue</dt><dd>{{ next.venue }}</dd></div>
+              <div><dt>Guest estimate</dt><dd>{{ next.guestCount }} guests</dd></div>
+              <div><dt>Package</dt><dd>{{ next.package.packageName }}</dd></div>
+            </dl>
+            <a class="btn btn-primary" routerLink="/my-bookings">View reservation</a>
           </div>
         </section>
 
-        @if (paymentSummary(); as payment) {
-        <section class="dashboard-panel payment-panel" aria-labelledby="payment-summary-title">
-          <div class="panel-heading"><div><p>Current balance</p><h2 id="payment-summary-title">Payment Summary</h2></div></div>
-          <p class="payment-panel__event">{{ payment.eventName }}</p>
-          <dl>
-            <div><dt>Total</dt><dd>{{ formatCurrency(payment.total) }}</dd></div>
-            <div><dt>Paid</dt><dd class="is-paid">{{ formatCurrency(payment.paid) }}</dd></div>
-            <div class="payment-panel__balance"><dt>Balance</dt><dd>{{ formatCurrency(payment.balance) }}</dd></div>
-          </dl>
-          <div class="payment-progress">
-            <div><span>Payment progress</span><strong>{{ paymentProgress() }}%</strong></div>
-            <div class="payment-progress__track" role="progressbar" [attr.aria-label]="payment.eventName + ' payment progress'" aria-valuemin="0" aria-valuemax="100" [attr.aria-valuenow]="paymentProgress()">
-              <span [style.width.%]="paymentProgress()"></span>
+        <section class="planning" aria-labelledby="planning-title">
+          <div class="section-heading">
+            <div><p class="section-label">Event journey</p><h2 id="planning-title">Reservation progress</h2></div>
+            <span>Reservation {{ next.reference }}</span>
+          </div>
+          <ol class="planning-steps">
+            <li class="planning-step" data-step="details" [class.is-complete]="isStepComplete(1)" [class.is-current]="isCurrentStep(1)" [attr.aria-current]="isCurrentStep(1) ? 'step' : null">
+              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(1) ? 'OK' : '1' }}</span>
+              <div><strong>Event details</strong><span>{{ isStepComplete(1) ? 'Submitted' : 'Needs attention' }}</span></div>
+            </li>
+            <li class="planning-step" data-step="review" [class.is-complete]="isStepComplete(2)" [class.is-current]="isCurrentStep(2)" [attr.aria-current]="isCurrentStep(2) ? 'step' : null">
+              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(2) ? 'OK' : '2' }}</span>
+              <div><strong>Reservation review</strong><span>{{ isStepComplete(2) ? 'Approved' : isCurrentStep(2) ? 'Under review' : 'Waiting' }}</span></div>
+            </li>
+            <li class="planning-step" data-step="payment" [class.is-complete]="isStepComplete(3)" [class.is-current]="isCurrentStep(3)" [attr.aria-current]="isCurrentStep(3) ? 'step' : null">
+              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(3) ? 'OK' : '3' }}</span>
+              <div><strong>Payment</strong><span>{{ isStepComplete(3) ? 'Confirmed' : isCurrentStep(3) ? 'In progress' : 'Waiting' }}</span></div>
+            </li>
+          </ol>
+        </section>
+
+        <div class="dashboard-lower-grid">
+          <section class="upcoming" aria-labelledby="upcoming-title">
+            <div class="section-heading">
+              <div><p class="section-label">Schedule</p><h2 id="upcoming-title">Upcoming reservations</h2></div>
+              <a routerLink="/my-bookings">View all <span aria-hidden="true">&rarr;</span></a>
             </div>
-          </div>
-          @if (payment.invoiceId) { <a class="btn btn-secondary" [routerLink]="['/invoice', payment.invoiceId]">View billing details</a> }
-        </section>
-        }
-      </div>
+            <div class="booking-table" role="table" aria-label="Upcoming reservations">
+              <div class="booking-table__head" role="row">
+                <span role="columnheader">Date</span><span role="columnheader">Event</span><span role="columnheader">Guests</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
+              </div>
+              @for (booking of upcomingBookings(); track booking.id) {
+                <div class="booking-table__row" role="row">
+                  <span role="cell" data-label="Date">{{ formatEventDate(booking.eventDate) }}</span>
+                  <span role="cell" data-label="Event"><strong>{{ booking.eventName }}</strong><small>{{ booking.venue }}</small></span>
+                  <span role="cell" data-label="Guests">{{ booking.guestCount }}</span>
+                  <span role="cell" data-label="Status"><app-status-badge [status]="booking.status" /></span>
+                  <span role="cell" data-label="Action"><a routerLink="/my-bookings">View <span aria-hidden="true">&rarr;</span></a></span>
+                </div>
+              }
+            </div>
+          </section>
 
-      <section class="activity-section" aria-labelledby="recent-activity-title">
-        <div class="activity-section__heading"><p class="page-kicker">Account updates</p><h2 id="recent-activity-title">Recent Activity</h2></div>
-        <div class="activity-list">
-          @for (activity of recentActivity(); track activity.id) {
-            <article class="activity-item">
-              <span class="activity-item__marker" [class]="'activity-item__marker activity-item__marker--' + activity.type" aria-hidden="true"></span>
-              <div><h3>{{ activity.title }}</h3><p>{{ activity.description }}</p></div>
-              <time>{{ activity.dateLabel }}</time>
-            </article>
+          @if (paymentSummary(); as payment) {
+            <aside class="billing-summary" aria-labelledby="billing-title">
+              <div class="section-heading"><div><p class="section-label">Account</p><h2 id="billing-title">Billing summary</h2></div></div>
+              <p>{{ payment.eventName }}</p>
+              <dl>
+                <div><dt>Reservation total</dt><dd>{{ formatCurrency(payment.total) }}</dd></div>
+                <div><dt>Amount paid</dt><dd>{{ formatCurrency(payment.paid) }}</dd></div>
+                <div class="billing-summary__balance"><dt>Outstanding balance</dt><dd>{{ formatCurrency(payment.balance) }}</dd></div>
+              </dl>
+              @if (payment.invoiceId) { <a class="btn btn-primary" [routerLink]="['/invoice', payment.invoiceId]">View billing details</a> }
+              @else { <a class="btn btn-secondary" routerLink="/billing">View billing</a> }
+            </aside>
           }
         </div>
-      </section>
       } @else {
-        <section class="dashboard-empty"><h2>No bookings yet</h2><p>Plan your first event with LA Chef.</p><a class="btn btn-primary" routerLink="/book-event">Book an Event</a></section>
+        <section class="dashboard-empty">
+          <p class="section-label">Your first celebration</p>
+          <h2>No reservations yet</h2>
+          <p>Plan an event to start tracking its reservation details, review, and payment here.</p>
+          <a class="btn btn-primary" routerLink="/book-event">Plan an event</a>
+        </section>
       }
     </div>
   </section>

@@ -4,7 +4,7 @@ import type { AuthenticatedAdmin, AuthenticatedCustomer } from '../types/domain.
 
 export async function findCustomerCredentials(email: string) {
   const pool = await getDbPool();
-  const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT customer_id, first_name, last_name, email, contact_number, password FROM dbo.CUSTOMER WHERE email = @email`);
+  const result = await pool.request().input('email', sql.NVarChar(255), email).query(`SELECT customer_id, first_name, last_name, email, contact_number, password FROM dbo.CUSTOMER WHERE email = @email AND status='ACTIVE'`);
   return result.recordset[0];
 }
 export async function createCustomer(input: { firstName: string; lastName: string; email: string; phone: string; passwordHash: string }): Promise<number> {
@@ -18,7 +18,7 @@ export async function createSession(customerId: number, tokenHash: string, expir
 }
 export async function findCustomerBySession(tokenHash: string): Promise<AuthenticatedCustomer | undefined> {
   const pool = await getDbPool();
-  const result = await pool.request().input('tokenHash', sql.Char(64), tokenHash).query(`SELECT c.customer_id,c.first_name,c.last_name,c.email,c.contact_number FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME()`);
+  const result = await pool.request().input('tokenHash', sql.Char(64), tokenHash).query(`SELECT c.customer_id,c.first_name,c.last_name,c.email,c.contact_number FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME() AND c.status='ACTIVE'`);
   const row = result.recordset[0];
   return row ? { id: Number(row.customer_id), fullName: `${row.first_name} ${row.last_name}`, email: row.email, phone: row.contact_number, role: 'customer' } : undefined;
 }
@@ -26,7 +26,29 @@ export async function deleteSession(tokenHash: string): Promise<void> {
   const pool = await getDbPool();
   await pool.request().input('tokenHash', sql.Char(64), tokenHash).query('DELETE dbo.AUTH_SESSION WHERE token_hash=@tokenHash');
 }
+export async function deleteCustomerSessions(customerId: number): Promise<void> {
+  const pool = await getDbPool();
+  await pool.request().input('customerId', sql.Int, customerId)
+    .query('DELETE dbo.AUTH_SESSION WHERE customer_id=@customerId');
+}
 export async function findAdminCredentials(identity:string){const pool=await getDbPool();const result=await pool.request().input('identity',sql.NVarChar(255),identity).query(`SELECT admin_id,full_name,email,password FROM dbo.ADMIN WHERE (email=@identity OR username=@identity) AND status='ACTIVE'`);return result.recordset[0];}
 export async function createAdminSession(adminId:number,tokenHash:string,expiresAt:Date){const pool=await getDbPool();await pool.request().input('adminId',sql.Int,adminId).input('tokenHash',sql.Char(64),tokenHash).input('expiresAt',sql.DateTime2,expiresAt).query('INSERT dbo.ADMIN_SESSION(admin_id,token_hash,expires_at) VALUES(@adminId,@tokenHash,@expiresAt)');}
 export async function findAdminBySession(tokenHash:string):Promise<AuthenticatedAdmin|undefined>{const pool=await getDbPool();const result=await pool.request().input('tokenHash',sql.Char(64),tokenHash).query(`SELECT a.admin_id,a.full_name,a.email FROM dbo.ADMIN_SESSION s JOIN dbo.ADMIN a ON a.admin_id=s.admin_id WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME() AND a.status='ACTIVE'`);const row=result.recordset[0];return row?{id:Number(row.admin_id),fullName:row.full_name,email:row.email,role:'admin'}:undefined;}
 export async function deleteAdminSession(tokenHash:string){const pool=await getDbPool();await pool.request().input('tokenHash',sql.Char(64),tokenHash).query('DELETE dbo.ADMIN_SESSION WHERE token_hash=@tokenHash');}
+export async function deleteAdminSessions(adminId: number): Promise<void> {
+  const pool = await getDbPool();
+  await pool.request().input('adminId', sql.Int, adminId)
+    .query('DELETE dbo.ADMIN_SESSION WHERE admin_id=@adminId');
+}
+export async function deleteExpiredSessions(): Promise<{ customers: number; administrators: number }> {
+  const pool = await getDbPool();
+  const result = await pool.request().query(`
+    DECLARE @customers int;
+    DELETE dbo.AUTH_SESSION WHERE expires_at<=SYSUTCDATETIME();
+    SET @customers=@@ROWCOUNT;
+    DELETE dbo.ADMIN_SESSION WHERE expires_at<=SYSUTCDATETIME();
+    SELECT @customers AS customers, @@ROWCOUNT AS administrators;
+  `);
+  const row = result.recordset[0] ?? {};
+  return { customers: Number(row.customers ?? 0), administrators: Number(row.administrators ?? 0) };
+}

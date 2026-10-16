@@ -4,27 +4,27 @@
   @if (error()) { <p class="data-state data-state--error">{{ error() }}</p> }
 
   @if (proofs(); as queue) {
-    <section class="admin-panel" style="margin-bottom:24px">
-      <header style="padding:18px 20px;border-bottom:1px solid var(--color-border)"><p class="page-kicker">Action queue</p><h2 style="margin-top:5px;font-family:var(--font-sans);font-size:1.1rem">Payment proofs awaiting review</h2></header>
+    <section class="admin-panel admin-panel--spaced admin-record-table payment-proof-records">
+      <header class="admin-panel__heading"><p class="page-kicker">Action queue</p><h2>Payment proofs awaiting review</h2></header>
       @if (queue.items.length) {
-        <div class="table-scroll"><table class="admin-table"><thead><tr><th>Submitted</th><th>Method</th><th>Claimed amount</th><th>Reference</th><th>Review</th></tr></thead><tbody>
-          @for (proof of queue.items; track proof.id) { <tr><td>{{ proof.createdAt | date:'medium':'UTC' }}</td><td>{{ proof.method.replaceAll('_', ' ') }}</td><td>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td>{{ proof.transactionReference || 'Not provided' }}</td><td><a class="btn btn-primary btn-sm" [routerLink]="['/admin/payments/proofs', proof.id]">Review proof</a></td></tr> }
+        <div class="table-scroll"><table class="admin-table admin-table--payments"><thead><tr><th>Submitted</th><th>Method</th><th>Claimed amount</th><th>Reference</th><th>Review</th></tr></thead><tbody>
+          @for (proof of queue.items; track proof.id) { <tr><td data-label="Submitted" data-card-wide="true">{{ proof.createdAt | date:'medium':'UTC' }}</td><td data-label="Method">{{ proof.method.replaceAll('_', ' ') }}</td><td data-label="Claimed amount" class="is-number">{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Reference" data-card-wide="true">{{ proof.transactionReference || 'Not provided' }}</td><td data-label="Review"><a class="btn btn-primary btn-sm" [routerLink]="['/admin/payments/proofs', proof.id]">Review proof</a></td></tr> }
         </tbody></table></div>
       } @else { <p class="data-state">No payment proofs are waiting for review.</p> }
     </section>
   }
 
   @if (showForm()) {
-    <section class="admin-panel" style="padding:18px;margin-bottom:18px"><form class="admin-form" [formGroup]="form" (ngSubmit)="save()"><label>Booking ID<input type="number" min="1" formControlName="reservationId"/></label><label>Amount<input type="number" min=".01" step=".01" formControlName="amount"/></label><label>Method<select formControlName="method"><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">E-wallet</option></select></label><label>Reference<input formControlName="reference"/></label><label>Payment date<input type="date" formControlName="paymentDate"/></label><div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Record payment</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div></form></section>
+    <section class="admin-panel admin-form-panel"><form class="admin-form" [formGroup]="form" (ngSubmit)="save()"><label>Booking ID<input type="number" min="1" formControlName="reservationId"/></label><label>Amount<input type="number" min=".01" step=".01" formControlName="amount"/></label><label>Method<select formControlName="method"><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">E-wallet</option></select></label><label>Reference<input formControlName="reference"/></label><label>Payment date<input type="date" formControlName="paymentDate"/></label><div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Record payment</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div></form></section>
   }
 
   <form class="admin-toolbar" (ngSubmit)="load(1)"><input name="search" [(ngModel)]="search" placeholder="Search booking or customer"/><select name="status" [(ngModel)]="status"><option value="">All statuses</option><option>PENDING</option><option>PARTIALLY_PAID</option><option>PAID</option></select><button class="btn btn-secondary btn-sm">Apply filters</button></form>
   @if (loading()) { <p class="data-state">Loading payments...</p> }
   @else if (data(); as result) {
-    <section class="admin-panel">
+    <section class="admin-panel admin-record-table payment-records">
       @if (result.items.length) {
-        <div class="table-scroll"><table class="admin-table"><thead><tr><th>Booking</th><th>Customer</th><th>Due</th><th>Paid</th><th>Method</th><th>Date</th><th>Reference</th><th>Status</th></tr></thead><tbody>
-          @for (item of result.items; track item.id) { <tr><td>{{ item.bookingReference }}</td><td>{{ item.customerName }}</td><td>{{ item.amountDue | currency:'PHP':'symbol-narrow':'1.0-0' }}</td><td>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.0-0' }}</td><td>{{ item.paymentMethod || 'Not recorded' }}</td><td>{{ item.paymentDate ? (item.paymentDate | date:'mediumDate') : 'Not recorded' }}</td><td>{{ item.reference || 'Not provided' }}</td><td><app-status-badge [status]="item.status"/></td></tr> }
+        <div class="table-scroll"><table class="admin-table admin-table--payments"><thead><tr><th>Booking</th><th>Customer</th><th>Due</th><th>Paid</th><th>Method</th><th>Date</th><th>Reference</th><th>Status</th></tr></thead><tbody>
+          @for (item of result.items; track item.id) { <tr><td data-label="Booking" data-card-wide="true"><strong>{{ item.bookingReference }}</strong></td><td data-label="Customer" data-card-wide="true">{{ item.customerName }}</td><td data-label="Due" class="is-number">{{ item.amountDue | currency:'PHP':'symbol-narrow':'1.0-0' }}</td><td data-label="Paid" class="is-number">{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.0-0' }}</td><td data-label="Method">{{ item.paymentMethod || 'Not recorded' }}</td><td data-label="Date">{{ item.paymentDate ? (item.paymentDate | date:'mediumDate') : 'Not recorded' }}</td><td data-label="Reference" data-card-wide="true">{{ item.reference || 'Not provided' }}</td><td data-label="Status"><app-status-badge [status]="item.status"/></td></tr> }
         </tbody></table></div>
         <footer class="admin-pagination"><span>Page {{ result.page }} of {{ result.totalPages }}</span><div><button class="btn btn-secondary btn-sm" [disabled]="result.page <= 1" (click)="load(result.page - 1)">Previous</button> <button class="btn btn-secondary btn-sm" [disabled]="result.page >= result.totalPages" (click)="load(result.page + 1)">Next</button></div></footer>
       } @else { <p class="data-state">No payment records found.</p> }

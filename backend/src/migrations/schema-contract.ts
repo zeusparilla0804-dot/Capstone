@@ -59,6 +59,10 @@ export const EXPECTED_MIGRATIONS = [
   '009_release_rejected_proof_references.sql',
   '010_booking_capacity_availability.sql',
   '011_password_recovery.sql',
+  '012_package_pricing_models.sql',
+  '013_custom_event_quotation.sql',
+  '014_custom_quote_invoice_quantity.sql',
+  '015_customer_account_status.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -103,6 +107,7 @@ const columns: ColumnShape[] = [
   nvarchar('CUSTOMER', 'last_name', 100), nvarchar('CUSTOMER', 'email', 255),
   nvarchar('CUSTOMER', 'contact_number', 30), nvarchar('CUSTOMER', 'address', 500, true),
   nvarchar('CUSTOMER', 'password', 255), datetime2('CUSTOMER', 'created_at', false, 0),
+  nvarchar('CUSTOMER', 'status', 20),
 
   integer('ADMIN', 'admin_id', false, true), nvarchar('ADMIN', 'username', 100),
   nvarchar('ADMIN', 'password', 255), nvarchar('ADMIN', 'full_name', 200),
@@ -114,7 +119,10 @@ const columns: ColumnShape[] = [
 
   integer('PACKAGE', 'package_id', false, true), integer('PACKAGE', 'event_id'),
   nvarchar('PACKAGE', 'package_name', 150), nvarchar('PACKAGE', 'description', 1000, true),
-  decimal('PACKAGE', 'price_per_head'), integer('PACKAGE', 'min_guest'), integer('PACKAGE', 'max_guest'),
+  column('PACKAGE', 'pricing_type', 'varchar', 20, 0, 0, false),
+  decimal('PACKAGE', 'price_per_head', true), decimal('PACKAGE', 'base_price', true),
+  integer('PACKAGE', 'included_guests', true), decimal('PACKAGE', 'excess_guest_price', true),
+  integer('PACKAGE', 'min_guest', true), integer('PACKAGE', 'max_guest', true),
   column('PACKAGE', 'is_active', 'bit', 1, 1, 0, false),
 
   integer('MENU_ITEM', 'menu_item_id', false, true), integer('MENU_ITEM', 'package_id'),
@@ -129,6 +137,11 @@ const columns: ColumnShape[] = [
   integer('RESERVATION', 'package_id', true), nvarchar('RESERVATION', 'booking_reference', 30, true),
   decimal('RESERVATION', 'package_unit_price', true), decimal('RESERVATION', 'subtotal', true),
   decimal('RESERVATION', 'discount_amount'), decimal('RESERVATION', 'total_amount', true),
+  nvarchar('RESERVATION', 'package_name_snapshot', 150, true),
+  column('RESERVATION', 'package_pricing_type', 'varchar', 20, 0, 0, true),
+  decimal('RESERVATION', 'package_base_price', true), integer('RESERVATION', 'package_included_guests', true),
+  decimal('RESERVATION', 'package_excess_guest_price', true), decimal('RESERVATION', 'package_total', true),
+  integer('RESERVATION', 'accepted_quote_id', true),
 
   integer('PAYMENT', 'payment_id', false, true), integer('PAYMENT', 'reservation_id'),
   integer('PAYMENT', 'admin_id', true), decimal('PAYMENT', 'amount_due'), decimal('PAYMENT', 'amount_paid'),
@@ -167,7 +180,7 @@ const columns: ColumnShape[] = [
   integer('INVOICE', 'issued_by'), datetime2('INVOICE', 'created_at'),
 
   bigint('INVOICE_ITEM', 'invoice_item_id', false, true), integer('INVOICE_ITEM', 'invoice_id'),
-  nvarchar('INVOICE_ITEM', 'description', 250), integer('INVOICE_ITEM', 'quantity'),
+  nvarchar('INVOICE_ITEM', 'description', 250), decimal('INVOICE_ITEM', 'quantity'),
   decimal('INVOICE_ITEM', 'unit_price'), decimal('INVOICE_ITEM', 'line_total'),
   nvarchar('INVOICE_ITEM', 'item_type', 30),
 
@@ -209,6 +222,27 @@ const columns: ColumnShape[] = [
   integer('PASSWORD_RESET_TOKEN', 'customer_id', true), integer('PASSWORD_RESET_TOKEN', 'admin_id', true),
   datetime2('PASSWORD_RESET_TOKEN', 'expires_at'), datetime2('PASSWORD_RESET_TOKEN', 'used_at', true),
   datetime2('PASSWORD_RESET_TOKEN', 'invalidated_at', true), datetime2('PASSWORD_RESET_TOKEN', 'created_at'),
+
+  integer('CUSTOM_EVENT_REQUEST', 'request_id', false, true), integer('CUSTOM_EVENT_REQUEST', 'reservation_id'),
+  integer('CUSTOM_EVENT_REQUEST', 'source_package_id', true), decimal('CUSTOM_EVENT_REQUEST', 'target_budget', true),
+  nvarchar('CUSTOM_EVENT_REQUEST', 'menu_preferences', 2000, true), nvarchar('CUSTOM_EVENT_REQUEST', 'dietary_notes', 2000, true),
+  nvarchar('CUSTOM_EVENT_REQUEST', 'setup_preferences', 2000, true), nvarchar('CUSTOM_EVENT_REQUEST', 'requested_services', 2000, true),
+  nvarchar('CUSTOM_EVENT_REQUEST', 'special_requests', 2000, true), column('CUSTOM_EVENT_REQUEST', 'status', 'varchar', 30, 0, 0, false),
+  nvarchar('CUSTOM_EVENT_REQUEST', 'clarification_reason', 1000, true), nvarchar('CUSTOM_EVENT_REQUEST', 'rejection_reason', 1000, true),
+  datetime2('CUSTOM_EVENT_REQUEST', 'created_at'), datetime2('CUSTOM_EVENT_REQUEST', 'updated_at'),
+
+  integer('CUSTOM_QUOTE', 'quote_id', false, true), integer('CUSTOM_QUOTE', 'request_id'),
+  integer('CUSTOM_QUOTE', 'version'), decimal('CUSTOM_QUOTE', 'subtotal'), decimal('CUSTOM_QUOTE', 'discount_amount'),
+  decimal('CUSTOM_QUOTE', 'total_amount'), decimal('CUSTOM_QUOTE', 'required_down_payment'),
+  column('CUSTOM_QUOTE', 'valid_until', 'date', 3, 10, 0, false), nvarchar('CUSTOM_QUOTE', 'terms', 4000, true),
+  column('CUSTOM_QUOTE', 'status', 'varchar', 20, 0, 0, false), integer('CUSTOM_QUOTE', 'sent_by', true),
+  datetime2('CUSTOM_QUOTE', 'sent_at', true), datetime2('CUSTOM_QUOTE', 'accepted_at', true),
+  datetime2('CUSTOM_QUOTE', 'declined_at', true), datetime2('CUSTOM_QUOTE', 'created_at'),
+
+  bigint('CUSTOM_QUOTE_ITEM', 'quote_item_id', false, true), integer('CUSTOM_QUOTE_ITEM', 'quote_id'),
+  integer('CUSTOM_QUOTE_ITEM', 'sort_order'), decimal('CUSTOM_QUOTE_ITEM', 'quantity'),
+  decimal('CUSTOM_QUOTE_ITEM', 'unit_price'), decimal('CUSTOM_QUOTE_ITEM', 'line_total'),
+  nvarchar('CUSTOM_QUOTE_ITEM', 'description', 250),
 ];
 
 function constraints(table: string, type: ConstraintShape['type'], names: string[]): ConstraintShape[] {
@@ -219,19 +253,20 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('SCHEMA_MIGRATION', 'PK', ['PK_SCHEMA_MIGRATION']),
   ...constraints('SCHEMA_MIGRATION', 'D', ['DF_SCHEMA_MIGRATION_applied']),
   ...constraints('CUSTOMER', 'PK', ['PK_CUSTOMER']), ...constraints('CUSTOMER', 'UQ', ['UQ_CUSTOMER_email']),
-  ...constraints('CUSTOMER', 'D', ['DF_CUSTOMER_created_at']),
+  ...constraints('CUSTOMER', 'D', ['DF_CUSTOMER_created_at', 'DF_CUSTOMER_status']),
+  ...constraints('CUSTOMER', 'C', ['CK_CUSTOMER_status']),
   ...constraints('ADMIN', 'PK', ['PK_ADMIN']), ...constraints('ADMIN', 'UQ', ['UQ_ADMIN_username', 'UQ_ADMIN_email']),
   ...constraints('ADMIN', 'D', ['DF_ADMIN_status']), ...constraints('ADMIN', 'C', ['CK_ADMIN_status']),
   ...constraints('EVENT', 'PK', ['PK_EVENT']), ...constraints('EVENT', 'UQ', ['UQ_EVENT_event_type']),
   ...constraints('PACKAGE', 'PK', ['PK_PACKAGE']), ...constraints('PACKAGE', 'UQ', ['UQ_PACKAGE_event_name']),
-  ...constraints('PACKAGE', 'F', ['FK_PACKAGE_EVENT']), ...constraints('PACKAGE', 'D', ['DF_PACKAGE_is_active']),
-  ...constraints('PACKAGE', 'C', ['CK_PACKAGE_price_per_head', 'CK_PACKAGE_min_guest', 'CK_PACKAGE_max_guest', 'CK_PACKAGE_prices_guests']),
+  ...constraints('PACKAGE', 'F', ['FK_PACKAGE_EVENT']), ...constraints('PACKAGE', 'D', ['DF_PACKAGE_is_active', 'DF_PACKAGE_pricing_type']),
+  ...constraints('PACKAGE', 'C', ['CK_PACKAGE_pricing_model', 'CK_PACKAGE_guest_limits']),
   ...constraints('MENU_ITEM', 'PK', ['PK_MENU_ITEM']), ...constraints('MENU_ITEM', 'UQ', ['UQ_MENU_ITEM_package_item']),
   ...constraints('MENU_ITEM', 'F', ['FK_MENU_ITEM_PACKAGE']),
   ...constraints('RESERVATION', 'PK', ['PK_RESERVATION']),
-  ...constraints('RESERVATION', 'F', ['FK_RESERVATION_CUSTOMER', 'FK_RESERVATION_EVENT', 'FK_RESERVATION_PACKAGE']),
+  ...constraints('RESERVATION', 'F', ['FK_RESERVATION_CUSTOMER', 'FK_RESERVATION_EVENT', 'FK_RESERVATION_PACKAGE', 'FK_RESERVATION_ACCEPTED_QUOTE']),
   ...constraints('RESERVATION', 'D', ['DF_RESERVATION_status', 'DF_RESERVATION_created_at', 'DF_RESERVATION_discount']),
-  ...constraints('RESERVATION', 'C', ['CK_RESERVATION_guest_count', 'CK_RESERVATION_status', 'CK_RESERVATION_financials']),
+  ...constraints('RESERVATION', 'C', ['CK_RESERVATION_guest_count', 'CK_RESERVATION_status', 'CK_RESERVATION_financials', 'CK_RESERVATION_package_pricing_snapshot']),
   ...constraints('PAYMENT', 'PK', ['PK_PAYMENT']), ...constraints('PAYMENT', 'UQ', ['UQ_PAYMENT_reservation']),
   ...constraints('PAYMENT', 'F', ['FK_PAYMENT_RESERVATION', 'FK_PAYMENT_ADMIN']),
   ...constraints('PAYMENT', 'D', ['DF_PAYMENT_amount_paid', 'DF_PAYMENT_status']),
@@ -277,6 +312,20 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('PASSWORD_RESET_TOKEN', 'F', ['FK_PASSWORD_RESET_TOKEN_CUSTOMER', 'FK_PASSWORD_RESET_TOKEN_ADMIN']),
   ...constraints('PASSWORD_RESET_TOKEN', 'D', ['DF_PASSWORD_RESET_TOKEN_created']),
   ...constraints('PASSWORD_RESET_TOKEN', 'C', ['CK_PASSWORD_RESET_TOKEN_principal']),
+  ...constraints('CUSTOM_EVENT_REQUEST', 'PK', ['PK_CUSTOM_EVENT_REQUEST']),
+  ...constraints('CUSTOM_EVENT_REQUEST', 'UQ', ['UQ_CUSTOM_EVENT_REQUEST_reservation']),
+  ...constraints('CUSTOM_EVENT_REQUEST', 'F', ['FK_CUSTOM_EVENT_REQUEST_RESERVATION', 'FK_CUSTOM_EVENT_REQUEST_SOURCE_PACKAGE']),
+  ...constraints('CUSTOM_EVENT_REQUEST', 'D', ['DF_CUSTOM_EVENT_REQUEST_status', 'DF_CUSTOM_EVENT_REQUEST_created', 'DF_CUSTOM_EVENT_REQUEST_updated']),
+  ...constraints('CUSTOM_EVENT_REQUEST', 'C', ['CK_CUSTOM_EVENT_REQUEST_budget', 'CK_CUSTOM_EVENT_REQUEST_status']),
+  ...constraints('CUSTOM_QUOTE', 'PK', ['PK_CUSTOM_QUOTE']),
+  ...constraints('CUSTOM_QUOTE', 'UQ', ['UQ_CUSTOM_QUOTE_request_version']),
+  ...constraints('CUSTOM_QUOTE', 'F', ['FK_CUSTOM_QUOTE_REQUEST', 'FK_CUSTOM_QUOTE_SENDER']),
+  ...constraints('CUSTOM_QUOTE', 'D', ['DF_CUSTOM_QUOTE_discount', 'DF_CUSTOM_QUOTE_status', 'DF_CUSTOM_QUOTE_created']),
+  ...constraints('CUSTOM_QUOTE', 'C', ['CK_CUSTOM_QUOTE_version', 'CK_CUSTOM_QUOTE_amounts', 'CK_CUSTOM_QUOTE_status']),
+  ...constraints('CUSTOM_QUOTE_ITEM', 'PK', ['PK_CUSTOM_QUOTE_ITEM']),
+  ...constraints('CUSTOM_QUOTE_ITEM', 'UQ', ['UQ_CUSTOM_QUOTE_ITEM_order']),
+  ...constraints('CUSTOM_QUOTE_ITEM', 'F', ['FK_CUSTOM_QUOTE_ITEM_QUOTE']),
+  ...constraints('CUSTOM_QUOTE_ITEM', 'C', ['CK_CUSTOM_QUOTE_ITEM_values']),
 ];
 
 function index(table: string, name: string, keys: string[], includes: string[] = [], unique = false, filter: string | null = null): IndexShape {
@@ -284,7 +333,9 @@ function index(table: string, name: string, keys: string[], includes: string[] =
 }
 
 const indexes: IndexShape[] = [
+  index('CUSTOMER', 'IX_CUSTOMER_status', ['status']),
   index('PACKAGE', 'IX_PACKAGE_event_id', ['event_id']),
+  index('PACKAGE', 'IX_PACKAGE_active_event', ['is_active', 'event_id'], ['pricing_type', 'price_per_head', 'base_price', 'included_guests', 'excess_guest_price', 'min_guest', 'max_guest']),
   index('MENU_ITEM', 'IX_MENU_ITEM_package_id', ['package_id']),
   index('RESERVATION', 'IX_RESERVATION_customer_id', ['customer_id']),
   index('RESERVATION', 'IX_RESERVATION_event_id', ['event_id']),
@@ -313,6 +364,9 @@ const indexes: IndexShape[] = [
   index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_customer_created', ['customer_id', 'created_at'], ['expires_at', 'used_at', 'invalidated_at'], false, 'customer_id is not null'),
   index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_admin_created', ['admin_id', 'created_at'], ['expires_at', 'used_at', 'invalidated_at'], false, 'admin_id is not null'),
   index('PASSWORD_RESET_TOKEN', 'IX_PASSWORD_RESET_TOKEN_expiry', ['expires_at'], ['used_at', 'invalidated_at']),
+  index('CUSTOM_EVENT_REQUEST', 'IX_CUSTOM_EVENT_REQUEST_status_created', ['status', 'created_at'], ['reservation_id', 'source_package_id', 'target_budget', 'updated_at']),
+  index('CUSTOM_QUOTE', 'IX_CUSTOM_QUOTE_request_status', ['request_id', 'status'], ['version', 'total_amount', 'required_down_payment', 'valid_until', 'sent_at', 'created_at']),
+  index('CUSTOM_QUOTE_ITEM', 'IX_CUSTOM_QUOTE_ITEM_quote_order', ['quote_id', 'sort_order'], ['description', 'quantity', 'unit_price', 'line_total']),
 ];
 
 export const EXPECTED_SCHEMA_CONTRACT: Omit<SchemaSnapshot, 'migrations'> = {

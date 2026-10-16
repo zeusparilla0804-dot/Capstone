@@ -1,6 +1,6 @@
-<app-admin-shell title="Bookings" description="Review customer reservations and manage their status.">
+<app-admin-shell title="Reservations" description="Review customer reservation requests and manage their status.">
   <form class="admin-toolbar" (ngSubmit)="load(1)">
-    <input name="search" [(ngModel)]="search" placeholder="Search reference or customer" aria-label="Search bookings" />
+    <input name="search" [(ngModel)]="search" placeholder="Search reference or customer" aria-label="Search reservations" />
     <select name="status" [(ngModel)]="status" aria-label="Filter status">
       <option value="">All statuses</option>
       @for (item of statuses; track item) { <option [value]="item">{{ item.replaceAll('_', ' ') }}</option> }
@@ -13,40 +13,45 @@
   @if (message()) { <p class="admin-feedback" role="status">{{ message() }}</p> }
   @if (actionError()) { <p class="admin-action-error" role="alert">{{ actionError() }}</p> }
   @if (loading()) {
-    <p class="data-state">Loading bookings...</p>
+    <p class="data-state">Loading reservations...</p>
   } @else if (error()) {
     <p class="data-state data-state--error">{{ error() }}</p>
   } @else if (data(); as result) {
-    <section class="admin-panel">
+    <section class="admin-panel admin-record-table bookings-records">
       @if (result.items.length) {
         <div class="table-scroll">
-          <table class="admin-table">
-            <thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Package</th><th>Total</th><th>Status</th><th>Review</th><th>Update</th><th>Invoice</th></tr></thead>
+          <table class="admin-table admin-table--bookings">
+            <thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date</th><th>Guests</th><th>Package</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               @for (item of result.items; track item.id) {
                 <tr>
-                  <td>{{ item.reference }}</td><td>{{ item.customerName }}</td><td>{{ item.eventType }}</td>
-                  <td>{{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</td>
-                  <td><span>{{ item.guestCount }}</span><span class="capacity-meta">{{ item.capacity.activeBookingCount }} / {{ item.capacity.capacityLimit }} active &middot; {{ capacityStatusLabel(item) }}</span></td><td>{{ item.packageName || 'Not assigned' }}</td>
-                  <td class="is-number">{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
-                  <td><app-status-badge [status]="item.status" /></td>
-                  <td><a class="btn btn-tertiary" [routerLink]="['/admin/bookings', item.id]">View details</a></td>
-                  <td>
-                    @if (actionsFor(item.status).length) {
-                      <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
-                        <option value="">Choose action</option>
-                        @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ actionLabel(item, option) }}</option> }
-                      </select>
-                    } @else { <span class="admin-status-unavailable">No actions</span> }
-                  </td>
-                  <td>
-                    @if (item.invoiceId) { <a class="btn btn-tertiary" [routerLink]="['/admin/invoices', item.invoiceId]">View</a> }
-                    @else { <button class="btn btn-tertiary" type="button" (click)="issue(item)">Issue</button> }
+                  <td data-label="Reference" data-card-wide="true"><strong>{{ item.reference }}</strong></td>
+                  <td data-label="Customer" data-card-wide="true">{{ item.customerName }}</td>
+                  <td data-label="Event">{{ item.eventType }}</td>
+                  <td data-label="Date">{{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</td>
+                  <td data-label="Guests"><span>{{ item.guestCount }}</span><span class="capacity-meta">{{ item.capacity.activeBookingCount }} / {{ item.capacity.capacityLimit }} active &middot; {{ capacityStatusLabel(item) }}</span></td>
+                  <td data-label="Package" data-card-wide="true">{{ item.packageName || 'Not assigned' }}</td>
+                  <td data-label="Total" class="is-number">{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
+                  <td data-label="Status"><app-status-badge [status]="item.status" /></td>
+                  <td data-label="Actions" data-card-wide="true">
+                    <div class="booking-row-actions">
+                      <div class="booking-row-actions__links">
+                        <a class="btn btn-tertiary" [routerLink]="['/admin/bookings', item.id]">View details</a>
+                        @if (item.invoiceId) { <a class="btn btn-tertiary" [routerLink]="['/admin/invoices', item.invoiceId]">Invoice</a> }
+                        @else { <button class="btn btn-tertiary" type="button" (click)="issue(item)">Issue invoice</button> }
+                      </div>
+                      @if (actionsFor(item.status).length) {
+                        <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
+                          <option value="">Choose action</option>
+                          @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ actionLabel(item, option) }}</option> }
+                        </select>
+                      } @else { <span class="admin-status-unavailable">No status actions</span> }
+                    </div>
                   </td>
                 </tr>
                 @if (pendingAction(); as action) {
                   @if (action.booking.id === item.id) {
-                    <tr class="admin-status-reason-row"><td colspan="11">
+                    <tr class="admin-status-reason-row"><td colspan="9">
                       <div class="admin-status-reason">
                         @if (action.capacityConfirmation) {
                           <div><strong>Confirm accommodation for {{ item.guestCount }} guests</strong><p>Approving confirms that LA Chef can serve this event on {{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}.</p></div>
@@ -70,7 +75,7 @@
           <span>Page {{ result.page }} of {{ result.totalPages }}</span>
           <div><button class="btn btn-secondary btn-sm" type="button" [disabled]="result.page <= 1" (click)="load(result.page - 1)">Previous</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="result.page >= result.totalPages" (click)="load(result.page + 1)">Next</button></div>
         </footer>
-      } @else { <p class="data-state">No bookings found.</p> }
+      } @else { <p class="data-state">No reservations found.</p> }
     </section>
   }
 </app-admin-shell>

@@ -62,3 +62,10 @@ test('password recovery has dedicated forgot and reset limits without consuming 
   assert.deepEqual(resetStatuses, [...Array.from({ length: 10 }, () => 200), 429]);
   assert.equal((await fetch(`${origin}/api/auth/me`)).status, 401);
 });
+
+test('all-device logout routes require the matching authenticated account type', async () => {
+  const customer = await fetch(`${origin}/api/auth/logout-all`, { method: 'POST' });
+  const administrator = await fetch(`${origin}/api/auth/admin/logout-all`, { method: 'POST' });
+  assert.equal(customer.status, 401);
+  assert.equal(administrator.status, 401);
+});

@@ -1,4 +1,5 @@
 import { routes } from './app.routes';
+import { adminGuard } from './core/guards/admin.guard';
 
 describe('customer account routes', () => {
   it('provides guarded destinations for profile and billing navigation', () => {
@@ -23,5 +24,13 @@ describe('customer account routes', () => {
       expect(route?.data).toEqual(data);
       expect(Object.isFrozen(route?.data)).toBe(true);
     }
+  });
+
+  it('provides an admin-guarded lazy reports workspace', () => {
+    const route = routes.find(item => item.path === 'admin/reports');
+    expect(route).toBeDefined();
+    expect(route?.canActivate).toEqual([adminGuard]);
+    expect(route?.loadComponent).toBeTypeOf('function');
+    expect(route?.title).toBe('Reports | LA Chef Admin');
   });
 });

@@ -18,20 +18,20 @@ interface BookingAction {
 
 const actions: Record<AdminBookingStatus, readonly BookingAction[]> = {
   PENDING: [
-    { status: 'APPROVED', label: 'Approve booking', tone: 'primary' },
-    { status: 'REJECTED', label: 'Reject booking', tone: 'danger', reasonRequired: true },
-    { status: 'CANCELLED', label: 'Cancel booking', tone: 'secondary', reasonRequired: true },
+    { status: 'APPROVED', label: 'Approve reservation', tone: 'primary' },
+    { status: 'REJECTED', label: 'Reject reservation', tone: 'danger', reasonRequired: true },
+    { status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true },
   ],
   APPROVED: [
     { status: 'AWAITING_PAYMENT', label: 'Request payment', tone: 'primary' },
-    { status: 'CANCELLED', label: 'Cancel booking', tone: 'secondary', reasonRequired: true },
+    { status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true },
   ],
-  AWAITING_PAYMENT: [{ status: 'CANCELLED', label: 'Cancel booking', tone: 'secondary', reasonRequired: true }],
+  AWAITING_PAYMENT: [{ status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true }],
   PAYMENT_SUBMITTED: [],
-  PAYMENT_VERIFIED: [{ status: 'CONFIRMED', label: 'Confirm booking', tone: 'primary' }],
+  PAYMENT_VERIFIED: [{ status: 'CONFIRMED', label: 'Confirm reservation', tone: 'primary' }],
   CONFIRMED: [
     { status: 'COMPLETED', label: 'Mark completed', tone: 'primary' },
-    { status: 'CANCELLED', label: 'Cancel booking', tone: 'secondary', reasonRequired: true },
+    { status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true },
   ],
   COMPLETED: [],
   REJECTED: [],
@@ -78,14 +78,14 @@ export class AdminBookingDetailPage {
   protected load(): void {
     if (!Number.isSafeInteger(this.bookingId) || this.bookingId < 1) {
       this.loading.set(false);
-      this.error.set('Booking not found.');
+      this.error.set('Reservation not found.');
       return;
     }
     this.loading.set(true);
     this.error.set('');
     this.api.booking(this.bookingId).pipe(finalize(() => this.loading.set(false))).subscribe({
       next: (response) => this.booking.set(response.data),
-      error: () => this.error.set('Unable to load this booking.'),
+      error: () => this.error.set('Unable to load this reservation.'),
     });
   }
 
@@ -116,7 +116,7 @@ export class AdminBookingDetailPage {
       .pipe(finalize(() => this.mutationPending.set(false)))
       .subscribe({
         next: () => {
-          this.feedback.set('Booking status updated.');
+          this.feedback.set('Reservation status updated.');
           this.pendingAction.set(null);
           this.actionReason = '';
           this.load();
@@ -125,11 +125,11 @@ export class AdminBookingDetailPage {
           if (error?.status === 409) {
             this.actionError.set(error?.error?.code === 'CAPACITY_CHANGED' && error?.error?.message
               ? error.error.message
-              : 'This booking changed in another session. The latest details are shown.');
+              : 'This reservation changed in another session. The latest details are shown.');
             this.pendingAction.set(null);
             this.load();
           } else {
-            this.actionError.set(error?.error?.message || 'Unable to update this booking.');
+            this.actionError.set(error?.error?.message || 'Unable to update this reservation.');
           }
         },
       });

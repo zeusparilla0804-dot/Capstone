@@ -86,4 +86,16 @@ describe('AuthService', () => {
       { status: 400, statusText: 'Bad Request' });
     await expect(result).rejects.toMatchObject({ status: 400 });
   });
+
+  it('signs out every customer session through the protected endpoint', async () => {
+    const logoutAll = (service as unknown as { logoutAll?: () => Promise<void> }).logoutAll;
+    expect(typeof logoutAll).toBe('function');
+    const result = logoutAll!.call(service);
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/logout-all`);
+    expect(request.request.method).toBe('POST');
+    expect(request.request.withCredentials).toBe(true);
+    request.flush(null);
+    await expect(result).resolves.toBeUndefined();
+    expect(service.user()).toBeNull();
+  });
 });
