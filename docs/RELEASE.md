@@ -2,8 +2,8 @@
 
 ## Release
 
-- Identifier: `v1.0.0-rc.1`
-- Status: verified local release commit and tag created; not pushed or deployed; not ready for production deployment
+- Baseline identifier: `v1.0.0-rc.1` at local commit `218a72f`
+- Status: post-tag hardening is verified in the working tree and requires a new release commit/tag; nothing is pushed or deployed; not ready for production deployment
 - Runtime: Angular 22 frontend, Node.js/Express backend, Microsoft SQL Server 2022
 
 ## Included
@@ -14,8 +14,9 @@
 - Customer account activation/deactivation with transactional session revocation and preserved business history
 - Administrator reservation/payment reports with responsive views, CSV export, and print output
 - Configurable public Messenger contact action hidden from administrator routes
+- Responsive About and Contact pages using confirmed LA Chef business and contact details
 - Tracked empty-database schema migrations `000`-`006` and `008`-`015`
-- Container, reverse-proxy, CI, backup, restore, and smoke-test templates
+- Hardened Nginx headers/caching plus guarded least-privilege provisioning, read-only runtime permission verification, backup, restore, CI, and smoke-test templates
 
 ## Validation
 
@@ -46,6 +47,25 @@ Batch 2 approved-scope verification completed on 2026-10-16 under Node.js `22.22
 - Scoped secret and product-scope scans returned no findings. The Messenger URL is intentional public configuration, not a credential.
 - Fresh database: migrations `000`-`006` and `008`-`015` applied in order on a generated allow-listed database, the migration runner completed a second idempotent pass, schema/data contracts and all four configured SQL journeys passed, the baseline rerun preserved business-row counts, and the disposable database was removed.
 
+Post-tag deployment and public-content hardening verification completed on 2026-10-17 under Node.js `22.22.3`:
+
+- Backend: production TypeScript build passed; 369 tests executed, 367 passed, and 2 expected Windows permission tests skipped.
+- Frontend: production build passed without component-style budget warnings; all 182 Angular tests passed.
+- Browser E2E: all 19 Playwright tests passed, including About/Contact responsive content, the Contact-page Messenger overlap regression, package discovery, booking confirmation, and the full customer/admin operation journeys.
+- Visual QA: About, Contact, and booking-success captures were inspected at `390` and `1440` pixels; the duplicate floating Messenger action is suppressed on the dedicated Contact route and the booking-success actions remain aligned without horizontal overflow.
+- Staging smoke checks require JSON API contracts in addition to HTTP status codes, preventing an Angular/Nginx SPA fallback page from being mistaken for a healthy backend. The regression test and the complete same-origin smoke run pass through the local Docker/Nginx stack at `http://127.0.0.1:8080`; a real HTTPS-edge run remains required.
+- Docker validation: frontend and backend images build, both containers become healthy, `nginx -t` passes, the API connects to SQL Server, the backend runs as the non-root `node` user, and the private proof volume is writable. Live responses include the expected security headers, no-store app-shell policy, immutable hashed-asset caching, JSON API content type, and dotfile denial.
+- Production dependency audits report zero known vulnerabilities after updating `mssql` to `12.7.9` and its transitive `tedious` driver to `20.3.7`. The isolated SQL/proof-storage restore and public HTTPS-edge checks remain staging gates.
+
+Batch 4 non-destructive quotation retirement verification completed on 2026-10-18 under Node.js `22.22.3`:
+
+- Backend: production TypeScript build passed; 356 tests executed, 354 passed, and 2 expected Windows permission tests skipped.
+- Frontend: production build passed without budget warnings; all 178 Angular tests passed across 42 files.
+- Browser E2E: all 19 Playwright journeys passed, including the retired quotation entry redirect, package-to-reservation flow, manual billing/proof review, administrator operations, and release-width responsive checks.
+- Every authenticated legacy customer and administrator quotation endpoint returns `410 CUSTOM_QUOTATION_RETIRED`; `/custom-event` still redirects to package selection, while quotation detail and administration workspaces are no longer bundled.
+- Queued legacy quotation email messages fail closed with `CUSTOM_QUOTATION_RETIRED` and cannot deliver links to removed pages.
+- Migration `013`, schema-contract checks, and historical quotation rows remain intact. No destructive database operation was introduced.
+
 ## Configuration
 
 Copy the appropriate committed `.env.*.example` file to a secret-managed runtime environment. Never commit populated `.env` files. Production and staging credentials must be supplied by the deployment platform.
@@ -57,14 +77,16 @@ Copy the appropriate committed `.env.*.example` file to a secret-managed runtime
 - Client catalog data is applied separately through the default-safe `db:catalog:sync` command; migrations remain free of package, add-on, account, and transaction seed data.
 - Payments are manual and proof-based; no live card or GCash gateway is included.
 - A standard reservation requires cumulative verified payments equal to 50% of its server-authoritative total before it can enter `PAYMENT_VERIFIED`. One cent below the threshold remains `AWAITING_PAYMENT`.
-- New custom-quotation creation is retired: authenticated `POST /api/custom-events` returns `410 CUSTOM_QUOTATION_RETIRED`, and `/custom-event` redirects to package selection. Existing quotation records, migrations, and authenticated history routes remain unchanged pending Batch 4 classification.
+- The custom-quotation runtime is retired: authenticated legacy customer and administrator endpoints return `410 CUSTOM_QUOTATION_RETIRED`, and `/custom-event` redirects to package selection. Historical quotation records and migration/schema compatibility remain intact, but no quotation workspace or command endpoint remains active.
 - Payment-proof storage must be durable and backed up with its matching SQL metadata.
-- Container execution requires Docker and must be validated on a Docker-capable host.
+- Local container execution is verified with Docker Desktop/WSL2; each deployment host must still repeat image, health, header, and smoke validation in its own environment.
+- The local `v1.0.0-rc.1` tag predates the 2026-10-17 hardening changes and must not be published as though it contains them.
 - No production deployment is part of this release preparation.
 - Live SMTP delivery remains a staging gate; local tests prove outbox safety and rendering boundaries, not real mailbox receipt.
 - Recovery rate limits are process-local and require a shared proxy/store before multi-instance API scaling.
 
 ## Remaining Product Batches
 
-- Batch 3: registration and upcoming-event notifications plus live SMTP staging verification.
-- Batch 4: classify retained quotation data/code, obtain explicit approval before any destructive retirement, and repeat release verification.
+- Batch 3 application work is complete: registration confirmation intents and one upcoming-event reminder per confirmed booking are implemented and SQL-tested. Live SMTP staging verification remains open.
+- Batch 4 application cleanup is complete through non-destructive runtime retirement. No database table or historical quotation row was deleted.
+- Remaining work is operational: staging SMTP, least-privilege SQL proof, coordinated SQL/private-proof restore rehearsal, real HTTPS-edge validation, and final device/accessibility QA.

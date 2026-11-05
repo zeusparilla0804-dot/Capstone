@@ -48,68 +48,73 @@ export async function createInvoice(reservationId: number, adminId: number): Pro
   const transaction = new sql.Transaction(pool);
   await transaction.begin();
   try {
-    const source = await new sql.Request(transaction)
-      .input('id', sql.Int, reservationId)
-      .query(`SELECT r.reservation_id,r.status,r.guest_count,r.package_name_snapshot,
-          r.package_pricing_type,r.package_unit_price,r.package_base_price,r.package_included_guests,
-          r.package_excess_guest_price,r.package_total,r.subtotal,r.discount_amount,r.total_amount,p.package_name
-        FROM dbo.RESERVATION r WITH(UPDLOCK,HOLDLOCK)
-        LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id
-        WHERE r.reservation_id=@id`);
-    const row = source.recordset[0];
-    if (!row) {
-      await transaction.rollback();
-      return undefined;
-    }
-    if (!['APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(String(row.status).toUpperCase())) {
-      throw new Error('INVOICE_STATUS');
-    }
-
-    const existing = await new sql.Request(transaction)
-      .input('id', sql.Int, reservationId)
-      .query('SELECT invoice_id FROM dbo.INVOICE WHERE reservation_id=@id');
-    if (existing.recordset[0]) {
-      await transaction.rollback();
-      return Number(existing.recordset[0].invoice_id);
-    }
-
-    const inserted = await new sql.Request(transaction)
-      .input('reservationId', sql.Int, reservationId)
-      .input('adminId', sql.Int, adminId)
-      .input('subtotal', sql.Decimal(12,2), row.subtotal)
-      .input('discount', sql.Decimal(12,2), row.discount_amount)
-      .input('total', sql.Decimal(12,2), row.total_amount)
-      .query(`DECLARE @sequence bigint=NEXT VALUE FOR dbo.INVOICE_NUMBER_SEQUENCE;
-        DECLARE @number nvarchar(30)=CONCAT('INV-',YEAR(SYSDATETIME()),'-',RIGHT(CONCAT('000000',@sequence),6));
-        INSERT dbo.INVOICE(reservation_id,invoice_number,due_at,status,subtotal,discount_amount,total_amount,issued_by)
-        OUTPUT INSERTED.invoice_id
-        VALUES(@reservationId,@number,DATEADD(day,7,SYSDATETIME()),'ISSUED',@subtotal,@discount,@total,@adminId)`);
-    const invoiceId = Number(inserted.recordset[0].invoice_id);
-    const packageLine = buildInvoicePackageLine(row);
-    await new sql.Request(transaction)
-      .input('invoiceId', sql.Int, invoiceId)
-      .input('description', sql.NVarChar(250), packageLine.description)
-      .input('quantity', sql.Int, packageLine.quantity)
-      .input('unitPrice', sql.Decimal(12,2), packageLine.unitPrice)
-      .input('total', sql.Decimal(12,2), packageLine.total)
-      .query(`INSERT dbo.INVOICE_ITEM(invoice_id,description,quantity,unit_price,line_total,item_type)
-        VALUES(@invoiceId,@description,@quantity,@unitPrice,@total,'PACKAGE')`);
-    await new sql.Request(transaction)
-      .input('invoiceId', sql.Int, invoiceId)
-      .input('reservationId', sql.Int, reservationId)
-      .query(`INSERT dbo.INVOICE_ITEM(invoice_id,description,quantity,unit_price,line_total,item_type)
-        SELECT @invoiceId,a.add_on_name,1,ra.unit_price,ra.unit_price,'ADD_ON'
-        FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id
-        WHERE ra.reservation_id=@reservationId`);
-    const request = new sql.Request(transaction);
-    await writeAdminAudit({ adminId, action: 'INVOICE_ISSUED', entityType: 'INVOICE', entityId: invoiceId, newValues: { bookingId: reservationId } }, request);
-    await queueBookingNotification(reservationId, 'INVOICE_ISSUED', request, {}, 'INVOICE', String(invoiceId));
+    const invoiceId = await createInvoiceWithRequest(reservationId, adminId, new sql.Request(transaction));
     await transaction.commit();
     return invoiceId;
   } catch (error) {
-    await transaction.rollback();
+    try { await transaction.rollback(); } catch { /* Preserve the original failure. */ }
     throw error;
   }
+}
+
+/** The caller owns the transaction; existing invoices do not create another notification. */
+export async function createInvoiceWithRequest(reservationId: number, adminId: number, request: sql.Request): Promise<number | undefined> {
+  const source = await request
+    .replaceInput('id', sql.Int, reservationId)
+    .query(`SELECT r.reservation_id,r.status,r.guest_count,r.package_name_snapshot,
+        r.package_pricing_type,r.package_unit_price,r.package_base_price,r.package_included_guests,
+        r.package_excess_guest_price,r.package_total,r.subtotal,r.discount_amount,r.total_amount,
+        CONVERT(varchar(10),r.event_date,23) event_date,p.package_name
+      FROM dbo.RESERVATION r WITH(UPDLOCK,HOLDLOCK)
+      LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id
+      WHERE r.reservation_id=@id`);
+  const row = source.recordset[0];
+  if (!row) {
+    return undefined;
+  }
+  if (!['APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(String(row.status).toUpperCase())) {
+    throw new Error('INVOICE_STATUS');
+  }
+
+  const existing = await request
+    .replaceInput('id', sql.Int, reservationId)
+    .query('SELECT invoice_id FROM dbo.INVOICE WHERE reservation_id=@id');
+  if (existing.recordset[0]) {
+    return Number(existing.recordset[0].invoice_id);
+  }
+
+  const inserted = await request
+    .replaceInput('reservationId', sql.Int, reservationId)
+    .replaceInput('adminId', sql.Int, adminId)
+    .replaceInput('subtotal', sql.Decimal(12,2), row.subtotal)
+    .replaceInput('discount', sql.Decimal(12,2), row.discount_amount)
+    .replaceInput('total', sql.Decimal(12,2), row.total_amount)
+    .replaceInput('dueDate', sql.VarChar(10), row.event_date)
+    .query(`DECLARE @sequence bigint=NEXT VALUE FOR dbo.INVOICE_NUMBER_SEQUENCE;
+      DECLARE @number nvarchar(30)=CONCAT('INV-',YEAR(SYSDATETIME()),'-',RIGHT(CONCAT('000000',@sequence),6));
+      INSERT dbo.INVOICE(reservation_id,invoice_number,due_at,status,subtotal,discount_amount,total_amount,issued_by)
+      OUTPUT INSERTED.invoice_id
+      VALUES(@reservationId,@number,CAST(@dueDate AS date),'ISSUED',@subtotal,@discount,@total,@adminId)`);
+  const invoiceId = Number(inserted.recordset[0].invoice_id);
+  const packageLine = buildInvoicePackageLine(row);
+  await request
+    .replaceInput('invoiceId', sql.Int, invoiceId)
+    .replaceInput('description', sql.NVarChar(250), packageLine.description)
+    .replaceInput('quantity', sql.Int, packageLine.quantity)
+    .replaceInput('unitPrice', sql.Decimal(12,2), packageLine.unitPrice)
+    .replaceInput('total', sql.Decimal(12,2), packageLine.total)
+    .query(`INSERT dbo.INVOICE_ITEM(invoice_id,description,quantity,unit_price,line_total,item_type)
+      VALUES(@invoiceId,@description,@quantity,@unitPrice,@total,'PACKAGE')`);
+  await request
+    .replaceInput('invoiceId', sql.Int, invoiceId)
+    .replaceInput('reservationId', sql.Int, reservationId)
+    .query(`INSERT dbo.INVOICE_ITEM(invoice_id,description,quantity,unit_price,line_total,item_type)
+      SELECT @invoiceId,a.add_on_name,ra.quantity,ra.unit_price,ra.unit_price*ra.quantity,'ADD_ON'
+      FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id
+      WHERE ra.reservation_id=@reservationId`);
+  await writeAdminAudit({ adminId, action: 'INVOICE_ISSUED', entityType: 'INVOICE', entityId: invoiceId, newValues: { bookingId: reservationId } }, request);
+  await queueBookingNotification(reservationId, 'INVOICE_ISSUED', request, {}, 'INVOICE', String(invoiceId));
+  return invoiceId;
 }
 
 export async function findInvoice(invoiceId: number, customerId?: number): Promise<InvoiceDetails | undefined> {

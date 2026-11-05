@@ -28,8 +28,8 @@
         </p>
       }
       <div class="filter-heading">
-        <p>Choose your occasion</p>
-        <span>Event type</span>
+        <p>Choose your package</p>
+        <span>Package group</span>
       </div>
       <div class="category-filters" role="tablist" aria-label="Filter packages by event category">
         @for (category of categories; track category.value) {
@@ -56,7 +56,6 @@
             [cateringPackage]="cateringPackage"
             [position]="position"
             (planPackage)="planPackage($event)"
-            (customizePackage)="customizePackage($event)"
           />
         } @empty {
           <p class="packages-empty">No published packages are available in this category yet.</p>
@@ -75,9 +74,6 @@
           Choose the closest package, enter your estimated guest count, and add menu, dietary, or
           setup requests for the LA Chef team to review.
         </p>
-        <a class="custom-event__link" routerLink="/book-event"
-          >Start a reservation <span aria-hidden="true">&rarr;</span></a
-        >
       </div>
     </div>
   </section>

@@ -7,6 +7,7 @@ import { queueNotification } from './notification.service.js';
 import type { PasswordResetNotificationQueue } from '../types/password-recovery.types.js';
 import { AppError } from '../utils/app-error.js';
 import { hashPassword } from '../utils/password.js';
+import { newPassword } from '../utils/password-policy.js';
 import {
   createPasswordResetToken,
   validatePasswordResetToken,
@@ -48,9 +49,7 @@ export function createPasswordRecoveryService(deps: PasswordRecoveryDependencies
     },
 
     async reset(principalType: PasswordResetPrincipal, token: string, password: string, confirmation: string): Promise<void> {
-      if (password.length < 12 || password.length > 128) {
-        throw new AppError(400, 'Password must be between 12 and 128 characters.');
-      }
+      password = newPassword(password);
       if (password !== confirmation) throw new AppError(400, 'Passwords do not match.');
       if (!deps.hmacSecret) throw invalidToken();
 

@@ -21,6 +21,14 @@ export function emailAddress(value: unknown): string {
   return email;
 }
 
+export function philippineMobileNumber(value: unknown): string {
+  const phone = text(value, 'Phone', { max: 30 });
+  if (!/^(?:09|\+639)[0-9]{2} ?[0-9]{3} ?[0-9]{4}$/.test(phone)) {
+    throw new AppError(400, 'Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).');
+  }
+  return phone.replaceAll(' ', '');
+}
+
 export function isoDate(value: unknown, name: string, futureOnly = false): string {
   const date = text(value, name, { max: 10 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new AppError(400, `${name} is invalid.`);

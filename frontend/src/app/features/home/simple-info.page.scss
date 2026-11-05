@@ -1,0 +1,370 @@
+.info-page {
+  min-height: 100vh;
+  background: var(--color-background);
+}
+
+.info-hero {
+  position: relative;
+  display: grid;
+  min-height: min(700px, calc(100svh - 68px));
+  align-items: end;
+  isolation: isolate;
+  color: #fff;
+}
+
+.info-hero__image {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  background: url('/assets/images/hero/la-chef-hero.webp') center 48% / cover no-repeat;
+}
+
+.info-hero::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(18, 18, 15, 0.08) 20%, rgba(18, 18, 15, 0.84) 100%);
+  content: '';
+}
+
+.info-hero__content {
+  padding-block: clamp(76px, 11vw, 132px) clamp(54px, 8vw, 92px);
+}
+
+.info-hero__identity,
+.contact-intro__identity {
+  font-weight: 650;
+}
+
+.info-hero__identity {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .05em;
+}
+
+.info-hero h1 {
+  max-width: 850px;
+  margin-top: 14px;
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 4.8vw, 58px);
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -.5px;
+  text-wrap: balance;
+}
+
+.info-hero__content > p:last-child {
+  max-width: 690px;
+  margin-top: 24px;
+  color: rgba(255, 255, 255, 0.86);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.info-story {
+  padding-block: var(--section-spacing);
+}
+
+.info-story__layout,
+.contact-intro__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.72fr);
+  gap: clamp(42px, 9vw, 128px);
+}
+
+.info-story h2,
+.contact-directory h2,
+.contact-booking h2 {
+  font-size: clamp(2.15rem, 4.5vw, 4rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.info-story__copy {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.info-story h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(32px, 3.7vw, 44px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -.3px;
+}
+
+.info-story__copy .btn {
+  width: fit-content;
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: normal;
+}
+
+.info-details {
+  border-block: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.info-details__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.info-details__grid > div {
+  padding-block: clamp(34px, 5vw, 56px);
+}
+
+.info-details__grid > div + div {
+  border-left: 1px solid var(--color-border);
+  padding-left: clamp(24px, 4vw, 52px);
+}
+
+.info-details__grid > div:not(:last-child) {
+  padding-right: clamp(24px, 4vw, 52px);
+}
+
+.info-details span {
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.info-details p {
+  margin-top: 12px;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.contact-intro {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding-block: clamp(72px, 10vw, 128px);
+}
+
+.contact-intro h1 {
+  max-width: 720px;
+  margin-top: 16px;
+  font-family: var(--font-serif);
+  font-size: clamp(36px, 4.4vw, 52px);
+  font-weight: 400;
+  line-height: 1.13;
+  letter-spacing: -.5px;
+  text-wrap: balance;
+}
+
+.contact-intro__layout > p {
+  align-self: end;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.contact-directory {
+  padding-block: var(--section-spacing);
+}
+
+.contact-directory > .page-container > h2 {
+  margin-bottom: clamp(34px, 6vw, 64px);
+  font-family: var(--font-serif);
+  font-size: clamp(32px, 3.5vw, 42px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -.3px;
+}
+
+.contact-directory__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+  border-top: 1px solid var(--color-border);
+  padding-block: clamp(28px, 5vw, 48px);
+}
+
+.contact-directory__row:last-child {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.contact-directory h3 {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.contact-directory address,
+.contact-directory__row > div > p {
+  margin-top: 10px;
+  color: var(--color-text-muted);
+  font-style: normal;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.contact-directory__row--phones {
+  align-items: start;
+  grid-template-columns: minmax(0, 0.72fr) minmax(300px, 1fr);
+}
+
+.contact-directory ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.contact-directory li {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 20px;
+  padding-block: 12px;
+}
+
+.contact-directory li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.contact-directory li span {
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.contact-directory li a {
+  width: fit-content;
+  font-family: var(--font-serif);
+  font-size: clamp(23px, 2.4vw, 26px);
+  font-weight: 400;
+  line-height: 1.3;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  text-underline-offset: 5px;
+}
+
+.contact-directory li a:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+.contact-booking {
+  border-top: 1px solid var(--color-accent);
+  background: var(--color-dark);
+  color: #fff;
+  padding-block: clamp(48px, 7vw, 80px);
+}
+
+.contact-booking__layout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 36px;
+}
+
+.contact-booking h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -.3px;
+}
+
+.contact-booking p {
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.contact-intro__identity { font-family: var(--font-sans); font-size: 12px; font-weight: 500; line-height: 1.5; letter-spacing: .05em; }
+.contact-directory .btn, .contact-booking .btn { font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 1.5; letter-spacing: normal; }
+
+.contact-booking .btn-primary {
+  border-color: var(--color-accent);
+  background: #fff;
+  color: var(--color-dark);
+}
+
+@media (max-width: 767px) {
+  .info-hero {
+    min-height: 600px;
+  }
+
+  .contact-intro h1 {
+    font-size: clamp(36px, 7vw, 46px);
+  }
+
+  .info-story__layout,
+  .contact-intro__layout,
+  .contact-directory__row,
+  .contact-directory__row--phones {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+
+  .info-details__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-details__grid > div + div {
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .info-details__grid > div:not(:last-child) {
+    padding-right: 0;
+  }
+
+  .contact-directory__row .btn,
+  .contact-booking .btn {
+    width: 100%;
+  }
+
+  .contact-directory li {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .contact-directory li a {
+    overflow-wrap: anywhere;
+  }
+
+  .contact-booking__layout {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

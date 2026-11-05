@@ -22,7 +22,7 @@
 .dashboard-sidebar__brand,
 .dashboard-mobile-header__brand {
   color: #fff;
-  font-family: var(--font-serif);
+  font-family: var(--font-brand);
   font-size: 1.5rem;
   font-weight: 700;
   text-decoration: none;
@@ -35,9 +35,8 @@
   overflow: hidden;
 }
 
-.dashboard-sidebar__brand > span:first-child,
-.dashboard-mobile-header__brand span {
-  color: #c8a65a;
+.dashboard-brand__accent {
+  color: #d1a44d;
 }
 
 .dashboard-sidebar__top {
@@ -290,6 +289,63 @@ nav a.is-active::before {
   to { transform: rotate(360deg); }
 }
 
+.dashboard-sidebar.dashboard-sidebar--editorial {
+  height: 100dvh;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow-y: auto;
+  padding: 28px 15px 18px;
+  font-family: var(--font-sans);
+}
+
+.dashboard-sidebar__editorial-brand {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  text-align: center;
+}
+.dashboard-sidebar__editorial-name > span {
+  font: 500 2.15rem/1 'Playfair Display', Georgia, serif;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.dashboard-sidebar__profile--link {
+  margin-top: 16px;
+  border: 1px solid rgba(200, 166, 90, 0.36);
+  border-radius: 10px;
+  background: #20211d;
+  color: #fff;
+  padding: 13px 12px;
+  text-decoration: none;
+}
+
+.dashboard-sidebar__profile--link:hover,
+.dashboard-sidebar__profile--link:focus-visible {
+  border-color: rgba(226, 201, 135, 0.68);
+  background: #26271f;
+}
+
+.dashboard-sidebar--editorial nav { padding-top: 25px; }
+.dashboard-sidebar--editorial .dashboard-sidebar__profile strong { font-size: 14px; font-weight: 600; }
+.dashboard-sidebar--editorial .dashboard-sidebar__profile-copy > span { font-size: 12px; font-weight: 400; }
+.dashboard-sidebar--editorial .dashboard-sidebar__avatar { font-size: 12px; font-weight: 500; }
+.dashboard-sidebar.dashboard-sidebar--editorial nav .dashboard-sidebar__badge { font-size: 11px; font-weight: 600; }
+.dashboard-sidebar--editorial nav a,
+.dashboard-sidebar--editorial .dashboard-sidebar__action {
+  min-height: 58px;
+  border-radius: 0;
+  padding-inline: 24px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: normal;
+}
+.dashboard-sidebar--editorial nav a.is-active {
+  background: rgba(201, 155, 67, 0.14);
+  color: #dfb65f;
+}
+
 @media (max-width: 767px) {
   :host,
   :host:has(.dashboard-sidebar.is-collapsed) {
@@ -397,6 +453,10 @@ nav a.is-active::before {
 
   .dashboard-sidebar__backdrop.is-open {
     display: block;
+  }
+
+  .dashboard-sidebar--editorial .dashboard-sidebar__top {
+    min-height: 118px;
   }
 }
 

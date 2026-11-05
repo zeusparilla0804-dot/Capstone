@@ -2,6 +2,7 @@ import 'dotenv/config';
 import sql from 'mssql';
 import { closeDatabase, getDbPool } from '../config/database.js';
 import { hashPassword } from '../utils/password.js';
+import { newPassword } from '../utils/password-policy.js';
 
 const required = (name: string): string => {
   const value = process.env[name]?.trim();
@@ -13,8 +14,7 @@ try {
   const username = required('ADMIN_USERNAME');
   const email = required('ADMIN_EMAIL').toLowerCase();
   const fullName = required('ADMIN_FULL_NAME');
-  const password = required('ADMIN_PASSWORD');
-  if (password.length < 12) throw new Error('ADMIN_PASSWORD must contain at least 12 characters.');
+  const password = newPassword(required('ADMIN_PASSWORD'));
   const pool = await getDbPool();
   await pool.request()
     .input('username', sql.NVarChar(100), username)

@@ -31,6 +31,7 @@ function validateInput(value: unknown): PaymentProofSubmission {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AppError(400, 'Payment submission is invalid.');
   const raw = value as Record<string, unknown>;
   if (typeof raw.method !== 'string' || !['CASH', 'BANK_TRANSFER', 'E_WALLET'].includes(raw.method)) throw new AppError(400, 'Payment method is invalid.');
+  if (raw.method === 'CASH') throw new AppError(400, 'Cash payments are accepted at the LA Chef office and recorded by an administrator. No online payment proof is required.');
   const amountText = typeof raw.claimedAmount === 'string' ? raw.claimedAmount.trim() : undefined;
   if (amountText !== undefined && !/^\d+(?:\.\d{1,2})?$/.test(amountText)) {
     throw new AppError(400, 'Claimed amount must be positive with at most two decimal places.');
@@ -90,13 +91,14 @@ export function createPaymentProofService(deps: Dependencies) {
         return await deps.transaction(async request => {
           const booking = await lockedBookingStatus(reservationId, request);
           if (!booking || booking.customerId !== customerId) throw new AppError(404, 'Booking not found.');
-          if (booking.status !== 'AWAITING_PAYMENT' && booking.status !== 'PAYMENT_SUBMITTED') throw new AppError(409, 'Booking is not awaiting a payment proof.');
+          if (!['AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(booking.status)) throw new AppError(409, 'Booking is not awaiting a payment proof.');
           const payment = await lockedPayment(reservationId, request);
           if (!payment) throw new AppError(409, 'Booking has no payment record.');
+          if (payment.paymentMethod?.toUpperCase() === 'CASH') throw new AppError(409, 'This booking uses cash payment. Please pay at the LA Chef office.');
           const outstanding = Math.round(Number(payment.amountDue) * 100) - Math.round(Number(payment.amountPaid) * 100);
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance.');
           if (Math.round(input.claimedAmount * 100) > outstanding) throw new AppError(409, 'Claimed amount exceeds the outstanding balance.');
-          if (booking.status === 'PAYMENT_SUBMITTED') await supersedeSubmittedProofs(reservationId, customerId, request);
+          await supersedeSubmittedProofs(reservationId, customerId, request);
           const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId, input, stored, request);
           if (booking.status === 'AWAITING_PAYMENT') {
             await transitionBooking({ reservationId, nextStatus: 'PAYMENT_SUBMITTED', expectedStatus: 'AWAITING_PAYMENT', actor: { type: 'CUSTOMER', id: customerId }, request });

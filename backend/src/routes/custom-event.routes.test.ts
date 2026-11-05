@@ -13,18 +13,9 @@ process.env.DB_PASSWORD ??= 'test';
 process.env.FRONTEND_URL ??= 'http://localhost:4200';
 process.env.PAYMENT_PROOF_UPLOAD_ROOT ??= 'test-proofs';
 
-test('custom quotation creation is retired while authenticated history detail remains available', async t => {
-  const { customEventController } = await import('../controllers/custom-event.controller.js');
+test('all authenticated customer quotation endpoints are retired', async t => {
   const { errorHandler } = await import('../middleware/error.middleware.js');
   const { closeDatabase } = await import('../config/database.js');
-  let createCalls = 0;
-  t.mock.method(customEventController, 'create', async (_req, res) => {
-    createCalls += 1;
-    res.status(201).json({ success: true });
-  });
-  t.mock.method(customEventController, 'detail', async (_req, res) => {
-    res.json({ success: true, data: { id: 42, status: 'QUOTED' } });
-  });
 
   const pool = {
     connected: true,
@@ -66,11 +57,20 @@ test('custom quotation creation is retired while authenticated history detail re
       message: 'Custom quotation requests are no longer available. Select a package and add special requests to your reservation.',
       code: 'CUSTOM_QUOTATION_RETIRED',
     });
-    assert.equal(createCalls, 0);
 
-    const detail = await fetch(`${base}/42`, { headers: { cookie: 'la_chef_session=customer' } });
-    assert.equal(detail.status, 200);
-    assert.equal((await detail.json() as { data: { id: number } }).data.id, 42);
+    for (const request of [
+      { path: '/42', method: 'GET' },
+      { path: '/42/quotes/9/accept', method: 'POST' },
+      { path: '/42/quotes/9/decline', method: 'POST' },
+    ]) {
+      const response = await fetch(`${base}${request.path}`, {
+        method: request.method,
+        headers: { cookie: 'la_chef_session=customer', 'content-type': 'application/json' },
+        body: request.method === 'POST' ? '{}' : undefined,
+      });
+      assert.equal(response.status, 410);
+      assert.equal((await response.json() as { code: string }).code, 'CUSTOM_QUOTATION_RETIRED');
+    }
   } finally {
     server.close();
     await once(server, 'close');

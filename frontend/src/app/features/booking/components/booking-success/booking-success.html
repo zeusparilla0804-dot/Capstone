@@ -1,0 +1,14 @@
+<app-success-dialog
+  [title]="isEditing() ? 'Booking updated' : 'Booking request submitted'"
+  [message]="isEditing()
+    ? 'Your pending booking details and estimated total have been updated.'
+    : 'Your booking request has been received and will be reviewed by the LA Chef team.'"
+  [statusText]="isEditing() ? 'Changes saved' : 'Pending review'"
+  detailLabel="Booking reference"
+  [detailValue]="bookingReference()"
+  primaryLabel="View My Reservations"
+  primaryLink="/my-bookings"
+  secondaryLabel="Return to Dashboard"
+  secondaryLink="/dashboard"
+  (dismissed)="close()"
+/>

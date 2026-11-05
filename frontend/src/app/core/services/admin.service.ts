@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AdminAddOn, AdminAuditLogItem, AdminBooking, AdminBookingDetail, AdminCustomer, AdminCustomerBooking, AdminCustomerPayment, AdminCustomerProfile, AdminCustomerStatus, AdminCustomerUpdateInput, AdminCustomEventDetail, AdminCustomEventQueueItem, AdminCustomQuote, AdminCustomQuoteInput, AdminDashboard, AdminEmailOutboxItem, AdminEmailPreview, AdminPackage, AdminPackageInput, AdminPayment, AdminPaymentProof, AdminPaymentProofDetail, AdminPaymentReport, AdminPaymentReportFilter, AdminReservationReport, AdminReservationReportFilter, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
+import { AdminAddOn, AdminAuditLogItem, AdminBooking, AdminBookingDetail, AdminCustomer, AdminCustomerBooking, AdminCustomerPayment, AdminCustomerProfile, AdminCustomerStatus, AdminCustomerUpdateInput, AdminDashboard, AdminEmailOutboxItem, AdminEmailPreview, AdminPackage, AdminPackageInput, AdminPayment, AdminPaymentProof, AdminPaymentProofDetail, AdminPaymentReport, AdminPaymentReportFilter, AdminReservationReport, AdminReservationReportFilter, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
@@ -46,11 +46,6 @@ export class AdminService {
   retryEmail(id: string) { return this.http.post<ApiResponse<never>>(`${this.base}/email-outbox/${id}/retry`, {}, this.options); }
   emailPreview(id: string) { return this.http.get<ApiResponse<AdminEmailPreview>>(`${this.base}/email-outbox/${id}/preview`, this.options); }
   auditLog(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminAuditLogItem>>>(`${this.base}/audit-log`, { ...this.options, params: this.params(filters) }); }
-  customEvents(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminCustomEventQueueItem>>>(`${this.base}/custom-events`, { ...this.options, params: this.params(filters) }); }
-  customEvent(id: number) { return this.http.get<ApiResponse<AdminCustomEventDetail>>(`${this.base}/custom-events/${id}`, this.options); }
-  sendCustomQuote(id: number, value: AdminCustomQuoteInput) { return this.http.post<ApiResponse<AdminCustomQuote>>(`${this.base}/custom-events/${id}/quotes`, value, this.options); }
-  requestCustomClarification(id: number, reason: string) { return this.http.post(`${this.base}/custom-events/${id}/request-clarification`, { reason }, this.options); }
-  rejectCustomEvent(id: number, reason: string) { return this.http.post(`${this.base}/custom-events/${id}/reject`, { reason }, this.options); }
   recordPayment(value: object) { return this.http.post(`${this.base}/payments`, value, this.options); }
   private proofFileUrl(value: string) { if (/^https?:\/\//i.test(value)) return value; if (/^https?:\/\//i.test(environment.apiBaseUrl)) return `${new URL(environment.apiBaseUrl).origin}${value.startsWith('/') ? '' : '/'}${value}`; return value; }
   private params(values: object) { let params = new HttpParams(); Object.entries(values).forEach(([key, value]) => { if (value !== '' && value !== undefined) params = params.set(key, String(value)); }); return params; }

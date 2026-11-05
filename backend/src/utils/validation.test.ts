@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AppError } from './app-error.js';
-import { emailAddress, finiteMoney, identifier, isoDate, text, time24 } from './validation.js';
+import { emailAddress, finiteMoney, identifier, isoDate, philippineMobileNumber, text, time24 } from './validation.js';
+
+test('Philippine mobile numbers accept only local or +63 mobile formats and normalize display spaces', () => {
+  for (const [input, expected] of [
+    ['09171234567', '09171234567'], ['+639171234567', '+639171234567'],
+    ['0917 123 4567', '09171234567'], [' +63917 123 4567 ', '+639171234567'],
+  ]) assert.equal(philippineMobileNumber(input), expected);
+  for (const input of ['', null, 9171234567, '09999999999999999999999', '0917123456', '091712345678', '08171234567', '+6391712345678', '0917abc4567', '02 8123 4567', '+14155552671', '09 171234567']) {
+    assert.throws(() => philippineMobileNumber(input), (error: unknown) => error instanceof AppError && error.statusCode === 400);
+  }
+});
 
 test('identifier accepts only positive safe integers', () => {
   assert.equal(identifier('42'), 42);

@@ -1,7 +1,10 @@
-<header class="public-header">
+<header class="public-header" [class.public-header--auth]="appearance() === 'auth'">
   <div class="public-header__inner">
     <a class="public-header__brand" routerLink="/" aria-label="LA Chef home" (click)="closeMenu()">
-      <span>LA</span><strong>Chef</strong>
+      <span class="public-header__brand-name"
+        ><span class="public-header__brand-accent">LA</span><strong>Chef</strong></span
+      >
+      <small class="public-header__brand-tagline">Event Catering Services</small>
     </a>
 
     <button
@@ -42,19 +45,30 @@
 
       <div class="public-header__actions">
         @if (authenticated()) {
-          <a
-            class="public-header__avatar"
-            routerLink="/profile"
-            [attr.aria-label]="'Open profile for ' + (auth.user()?.fullName ?? 'customer')"
-            (click)="closeMenu()"
-            >{{ customerInitials() }}</a
-          >
+          <div #accountArea class="public-header__account" (keydown)="onAccountKeydown($event)" (focusout)="onAccountFocusOut($event)">
+            <button #accountTrigger class="public-header__account-trigger" type="button" [attr.aria-expanded]="isAccountOpen()" aria-controls="customer-account-menu" [attr.aria-label]="'Account for ' + (auth.user()?.fullName ?? 'Customer')" (click)="toggleAccount()">
+              <span class="public-header__account-avatar" aria-hidden="true">{{ customerInitials() }}</span>
+              <span class="public-header__account-copy"><strong [title]="auth.user()?.fullName ?? 'Customer'">{{ auth.user()?.fullName ?? 'Customer' }}</strong><small>Customer</small></span>
+              <svg class="public-header__account-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+            @if (isAccountOpen()) {
+              <nav id="customer-account-menu" class="public-header__account-menu" aria-label="Customer account">
+                <a routerLink="/dashboard" (click)="closeMenu()">Dashboard</a>
+                <a routerLink="/profile" (click)="closeMenu()">My Profile</a>
+                <button type="button" [disabled]="signingOut()" (click)="logout()">Logout</button>
+              </nav>
+            }
+          </div>
         } @else {
           <a class="public-header__login" routerLink="/login" (click)="closeMenu()">Log in</a>
         }
         <a
           class="public-header__auth btn btn-primary btn-sm"
-          routerLink="/book-event"
+          routerLink="/book-event" [queryParams]="{ new: 1 }"
+          routerLinkActive
+          #bookingLink="routerLinkActive"
+          [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+          [style.visibility]="bookingLink.isActive ? 'hidden' : null"
           (click)="closeMenu()"
           >Book now</a
         >

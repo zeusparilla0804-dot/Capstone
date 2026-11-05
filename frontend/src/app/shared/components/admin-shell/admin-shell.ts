@@ -19,6 +19,15 @@ export class AdminShellComponent {
   private readonly router = inject(Router);
   protected readonly signingOutAll = signal(false);
   protected readonly sessionError = signal('');
+  protected readonly renewingSession = signal(false);
+  protected async staySignedIn(): Promise<void> {
+    if (this.renewingSession()) return;
+    this.renewingSession.set(true);
+    this.sessionError.set('');
+    try { await this.auth.keepAlive(); }
+    catch { this.sessionError.set('Unable to renew your session. Please save your work and sign in again.'); }
+    finally { this.renewingSession.set(false); }
+  }
   protected readonly nav = computed<readonly DashboardNavItem[]>(() => [
     { label: 'Overview', route: '/admin/dashboard', icon: 'dashboard' },
     { label: 'Reservations', route: '/admin/bookings', icon: 'calendar', badge: this.badgeState.adminBadges().bookings, badgeLabel: 'pending reservation reviews' },
@@ -34,6 +43,8 @@ export class AdminShellComponent {
       isAction: true,
       disabled: this.signingOutAll(),
       busy: this.signingOutAll(),
+      confirmationMessage: 'Sign out this administrator account on every device?',
+      confirmationAllDevices: true,
     },
     {
       label: 'Logout',
@@ -51,9 +62,7 @@ export class AdminShellComponent {
       await this.router.navigate([item.route]);
       return;
     }
-    if (this.signingOutAll() || !window.confirm(
-      'Sign out this administrator account on every device? Unsaved form changes will be lost.',
-    )) return;
+    if (this.signingOutAll()) return;
 
     this.signingOutAll.set(true);
     this.sessionError.set('');

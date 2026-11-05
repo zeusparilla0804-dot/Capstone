@@ -9,6 +9,8 @@ import type {
   RecoveryPrincipal,
 } from '../types/password-recovery.types.js';
 import type { PasswordResetPrincipal } from '../utils/password-reset-token.js';
+import { clearLoginAttempts, recordSecurityEvent } from './login-security.repository.js';
+import { throttleKey } from '../services/login-security.service.js';
 
 interface RepositoryDependencies {
   readRequest: () => Promise<sql.Request>;
@@ -19,7 +21,7 @@ export interface PasswordRecoveryRepository {
   findPrincipal(principalType: PasswordResetPrincipal, normalizedEmail: string): Promise<RecoveryPrincipal | undefined>;
   issue(input: PasswordResetIssue, queue: PasswordResetNotificationQueue): Promise<PasswordResetIssueResult>;
   consume(input: PasswordResetConsume, queue: PasswordResetNotificationQueue): Promise<PasswordResetConsumeResult>;
-  isDeliverable(selector: string, principalType: PasswordResetPrincipal, now: Date): Promise<boolean>;
+  isDeliverable(selector: string, principalType: PasswordResetPrincipal, now: Date, recipient: string): Promise<boolean>;
 }
 
 function principalColumn(principalType: PasswordResetPrincipal): 'customer_id' | 'admin_id' {
@@ -42,7 +44,7 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
       const request = (await deps.readRequest()).replaceInput('email', sql.NVarChar(255), normalizedEmail);
       const command = principalType === 'CUSTOMER'
         ? `SELECT customer_id id,email,CONCAT(first_name,' ',last_name) displayName
-           FROM dbo.CUSTOMER WHERE LOWER(email)=@email`
+           FROM dbo.CUSTOMER WHERE LOWER(email)=@email AND status='ACTIVE'`
         : `SELECT admin_id id,email,full_name displayName
            FROM dbo.ADMIN WHERE LOWER(email)=@email AND status='ACTIVE'`;
       const result = await request.query<Record<string, unknown>>(command);
@@ -52,11 +54,14 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
     async issue(input, queue) {
       return deps.transaction(async request => {
         const column = principalColumn(input.principal.principalType);
+        request.replaceInput('principalEmail', sql.NVarChar(255), input.principal.email.trim().toLowerCase());
         const lockedAccount = input.principal.principalType === 'CUSTOMER'
           ? await request.replaceInput('principalId', sql.Int, input.principal.id)
-              .query(`SELECT customer_id id FROM dbo.CUSTOMER WITH(UPDLOCK,HOLDLOCK) WHERE customer_id=@principalId`)
+              .query(`SELECT customer_id id FROM dbo.CUSTOMER WITH(UPDLOCK,HOLDLOCK)
+                WHERE customer_id=@principalId AND LOWER(email)=@principalEmail AND status='ACTIVE'`)
           : await request.replaceInput('principalId', sql.Int, input.principal.id)
-              .query(`SELECT admin_id id FROM dbo.ADMIN WITH(UPDLOCK,HOLDLOCK) WHERE admin_id=@principalId AND status='ACTIVE'`);
+              .query(`SELECT admin_id id FROM dbo.ADMIN WITH(UPDLOCK,HOLDLOCK)
+                WHERE admin_id=@principalId AND LOWER(email)=@principalEmail AND status='ACTIVE'`);
         if (!lockedAccount.recordset[0]) return 'COOLDOWN';
 
         const cooldownCutoff = new Date(input.now.getTime() - input.cooldownMs);
@@ -109,7 +114,7 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
           ? `SELECT CONVERT(varchar(20),r.reset_id) resetId,r.customer_id principalId,c.email,
                 CONCAT(c.first_name,' ',c.last_name) displayName
              FROM dbo.PASSWORD_RESET_TOKEN r WITH(UPDLOCK,HOLDLOCK)
-             JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+              JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id AND c.status='ACTIVE'
              WHERE r.selector=@selector AND r.token_hash=@tokenHash AND r.principal_type=@principalType
                AND r.used_at IS NULL AND r.invalidated_at IS NULL AND r.expires_at>@now`
           : `SELECT CONVERT(varchar(20),r.reset_id) resetId,r.admin_id principalId,a.email,a.full_name displayName
@@ -129,7 +134,7 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
         const principalId = Number(row.principalId);
         const passwordResult = input.principalType === 'CUSTOMER'
           ? await request.replaceInput('principalId', sql.Int, principalId).replaceInput('passwordHash', sql.NVarChar(255), input.passwordHash)
-              .query('UPDATE dbo.CUSTOMER SET password=@passwordHash WHERE customer_id=@principalId')
+              .query("UPDATE dbo.CUSTOMER SET password=@passwordHash WHERE customer_id=@principalId AND status='ACTIVE'")
           : await request.replaceInput('principalId', sql.Int, principalId).replaceInput('passwordHash', sql.NVarChar(255), input.passwordHash)
               .query("UPDATE dbo.ADMIN SET password=@passwordHash WHERE admin_id=@principalId AND status='ACTIVE'");
         if ((passwordResult.rowsAffected[0] ?? 0) !== 1) throw new Error('Password reset principal changed during consumption.');
@@ -159,6 +164,9 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
             .query('DELETE dbo.ADMIN_SESSION WHERE admin_id=@principalId');
         }
 
+        const subjectHash = throttleKey(input.principalType, principalId, '');
+        await clearLoginAttempts(subjectHash, request);
+        await recordSecurityEvent({ role: input.principalType, principalId, subjectHash, event: 'PASSWORD_RESET' }, request);
         await queue({
           recipient: String(row.email),
           templateKey: 'PASSWORD_CHANGED',
@@ -168,18 +176,19 @@ export function createPasswordRecoveryRepository(deps: RepositoryDependencies): 
       });
     },
 
-    async isDeliverable(selector, principalType, now) {
+    async isDeliverable(selector, principalType, now, recipient) {
       const request = (await deps.readRequest())
         .replaceInput('selector', sql.Char(22), selector)
         .replaceInput('principalType', sql.VarChar(10), principalType)
-        .replaceInput('now', sql.DateTime2, now);
+        .replaceInput('now', sql.DateTime2, now)
+        .replaceInput('recipient', sql.NVarChar(255), recipient.trim().toLowerCase());
       const command = principalType === 'CUSTOMER'
         ? `SELECT TOP (1) 1 deliverable FROM dbo.PASSWORD_RESET_TOKEN r
-           JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+           JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id AND c.status='ACTIVE' AND LOWER(c.email)=@recipient
            WHERE r.selector=@selector AND r.principal_type=@principalType AND r.used_at IS NULL
              AND r.invalidated_at IS NULL AND r.expires_at>@now`
         : `SELECT TOP (1) 1 deliverable FROM dbo.PASSWORD_RESET_TOKEN r
-           JOIN dbo.ADMIN a ON a.admin_id=r.admin_id AND a.status='ACTIVE'
+           JOIN dbo.ADMIN a ON a.admin_id=r.admin_id AND a.status='ACTIVE' AND LOWER(a.email)=@recipient
            WHERE r.selector=@selector AND r.principal_type=@principalType AND r.used_at IS NULL
              AND r.invalidated_at IS NULL AND r.expires_at>@now`;
       const result = await request.query(command);

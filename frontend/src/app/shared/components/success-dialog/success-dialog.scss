@@ -1,0 +1,304 @@
+:host {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+:host(.success-dialog--native) { display: contents; }
+
+.success-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(23 24 22 / 58%);
+  animation: success-backdrop-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__panel {
+  position: relative;
+  width: min(100%, 520px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  border-top: 3px solid var(--color-accent);
+  border-radius: 8px;
+  outline: 0;
+  background: #fff;
+  box-shadow: 0 24px 70px rgb(23 24 22 / 24%);
+  padding: 42px 40px 36px;
+  text-align: center;
+  animation: success-dialog-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__panel--native {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: min(520px, calc(100vw - 40px));
+  height: fit-content;
+  max-width: none;
+  margin: auto;
+  border: 0;
+  border-top: 3px solid var(--color-accent);
+  overscroll-behavior: contain;
+}
+
+.success-dialog__panel--native::backdrop {
+  background: rgb(23 24 22 / 58%);
+  animation: success-backdrop-in 250ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__panel--native[data-closing='true']::backdrop {
+  animation: success-backdrop-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__panel:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  outline-offset: 3px;
+}
+
+.success-dialog__backdrop[data-closing='true'] {
+  animation: success-backdrop-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__panel[data-closing='true'] {
+  animation: success-dialog-out 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.success-dialog__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.success-dialog__close svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
+}
+
+.success-dialog__close:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.success-dialog__mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-success) 38%, #fff);
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  background: color-mix(in srgb, var(--color-success) 12%, #fff);
+  color: var(--color-success);
+  animation: success-mark-in 280ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
+}
+
+.success-dialog__mark svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.success-dialog__status {
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 35%, #fff);
+  border-radius: 999px;
+  margin: 0 auto 12px;
+  background: color-mix(in srgb, var(--color-accent) 10%, #fff);
+  color: #765817;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h2 {
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  font-size: clamp(1.8rem, 5vw, 2.4rem);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.success-dialog__message {
+  max-width: 46ch;
+  margin: 12px auto 0;
+  color: var(--color-text-muted);
+  line-height: 1.65;
+}
+
+.success-dialog__detail {
+  margin: 24px 0 0;
+  border-block: 1px solid var(--color-border);
+  padding: 15px;
+}
+
+.success-dialog__detail dt {
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.success-dialog__detail dd {
+  margin: 4px 0 0;
+  color: var(--color-text);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.success-dialog__actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+:host(.payment-proof-confirmation),
+:host(.booking-approval-confirmation) {
+  font-family: var(--font-sans);
+
+  .success-dialog__panel {
+    box-sizing: border-box;
+    width: min(100%, 480px);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 32px;
+    box-shadow: 0 16px 48px rgb(23 24 22 / 16%);
+  }
+
+  .success-dialog__mark {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 14px;
+    background: color-mix(in srgb, var(--color-success) 8%, #fff);
+    border-color: color-mix(in srgb, var(--color-success) 20%, #fff);
+
+    svg { width: 24px; height: 24px; }
+  }
+
+  .success-dialog__status {
+    margin-bottom: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: .04em;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: clamp(28px, 6vw, 32px);
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
+  .success-dialog__message {
+    max-width: 39ch;
+    margin-top: 12px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .success-dialog__actions {
+    margin-top: 24px;
+
+    .btn-primary {
+      box-sizing: border-box;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: min(100%, 280px);
+      min-height: 44px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font: 600 14px/1.5 var(--font-sans);
+    }
+  }
+
+  @media (max-width: 520px) {
+    .success-dialog__panel { padding: 32px 24px; }
+    .success-dialog__actions { align-items: center; }
+  }
+}
+
+:host(.booking-approval-confirmation) .success-dialog__panel {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+
+@keyframes success-dialog-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes success-dialog-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes success-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes success-backdrop-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes success-mark-in {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (max-width: 520px) {
+  :host { padding: 14px; }
+  .success-dialog__panel { max-height: calc(100dvh - 28px); padding: 38px 22px 26px; }
+  .success-dialog__actions { flex-direction: column; }
+  .success-dialog__actions .btn { width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .success-dialog__panel,
+  .success-dialog__mark {
+    animation: success-fade-in 160ms ease-out both;
+  }
+
+  .success-dialog__panel[data-closing='true'] {
+    animation: success-backdrop-out 160ms ease-out both;
+  }
+
+  .success-dialog__backdrop,
+  .success-dialog__backdrop[data-closing='true'],
+  .success-dialog__panel--native::backdrop,
+  .success-dialog__panel--native[data-closing='true']::backdrop {
+    animation-duration: 160ms;
+  }
+}
+
+@keyframes success-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

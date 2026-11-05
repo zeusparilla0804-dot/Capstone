@@ -42,6 +42,7 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
       input(name: string, _type: unknown, value: unknown) { params[name] = value; return runner; },
       replaceInput(name: string, _type: unknown, value: unknown) { params[name] = value; return runner; },
       async query(command: string) {
+        if (/FROM dbo\.BOOKING_POLICY/i.test(command)) return { recordset: [], rowsAffected: [0] };
         let recordset: Record<string, unknown>[] = [];
         if (command.includes('dbo.ADMIN_SESSION')) {
           if (params['tokenHash'] === hashSessionToken('admin')) recordset = [{ admin_id: 3, full_name: 'Admin', email: 'admin@example.test' }];
@@ -104,7 +105,7 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
     body.set('method', 'BANK_TRANSFER'); body.set('claimedAmount', options.amount ?? '50.25');
     body.set('transactionReference', ' TX-HTTP '); body.set('paymentDate', '2026-10-02');
     if (options.withFile !== false) body.set(options.field ?? 'proof', new Blob([png], { type: 'image/png' }), 'receipt.png');
-    return fetch(`${base}/api/bookings/5/payment-proofs`, { method: 'POST', headers: { cookie }, body });
+    return fetch(`${base}/api/bookings/5/payment-proofs`, { method: 'POST', headers: { cookie, 'x-la-chef-request': '1' }, body });
   };
   try {
     await t.test('unauthenticated, admin-only, missing-file and incorrect multipart fields are rejected', async () => {

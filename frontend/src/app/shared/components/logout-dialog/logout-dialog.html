@@ -1,0 +1,13 @@
+<dialog #dialog class="logout-dialog" aria-modal="true" aria-labelledby="logout-dialog-title" aria-describedby="logout-dialog-description"
+  (cancel)="cancel($event)" (click)="backdropClick($event)" (keydown)="$event.stopPropagation()">
+  <div class="logout-dialog__content">
+    <h2 id="logout-dialog-title">{{ allDevices() ? 'Sign out all devices?' : 'Log out of La Chef?' }}</h2>
+    <p id="logout-dialog-description">{{ allDevices()
+      ? 'This will end your administrator sessions on every device. Unsaved form changes will be lost.'
+      : 'You can sign in again anytime to manage your account.' }}</p>
+    <div class="logout-dialog__actions">
+      <button #cancelButton type="button" class="logout-dialog__stay" data-action="cancel" (click)="decided.emit(false)">Stay signed in</button>
+      <button type="button" class="logout-dialog__confirm" data-action="confirm" (click)="decided.emit(true)">{{ allDevices() ? 'Sign out all devices' : 'Log out' }}</button>
+    </div>
+  </div>
+</dialog>

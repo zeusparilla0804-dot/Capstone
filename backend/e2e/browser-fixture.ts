@@ -1,3 +1,4 @@
+import { verifyFixtureEmail } from './verify-fixture-email.js';
 import 'dotenv/config';
 
 import assert from 'node:assert/strict';
@@ -17,7 +18,8 @@ const receiptJpeg = Buffer.from(
   'base64',
 );
 process.env['PAYMENT_PROOF_UPLOAD_ROOT'] = uploadRoot;
-process.env['EMAIL_WORKER_ENABLED'] = 'false';
+// These fixtures import app.ts, never server.ts; no mail worker is started.
+process.env['EMAIL_WORKER_ENABLED'] = 'true';
 
 const [{ default: app }, database, { environment }, { hashPassword }] = await Promise.all([
   import('../src/app.js'),
@@ -60,6 +62,7 @@ async function cleanup(): Promise<void> {
       DELETE q FROM dbo.CUSTOM_EVENT_REQUEST q JOIN dbo.RESERVATION r ON r.reservation_id=q.reservation_id
         WHERE r.customer_id=@customerId;
       DELETE ra FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.RESERVATION r ON r.reservation_id=ra.reservation_id WHERE r.customer_id=@customerId;
+      DELETE FROM dbo.BOOKING_SUBMISSION WHERE customer_id=@customerId;
       DELETE FROM dbo.RESERVATION WHERE customer_id=@customerId;
       DELETE FROM dbo.PACKAGE WHERE package_name IN(@packageName,@basePackageName,@mediumPackageName);
       DELETE FROM dbo.AUTH_SESSION WHERE customer_id=@customerId;
@@ -79,10 +82,14 @@ function cookie(response: Response): string {
 
 async function api(path: string, init: RequestInit = {}, expected = 200): Promise<any> {
   const headers = new Headers(init.headers);
+  headers.set('x-la-chef-request', '1');
   if (init.body && !(init.body instanceof FormData)) headers.set('content-type', 'application/json');
   const response = await fetch(`http://localhost:${environment.port}/api${path}`, { ...init, headers });
   const body = response.status === 204 ? undefined : await response.json();
   assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path}: ${JSON.stringify(body)}`);
+  if (path === '/auth/register' && response.status === 201) {
+    await verifyFixtureEmail(`http://localhost:${environment.port}/api`, JSON.parse(String(init.body)).email);
+  }
   return { response, body };
 }
 
@@ -112,7 +119,8 @@ await new Promise<void>((accept, reject) => {
 const registered = await api('/auth/register', { method: 'POST', body: JSON.stringify({
   firstName: 'Browser', lastName: 'Customer', email: customerEmail, phone: '09171234567', password
 }) }, 201);
-const customerCookie = cookie(registered.response);
+const customerLogin = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email: customerEmail, password }) });
+const customerCookie = cookie(customerLogin.response);
 const adminLogin = await api('/auth/admin/login', { method: 'POST', body: JSON.stringify({ identity: adminEmail, password }) });
 const adminCookie = cookie(adminLogin.response);
 const packageResult = await api('/admin/packages', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({

@@ -17,7 +17,7 @@ describe('AdminCustomerDetailPage', () => {
       updateCustomer: vi.fn(() => of({ success: true, data: { id: 7, firstName: 'Klint', lastName: 'Charles', email: 'klint@example.test', phone: '09171234567', address: 'Santa Rosa', status: 'ACTIVE', createdAt: '2026-01-01' } })),
       updateCustomerStatus: vi.fn(() => of({ success: true, data: { id: 7, firstName: 'Klint', lastName: 'Charles', email: 'klint@example.test', phone: '09171234567', address: 'Santa Rosa', status: 'INACTIVE', createdAt: '2026-01-01' } })),
     };
-    await TestBed.configureTestingModule({ imports: [AdminCustomerDetailPage], providers: [provideRouter([]), { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } }, { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [AdminCustomerDetailPage], providers: [provideRouter([]), { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '7' }) } } }, { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
     fixture = TestBed.createComponent(AdminCustomerDetailPage);
     fixture.detectChanges();
   });

@@ -59,7 +59,13 @@ The `007` gap is intentional and must remain absent from fresh history. Migratio
 - `docker-compose.staging.yml`
 - `operations/sql-server/backup.sql`
 - `operations/sql-server/restore-verification.sql`
+- `operations/sql-server/least-privilege.sql`
+- `operations/sql-server/verify-runtime-permissions.sql`
 - `scripts/staging-smoke.mjs`
+- `scripts/staging-smoke.test.mjs`
+- `scripts/sql-server-permissions.test.mjs`
+- `scripts/recovery-rehearsal.mjs`
+- `scripts/recovery-rehearsal.test.mjs`
 
 ## Commit: Documentation
 

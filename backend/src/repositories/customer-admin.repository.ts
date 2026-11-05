@@ -48,6 +48,12 @@ export function createCustomerAdminRepository(deps: CustomerAdminRepositoryDepen
           .query(`UPDATE dbo.CUSTOMER SET first_name=@firstName,last_name=@lastName,
             email=@email,contact_number=@phone WHERE customer_id=@customerId`);
 
+        if (current.email.trim().toLowerCase() !== input.email.trim().toLowerCase()) {
+          await request.query(`UPDATE dbo.PASSWORD_RESET_TOKEN SET invalidated_at=SYSUTCDATETIME()
+            WHERE principal_type='CUSTOMER' AND customer_id=@customerId
+              AND used_at IS NULL AND invalidated_at IS NULL`);
+        }
+
         await deps.audit({
           adminId,
           action: 'CUSTOMER_UPDATED',

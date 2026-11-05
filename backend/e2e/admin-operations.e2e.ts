@@ -1,3 +1,4 @@
+import { verifyFixtureEmail } from './verify-fixture-email.js';
 import 'dotenv/config';
 
 import assert from 'node:assert/strict';
@@ -9,13 +10,15 @@ import sql from 'mssql';
 
 const uploadRoot = await mkdtemp(join(tmpdir(), 'la-chef-admin-e2e-'));
 process.env['PAYMENT_PROOF_UPLOAD_ROOT'] = uploadRoot;
-process.env['EMAIL_WORKER_ENABLED'] = 'false';
+// These fixtures import app.ts, never server.ts; no mail worker is started.
+process.env['EMAIL_WORKER_ENABLED'] = 'true';
 
-const [{ default: app }, database, { environment }, { hashPassword }] = await Promise.all([
+const [{ default: app }, database, { environment }, { hashPassword }, { eventReminderRepository }] = await Promise.all([
   import('../src/app.js'),
   import('../src/config/database.js'),
   import('../src/config/environment.js'),
-  import('../src/utils/password.js')
+  import('../src/utils/password.js'),
+  import('../src/repositories/event-reminder.repository.js')
 ]);
 
 if (environment.isProduction) throw new Error('E2E verification is disabled in production.');
@@ -45,6 +48,7 @@ function cookie(response: Response): string {
 
 async function api(base: string, path: string, init: RequestInit = {}, expected = 200): Promise<ApiResult> {
   const headers = new Headers(init.headers);
+  headers.set('x-la-chef-request', '1');
   if (init.body && !(init.body instanceof FormData) && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
@@ -54,6 +58,9 @@ async function api(base: string, path: string, init: RequestInit = {}, expected 
     ? await response.json()
     : await response.arrayBuffer();
   assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path}: ${JSON.stringify(body)}`);
+  if (path === '/auth/register' && response.status === 201) {
+    await verifyFixtureEmail(base, JSON.parse(String(init.body)).email);
+  }
   return { response, body };
 }
 
@@ -90,6 +97,7 @@ async function cleanup(): Promise<void> {
           DELETE pt FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id WHERE p.reservation_id=@id;
           DELETE FROM dbo.PAYMENT WHERE reservation_id=@id;
           DELETE FROM dbo.RESERVATION_ADD_ON WHERE reservation_id=@id;
+          DELETE FROM dbo.BOOKING_SUBMISSION WHERE reservation_id=@id;
           DELETE FROM dbo.RESERVATION WHERE reservation_id=@id;
         `);
     }
@@ -99,6 +107,7 @@ async function cleanup(): Promise<void> {
     }
     for (const email of [customerAEmail, customerAUpdatedEmail, customerBEmail]) {
       await pool.request().input('email', sql.NVarChar(255), email).query(`
+        DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient=@email;
         DELETE s FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE c.email=@email;
         DELETE FROM dbo.CUSTOMER WHERE email=@email;
       `);
@@ -143,8 +152,19 @@ try {
   }, 201);
   const registeredA = await register(customerAEmail);
   const registeredB = await register(customerBEmail);
-  const customerBCookie = cookie(registeredB.response);
-  await api(base, '/auth/logout', { method: 'POST', headers: { cookie: cookie(registeredA.response) } }, 204);
+  const registrationNotifications = await pool.request()
+    .input('emailA', sql.NVarChar(320), customerAEmail)
+    .input('emailB', sql.NVarChar(320), customerBEmail)
+    .query(`SELECT recipient,template_key templateKey,status FROM dbo.EMAIL_OUTBOX
+      WHERE recipient IN(@emailA,@emailB) AND template_key='ACCOUNT_REGISTERED'`);
+  assert.equal(registrationNotifications.recordset.length, 2, 'Each registration must queue one confirmation email intent.');
+  assert.ok(registrationNotifications.recordset.every(row => row.status === 'PENDING'));
+  assert.equal(registeredA.response.headers.get('set-cookie'), null);
+  assert.equal(registeredB.response.headers.get('set-cookie'), null);
+  const loginB = await api(base, '/auth/login', { method: 'POST', body: JSON.stringify({ email: customerBEmail, password }) });
+  const loginA = await api(base, '/auth/login', { method: 'POST', body: JSON.stringify({ email: customerAEmail, password }) });
+  const customerBCookie = cookie(loginB.response);
+  await api(base, '/auth/logout', { method: 'POST', headers: { cookie: cookie(loginA.response) } }, 204);
   const customerLogin = await api(base, '/auth/login', {
     method: 'POST', body: JSON.stringify({ email: customerAEmail, password })
   });
@@ -167,7 +187,7 @@ try {
   }, 201);
   created.capacityPackage = Number(capacityPackageCreate.body.data.id);
 
-  const eventDate = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const eventDate = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
   const bookingCreate = await api(base, '/bookings', {
     method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({
       eventType: event.event_type, eventDate, eventTime: '14:00', venue: `${marker} Venue`, guestCount: 10,
@@ -303,6 +323,12 @@ try {
   assert.ok(booking.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'AWAITING_PAYMENT'));
   assert.ok(booking.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'PAYMENT_VERIFIED'));
 
+  const reminderFrom = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+  assert.equal(await eventReminderRepository.queueDue(reminderFrom, eventDate), 1,
+    'The confirmed booking must queue one upcoming-event reminder.');
+  assert.equal(await eventReminderRepository.queueDue(reminderFrom, eventDate), 0,
+    'A repeated scheduler run must not duplicate the reminder.');
+
   const customerBooking = await api(base, `/bookings/${created.booking}`, { headers: { cookie: customerACookie } });
   assert.equal(customerBooking.body.data.status, 'confirmed');
   const customerProofs = await api(base, `/bookings/${created.booking}/payment-proofs`, { headers: { cookie: customerACookie } });
@@ -336,6 +362,8 @@ try {
   assert.ok(state.recordsets[3]!.every(row => row.status === 'PENDING'), 'SMTP-disabled notifications must remain pending.');
   assert.ok(state.recordsets[3]!.some(row => row.templateKey === 'PAYMENT_PROOF_REJECTED'));
   assert.ok(state.recordsets[3]!.some(row => row.templateKey === 'PAYMENT_PROOF_VERIFIED'));
+  assert.equal(state.recordsets[3]!.filter(row => row.templateKey === 'ACCOUNT_REGISTERED').length, 1);
+  assert.equal(state.recordsets[3]!.filter(row => row.templateKey === 'UPCOMING_EVENT_REMINDER').length, 1);
 
   const customerId = Number(registeredA.body.data.id);
   const updatedCustomer = await api(base, `/admin/customers/${customerId}`, {

@@ -15,11 +15,12 @@ const { closeDatabase } = await import('../config/database.js');
 function installDatabase(
   t: test.TestContext,
   initialStatus: string,
-  amounts: { amountDue?: number; amountPaid?: number } = {},
+  amounts: { amountDue?: number; amountPaid?: number; paymentMethod?: string; policy?: Record<string, unknown>; pendingProofs?: number; previous?: { payment_id: number; amount: number; payment_date: string; actual_payment_at?: Date } } = {},
 ) {
   let status = initialStatus;
   const amountDue = amounts.amountDue ?? 100;
-  const amountPaid = amounts.amountPaid ?? 10;
+  let amountPaid = amounts.amountPaid ?? 10;
+  const credits: Record<string, unknown>[] = [];
   const queries: string[] = [];
   const events: string[] = [];
   const pool = { connected: true, close: async () => {} };
@@ -31,13 +32,35 @@ function installDatabase(
     queries.push(command);
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, value]) => [key, value.value]));
     const result = (recordset: Record<string, unknown>[] = [], rows = 1) => ({ recordset, rowsAffected: [rows] });
+    if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return result(amounts.policy ? [amounts.policy] : []);
+    if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
+      for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'UpdatedAt']) {
+        if (`policy${field}` in values) amounts.policy![field[0]!.toLowerCase() + field.slice(1)] = values[`policy${field}`];
+      }
+      return result();
+    }
+    if (/SELECT COUNT\(\*\) pendingCount/i.test(command)) return result([{ pendingCount: amounts.pendingProofs ?? 0 }]);
+    if (/COUNT_BIG\(\*\) AS activeBookingCount/i.test(command)) return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
     if (/SELECT status,customer_id customerId[\s\S]*FROM dbo\.RESERVATION/i.test(command)) return result([{
       status, customerId: 7, eventDate: '2026-12-01', guestCount: 100
     }]);
     if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) return result([{
       payment_id: 3, amount_due: amountDue, amount_paid: amountPaid
     }]);
+    if (/SELECT payment_id paymentId,amount_due amountDue,amount_paid amountPaid/i.test(command)) return result([{
+      paymentId: 3, amountDue, amountPaid, paymentMethod: amounts.paymentMethod ?? 'CASH'
+    }]);
+    if (/FROM dbo\.PAYMENT_TRANSACTION WITH\(UPDLOCK,HOLDLOCK\)/i.test(command)) {
+      assert.match(command, /WHERE payment_method=@method AND transaction_ref=@reference/);
+      return result(amounts.previous ? [amounts.previous] : credits.filter(credit => credit.method === values['method'] && credit.reference === values['reference']));
+    }
+    if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
+      credits.push({ payment_id: values['paymentId'], amount: values['amount'], payment_date: (values['date'] as Date).toISOString().slice(0, 10), actual_payment_at: values['date'], method: values['method'], reference: values['reference'] });
+      return result();
+    }
+    if (/UPDATE dbo\.PAYMENT SET amount_paid/i.test(command)) { amountPaid = (Math.round(amountPaid * 100) + Math.round(Number(values['amount']) * 100)) / 100; return result(); }
     if (/UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(command)) { status = String(values['nextStatus']); return result(); }
+    if (/UPDATE dbo\.RESERVATION SET status='EXPIRED'/i.test(command)) { status = 'EXPIRED'; return result(); }
     if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) return result([{
       customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01'
     }]);
@@ -46,7 +69,7 @@ function installDatabase(
         /UPDATE dbo\.(PAYMENT|PAYMENT_PROOF)/i.test(command) || /UPDATE i SET status/i.test(command)) return result();
     throw new Error(`Unexpected manual payment SQL: ${command}`);
   });
-  return { queries, events, status: () => status };
+  return { queries, events, credits, amountPaid: () => amountPaid, status: () => status };
 }
 
 test('manual payment locks booking before balance and advances awaiting payment atomically', async t => {
@@ -95,13 +118,26 @@ test('manual payment uses cumulative paid amount and advances at the exact half-
   } finally { await closeDatabase(); }
 });
 
-for (const status of ['PAYMENT_VERIFIED', 'CONFIRMED']) {
+for (const status of ['PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED']) {
   test(`manual payment does not regress an already ${status.toLowerCase()} reservation`, async t => {
     const db = installDatabase(t, status, { amountPaid: 60 });
     try {
       assert.equal(await recordPayment(2, {
         reservationId: 5, amount: 10, method: 'CASH', paymentDate: '2026-10-02'
       }), true);
+      assert.equal(db.status(), status);
+      assert.equal(db.queries.some(query => /UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(query)), false);
+    } finally { await closeDatabase(); }
+  });
+
+  test(`manual balance settlement supersedes a pending supplementary proof on ${status} without regressing lifecycle`, async t => {
+    const db = installDatabase(t, status, { amountPaid: 50 });
+    try {
+      await recordPayment(2, { reservationId: 5, amount: 50, method: 'CASH', reference: 'BALANCE-CASH-1', paymentDate: '2026-10-02' });
+      const supersede = db.queries.findIndex(query => /UPDATE dbo\.PAYMENT_PROOF SET status='SUPERSEDED'/i.test(query));
+      assert.ok(supersede >= 0, 'manual settlement must retire any submitted balance receipt');
+      assert.match(db.queries[supersede]!, /WHERE reservation_id=@reservationId AND status='SUBMITTED'/);
+      assert.ok(supersede < db.queries.findIndex(query => /INSERT dbo\.PAYMENT_TRANSACTION/i.test(query)));
       assert.equal(db.status(), status);
       assert.equal(db.queries.some(query => /UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(query)), false);
     } finally { await closeDatabase(); }
@@ -116,3 +152,52 @@ test('manual payment rejects terminal bookings before writing a credit', async t
     assert.equal(db.queries.some(query => /INSERT dbo\.PAYMENT_TRANSACTION/i.test(query)), false);
   } finally { await closeDatabase(); }
 });
+
+test('manual payment accepts exact final settlement using integer cents', async t => {
+  const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 20000.30, amountPaid: 10000.10 });
+  try {
+    assert.equal(await recordPayment(2, { reservationId: 5, amount: 10000.20, method: 'CASH', reference: 'CASH-FINAL', paymentDate: '2026-10-02' }), true);
+    assert.equal(db.status(), 'PAYMENT_VERIFIED');
+  } finally { await closeDatabase(); }
+});
+
+test('exact committed payment retry succeeds without repeating any side effects even when now fully paid', async t => {
+  const db = installDatabase(t, 'COMPLETED', { amountPaid: 100, previous: { payment_id: 3, amount: 25, payment_date: '2026-10-02' } });
+  try {
+    assert.equal(await recordPayment(2, { reservationId: 5, amount: 25, method: 'BANK_TRANSFER', reference: 'BANK-RETRY', paymentDate: '2026-10-02' }), true);
+    assert.equal(db.queries.some(query => /\b(INSERT|UPDATE)\b/i.test(query)), false);
+    assert.deepEqual(db.events, ['begin', 'commit']);
+    assert.equal(db.status(), 'COMPLETED');
+  } finally { await closeDatabase(); }
+});
+
+for (const method of ['CASH', 'BANK_TRANSFER', 'E-WALLET'] as const) {
+  test(`lost-response ${method} retry records one credit and one set of side effects`, async t => {
+    const db = installDatabase(t, 'AWAITING_PAYMENT');
+    const input = { reservationId: 5, amount: 90, method, reference: 'RETRY-1', paymentDate: '2026-10-02' };
+    try {
+      await recordPayment(2, input);
+      const mutations = db.queries.filter(query => /\b(INSERT|UPDATE)\b/i.test(query)).length;
+      await recordPayment(3, input);
+      assert.equal(db.credits.length, 1); assert.equal(db.amountPaid(), 100);
+      assert.equal(db.queries.filter(query => /\b(INSERT|UPDATE)\b/i.test(query)).length, mutations);
+      assert.equal(db.status(), 'PAYMENT_VERIFIED');
+      assert.deepEqual(db.events, ['begin', 'commit', 'begin', 'commit']);
+    } finally { await closeDatabase(); }
+  });
+}
+
+for (const previous of [
+  { payment_id: 8, amount: 25, payment_date: '2026-10-02' },
+  { payment_id: 3, amount: 26, payment_date: '2026-10-02' },
+  { payment_id: 3, amount: 25, payment_date: '2026-10-03' },
+]) {
+  test(`conflicting payment reference reuse rejects before side effects: ${JSON.stringify(previous)}`, async t => {
+    const db = installDatabase(t, 'AWAITING_PAYMENT', { previous });
+    try {
+      await assert.rejects(recordPayment(2, { reservationId: 5, amount: 25, method: 'BANK_TRANSFER', reference: 'BANK-RETRY', paymentDate: '2026-10-02' }), /PAYMENT_REFERENCE_CONFLICT/);
+      assert.equal(db.queries.some(query => /\b(INSERT|UPDATE)\b/i.test(query)), false);
+      assert.deepEqual(db.events, ['begin', 'rollback']);
+    } finally { await closeDatabase(); }
+  });
+}

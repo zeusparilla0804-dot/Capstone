@@ -23,9 +23,9 @@ export async function readCapacitySnapshot(
   const exclusion = options?.excludeReservationId === undefined
     ? ''
     : ' AND reservation_id <> @excludeReservationId';
-  request.input('eventDate', sql.Date, new Date(`${eventDate}T00:00:00.000Z`));
+  request.replaceInput('eventDate', sql.Date, new Date(`${eventDate}T00:00:00.000Z`));
   if (options?.excludeReservationId !== undefined) {
-    request.input('excludeReservationId', sql.Int, options.excludeReservationId);
+    request.replaceInput('excludeReservationId', sql.Int, options.excludeReservationId);
   }
   const result = await request.query<CapacitySnapshotRow>(`
       SELECT
@@ -41,7 +41,8 @@ export async function readCapacitySnapshot(
           'PAYMENT_SUBMITTED',
           'PAYMENT_VERIFIED',
           'CONFIRMED'
-        )${exclusion};
+        )
+        ${exclusion};
     `);
   const row = result.recordset[0];
 

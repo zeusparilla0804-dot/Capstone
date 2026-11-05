@@ -1,5 +1,7 @@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
 <main class="billing-layout portal-surface">
   <app-dashboard-sidebar
+    appearance="editorial"
     [title]="auth.user()?.fullName ?? 'Customer'"
     subtitle="Customer"
     [navItems]="navItems()"
@@ -14,7 +16,6 @@
           <h1>Billing & Payments</h1>
           <p>Track invoices, recorded payments, and remaining balances for your events.</p>
         </div>
-        <a class="btn btn-primary" routerLink="/book-event">Book an Event</a>
       </header>
 
       @if (bookingService.loading()) {
@@ -27,9 +28,9 @@
       } @else if (records().length) {
         <section class="billing-summary" aria-label="Billing summary">
           <dl>
-            <div><dt>Total booked</dt><dd>{{ formatCurrency(totalBilled()) }}</dd></div>
-            <div><dt>Payments recorded</dt><dd>{{ formatCurrency(totalPaid()) }}</dd></div>
-            <div><dt>Outstanding balance</dt><dd>{{ formatCurrency(outstandingBalance()) }}</dd></div>
+            <div><dt>Total booked</dt><dd><span class="billing-summary__currency">₱</span>{{ formatCurrency(totalBilled()).slice(1) }}</dd></div>
+            <div><dt>Payments recorded</dt><dd><span class="billing-summary__currency">₱</span>{{ formatCurrency(totalPaid()).slice(1) }}</dd></div>
+            <div><dt>Outstanding balance</dt><dd><span class="billing-summary__currency">₱</span>{{ formatCurrency(outstandingBalance()).slice(1) }}</dd></div>
           </dl>
         </section>
 
@@ -50,7 +51,6 @@
                   <h3>{{ record.eventName }}</h3>
                   <time [attr.datetime]="record.eventDate">{{ formatDate(record.eventDate) }}</time>
                 </div>
-                <app-status-badge [status]="record.status" />
                 <dl class="billing-record__amounts">
                   <div><dt>Total</dt><dd>{{ formatCurrency(record.total) }}</dd></div>
                   <div><dt>Paid</dt><dd>{{ formatCurrency(record.paid) }}</dd></div>
@@ -62,10 +62,11 @@
                   }
                   @if (record.acceptsPayment && record.balance > 0) {
                     <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
-                      {{ record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
+                      {{ record.cashPayment ? 'View Cash Instructions' : record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
                     </a>
                   }
                 </div>
+                <app-status-badge [status]="record.paymentStatus" />
               </article>
             }
           </div>

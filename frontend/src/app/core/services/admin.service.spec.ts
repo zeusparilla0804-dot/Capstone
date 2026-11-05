@@ -37,30 +37,6 @@ describe('AdminService booking status', () => {
     request.flush({ success: true });
   });
 
-  it('sends quotation line items to the custom event endpoint', () => {
-    const value = {
-      items: [{ description: 'Catering', quantity: 120, unitPrice: 950 }],
-      requiredDownPayment: 34200, validUntil: '2026-12-31', terms: 'Balance due before the event.',
-    } as const;
-    service.sendCustomQuote(18, value).subscribe();
-    const request = http.expectOne(`${environment.apiBaseUrl}/admin/custom-events/18/quotes`);
-    expect(request.request.method).toBe('POST');
-    expect(request.request.body).toEqual(value);
-    request.flush({ success: true, data: {} });
-  });
-
-  it('uses separate clarification and rejection actions', () => {
-    service.requestCustomClarification(18, 'Please confirm the venue').subscribe();
-    const clarification = http.expectOne(`${environment.apiBaseUrl}/admin/custom-events/18/request-clarification`);
-    expect(clarification.request.body).toEqual({ reason: 'Please confirm the venue' });
-    clarification.flush({ success: true });
-
-    service.rejectCustomEvent(18, 'Outside the service area').subscribe();
-    const rejection = http.expectOne(`${environment.apiBaseUrl}/admin/custom-events/18/reject`);
-    expect(rejection.request.body).toEqual({ reason: 'Outside the service area' });
-    rejection.flush({ success: true });
-  });
-
   it('updates an administrator-managed customer profile with credentials', () => {
     const value = { firstName: 'Klint', lastName: 'Charles', email: 'klint@example.test', phone: '09171234567' };
     service.updateCustomer(7, value).subscribe();

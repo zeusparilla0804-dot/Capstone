@@ -54,7 +54,8 @@ function queryInput(raw: unknown): ProofReviewQuery {
   if ((page - 1) * pageSize > 2_147_483_647) throw new AppError(400, 'Page offset is too large.');
   const search = text('search'); if (search.length > 200) throw new AppError(400, 'Search is too long.');
   const status = text('status', 'SUBMITTED').toUpperCase();
-  if (!['SUBMITTED', 'VERIFIED', 'REJECTED', 'SUPERSEDED'].includes(status)) throw new AppError(400, 'Proof status is invalid.');
+  if (!['SUBMITTED', 'VERIFIED', 'REJECTED', 'SUPERSEDED', 'ALL'].includes(status)) throw new AppError(400, 'Proof status is invalid.');
+  const reservationId = value['reservationId'] === undefined ? undefined : integer('reservationId', 1, 2_147_483_647);
   const method = text('method').toUpperCase();
   if (!['', 'CASH', 'BANK_TRANSFER', 'E_WALLET'].includes(method)) throw new AppError(400, 'Proof method is invalid.');
   function date(name: string): string {
@@ -65,7 +66,7 @@ function queryInput(raw: unknown): ProofReviewQuery {
   if (dateFrom && dateTo && dateFrom > dateTo) throw new AppError(400, 'Date range is invalid.');
   const order = text('order', 'oldest');
   if (order !== 'oldest' && order !== 'newest') throw new AppError(400, 'Proof order is invalid.');
-  return { page, pageSize, search, status: status as ProofReviewQuery['status'], method: method as ProofReviewQuery['method'],
+  return { page, pageSize, search, reservationId, status: status as ProofReviewQuery['status'], method: method as ProofReviewQuery['method'],
     date: exact, dateFrom, dateTo, order };
 }
 
@@ -89,7 +90,7 @@ export function createPaymentVerificationService(deps: Dependencies) {
       return await deps.transaction(async request => {
         // Shared with customer submission/replacement: reservation -> payment -> proof.
         const booking = await lockedBookingStatus(initial.reservationId, request);
-        if (!booking || booking.status !== 'PAYMENT_SUBMITTED') throw conflict();
+        if (!booking || !['PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(booking.status)) throw conflict();
         const payment = await lockedPayment(initial.reservationId, request);
         if (!payment) throw new AppError(409, 'Booking has no payment aggregate. Refresh the booking.');
         const proof = await lockedProof(proofId, request);
@@ -118,8 +119,10 @@ export function createPaymentVerificationService(deps: Dependencies) {
         const nextStatus = status === 'VERIFIED' && hasRequiredReservationDeposit(Number(payment.amountDue), cumulativePaid)
           ? 'PAYMENT_VERIFIED'
           : 'AWAITING_PAYMENT';
-        await transitionBooking({ reservationId: proof.reservationId, expectedStatus: 'PAYMENT_SUBMITTED',
-          nextStatus, actor: { type: 'ADMIN', id: adminId }, reason, request });
+        if (booking.status === 'PAYMENT_SUBMITTED') {
+          await transitionBooking({ reservationId: proof.reservationId, expectedStatus: 'PAYMENT_SUBMITTED',
+            nextStatus, actor: { type: 'ADMIN', id: adminId }, reason, request });
+        }
         // ADMIN_AUDIT_LOG.entity_id is int; proof IDs are bigint, so anchor on booking.
         await writeAdminAudit({ adminId, action: `PAYMENT_PROOF_${status}`, entityType: 'BOOKING', entityId: proof.reservationId,
           oldValues: { proofId, status: proof.status, amountPaid: paidCents / 100 },

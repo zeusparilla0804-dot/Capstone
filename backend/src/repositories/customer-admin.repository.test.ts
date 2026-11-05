@@ -51,6 +51,10 @@ test('profile update locks the customer, updates allowed fields, and audits old 
   assert.match(request.calls[0]!.command, /WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
   assert.match(request.calls[1]!.command, /UPDATE\s+dbo\.CUSTOMER/i);
   assert.doesNotMatch(request.calls[1]!.command, /password/i);
+  const invalidation = request.calls.find(call => /UPDATE\s+dbo\.PASSWORD_RESET_TOKEN/i.test(call.command));
+  assert.ok(invalidation, 'Changing email must invalidate links sent to the previous address');
+  assert.match(invalidation.command, /customer_id=@customerId/);
+  assert.match(invalidation.command, /used_at IS NULL AND invalidated_at IS NULL/);
   assert.deepEqual(audits, [{
     adminId: 3, action: 'CUSTOMER_UPDATED', entityType: 'CUSTOMER', entityId: 7,
     oldValues: { firstName: 'Old', lastName: 'Name', email: 'old@example.test', phone: '09000000000' },

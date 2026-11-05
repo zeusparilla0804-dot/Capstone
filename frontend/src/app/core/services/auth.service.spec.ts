@@ -3,8 +3,52 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
+import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 describe('AuthService', () => {
+  it('verifies an email code without authenticating and preserves leading zeroes', async () => {
+    const result = service.verifyEmail('customer@example.test', '012345');
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/email/verify`);
+    expect(request.request.body).toEqual({ email: 'customer@example.test', code: '012345' });
+    request.flush({ success: true }); await result;
+    expect(service.user()).toBeNull();
+  });
+  it('requests a replacement email code without creating a session', async () => {
+    const result = service.resendEmailCode('customer@example.test');
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/email/resend`);
+    expect(request.request.body).toEqual({ email: 'customer@example.test' });
+    request.flush({ success: true }); await result;
+    expect(service.user()).toBeNull();
+  });
+  it('updates the signed-in customer phone through a credentialed request and refreshes account state', async () => {
+    const result = (service as any).updatePhone('0917 123 4567');
+    const request = http.expectOne(`${environment.apiBaseUrl}/auth/me/phone`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toEqual({ phone: '0917 123 4567' });
+    request.flush({ success: true, data: { id: 42, fullName: 'New Customer', email: 'new@example.test', phone: '09171234567', role: 'customer' } });
+    await result;
+    expect(service.user()?.phone).toBe('09171234567');
+    expect(service.user()?.id).toBe('42');
+  });
+
+  it('preserves the displayed phone when saving fails', async () => {
+    const user = { id: '42', fullName: 'New Customer', email: 'new@example.test', phone: '09171234567', role: 'customer' as const };
+    service.user.set(user);
+    const result = (service as any).updatePhone('09181234567');
+    const rejection = expect(result).rejects.toMatchObject({ status: 400 });
+    http.expectOne(`${environment.apiBaseUrl}/auth/me/phone`).flush({ success: false, message: 'Invalid phone.' }, { status: 400, statusText: 'Bad Request' });
+    await rejection;
+    expect(service.user()).toEqual(user);
+  });
+
+  it('creates an account without authenticating the customer', async () => {
+    const result = service.register({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
+    http.expectOne(`${environment.apiBaseUrl}/auth/register`).flush({ success: true, data: { id: 42, fullName: 'New Customer', email: 'new@example.test', role: 'customer' } });
+    await result;
+    expect(service.user()).toBeNull();
+  });
+
   let service: AuthService;
   let http: HttpTestingController;
 
@@ -17,6 +61,30 @@ describe('AuthService', () => {
   });
 
   afterEach(() => http.verify());
+
+  it('invalidates customer stores before publishing the changed account identity', async () => {
+    const scope = TestBed.inject(CustomerAccountScopeService);
+    const seen: (string | null)[] = [];
+    scope.changes.subscribe(() => seen.push(service.user()?.id ?? null));
+    const login = service.login('customer@example.test', 'password-12345');
+    http.expectOne(`${environment.apiBaseUrl}/auth/login`).flush({ success: true, data: {
+      id: 42, fullName: 'Customer', email: 'customer@example.test', role: 'customer',
+    } });
+    await login;
+    const logout = service.logout();
+    http.expectOne(`${environment.apiBaseUrl}/auth/logout`).flush(null);
+    await logout;
+    expect(seen).toEqual([null, '42']);
+    expect(scope.generation).toBe(2);
+  });
+
+  it('treats an already revoked session as a successful local logout', async () => {
+    service.user.set({ id: '42', fullName: 'Customer', email: 'customer@example.test', role: 'customer' });
+    const result = service.logout();
+    http.expectOne(`${environment.apiBaseUrl}/auth/logout`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    await expect(result).resolves.toBeUndefined();
+    expect(service.user()).toBeNull();
+  });
 
   it('retries the server session check after an earlier failure', async () => {
     const firstCheck = service.ensureAuthenticated();
@@ -58,6 +126,28 @@ describe('AuthService', () => {
     });
 
     await expect(Promise.all([firstCheck, secondCheck])).resolves.toEqual([true, true]);
+  });
+
+  it('keeps an earlier session discovery from winning over an intentional login', async () => {
+    const check = service.ensureAuthenticated();
+    const prior = http.expectOne(`${environment.apiBaseUrl}/auth/me`);
+    const login = service.login('other@example.test', 'password-12345');
+    prior.flush({ success: true, data: { id: '42', fullName: 'Prior', email: 'prior@example.test', role: 'customer' } });
+    http.expectOne(`${environment.apiBaseUrl}/auth/login`).flush({ success: true, data: {
+      id: '99', fullName: 'Other', email: 'other@example.test', role: 'customer',
+    } });
+    await Promise.all([check, login]);
+    expect(service.user()?.id).toBe('99');
+  });
+
+  it('does not let an earlier session discovery prevent local logout', async () => {
+    const check = service.ensureAuthenticated();
+    const prior = http.expectOne(`${environment.apiBaseUrl}/auth/me`);
+    const logout = service.logout();
+    prior.flush({ success: true, data: { id: '42', fullName: 'Prior', email: 'prior@example.test', role: 'customer' } });
+    http.expectOne(`${environment.apiBaseUrl}/auth/logout`).flush(null);
+    await Promise.all([check, logout]);
+    expect(service.user()).toBeNull();
   });
 
   it('requests a customer password reset without credentials', async () => {

@@ -29,7 +29,11 @@ const upload = multer({
   }),
   limits: {
     fileSize: MAX_PAYMENT_PROOF_BYTES,
-    files: 1
+    files: 1,
+    fields: 4,
+    parts: 5,
+    fieldSize: 256,
+    fieldNameSize: 32
   }
 }).single('proof');
 

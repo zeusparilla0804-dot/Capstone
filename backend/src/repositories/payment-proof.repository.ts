@@ -30,9 +30,9 @@ function record(row: PaymentProofRecord): PaymentProofRecord {
   };
 }
 
-export async function lockedPayment(reservationId: number, request: sql.Request): Promise<{ paymentId: number; amountDue: number; amountPaid: number } | undefined> {
+export async function lockedPayment(reservationId: number, request: sql.Request): Promise<{ paymentId: number; amountDue: number; amountPaid: number; paymentMethod?: string } | undefined> {
   const result = await request.replaceInput('reservationId', sql.Int, reservationId)
-    .query<{ paymentId: number; amountDue: number; amountPaid: number }>(`SELECT payment_id paymentId,amount_due amountDue,amount_paid amountPaid
+    .query<{ paymentId: number; amountDue: number; amountPaid: number; paymentMethod?: string }>(`SELECT payment_id paymentId,amount_due amountDue,amount_paid amountPaid,payment_method paymentMethod
       FROM dbo.PAYMENT WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId`);
   return result.recordset[0];
 }
@@ -147,7 +147,8 @@ export async function markProofReviewed(input: { proofId: number; reservationId:
 
 export async function listReviewProofs(query: ProofReviewQuery, request: sql.Request): Promise<PageResult<PaymentProofRecord>> {
   const filter = `FROM dbo.PAYMENT_PROOF pp
-    WHERE pp.status=@status AND (@method='' OR pp.method=@method)
+    WHERE (@status='ALL' OR pp.status=@status) AND (@reservationId IS NULL OR pp.reservation_id=@reservationId)
+      AND (@method='' OR pp.method=@method)
       AND (@date='' OR pp.payment_date=CONVERT(date,NULLIF(@date,'')))
       AND (@dateFrom='' OR pp.payment_date>=CONVERT(date,NULLIF(@dateFrom,'')))
       AND (@dateTo='' OR CONVERT(date,pp.payment_date)<=CONVERT(date,NULLIF(@dateTo,'')))
@@ -158,6 +159,7 @@ export async function listReviewProofs(query: ProofReviewQuery, request: sql.Req
   // Oldest first avoids starving pending work; ID breaks ties deterministically.
   const direction = query.order === 'newest' ? 'DESC' : 'ASC';
   const result = await request.replaceInput('status', sql.NVarChar(30), query.status)
+    .replaceInput('reservationId', sql.Int, query.reservationId ?? null)
     .replaceInput('method', sql.NVarChar(30), query.method).replaceInput('search', sql.NVarChar(200), query.search)
     .replaceInput('date', sql.VarChar(10), query.date).replaceInput('dateFrom', sql.VarChar(10), query.dateFrom)
     .replaceInput('dateTo', sql.VarChar(10), query.dateTo).replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)

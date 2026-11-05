@@ -15,7 +15,6 @@ export class PackageExperienceComponent {
   readonly position = input(0);
   readonly planPackage = output<string>();
   readonly viewInclusions = output<string>();
-  readonly customizePackage = output<string>();
 
   protected readonly currentImageIndex = signal(0);
   protected readonly inclusionsExpanded = signal(false);
@@ -27,6 +26,15 @@ export class PackageExperienceComponent {
   protected readonly currentImage = computed(
     () => this.galleryImages()[this.currentImageIndex()] ?? this.cateringPackage().imageUrl,
   );
+  protected readonly visibleDots = computed(() => {
+    const count = this.galleryImages().length;
+    const visibleCount = Math.min(7, count);
+    const start = Math.min(
+      Math.max(this.currentImageIndex() - Math.floor(visibleCount / 2), 0),
+      count - visibleCount,
+    );
+    return Array.from({ length: visibleCount }, (_, offset) => start + offset);
+  });
   protected readonly currentImageAlt = computed(
     () => `${this.cateringPackage().name} event design ${this.currentImageIndex() + 1} of ${this.galleryImages().length}`,
   );
@@ -79,7 +87,4 @@ export class PackageExperienceComponent {
     this.planPackage.emit(this.cateringPackage().id);
   }
 
-  protected requestCustomization(): void {
-    this.customizePackage.emit(this.cateringPackage().id);
-  }
 }

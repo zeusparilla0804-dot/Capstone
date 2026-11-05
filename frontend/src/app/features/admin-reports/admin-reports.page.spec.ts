@@ -53,7 +53,7 @@ describe('AdminReportsPage', () => {
       providers: [
         provideRouter([]),
         { provide: AdminService, useValue: api },
-        { provide: AdminAuthService, useValue: {
+        { provide: AdminAuthService, useValue: { idleWarning: signal(false),
           user: signal({ id: '1', fullName: 'LA Chef Admin', email: 'admin@lachef.com', role: 'admin' as const }),
           logout: vi.fn(), logoutAll: vi.fn(),
         } },

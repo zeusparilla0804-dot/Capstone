@@ -65,9 +65,11 @@ interface BookingAvailabilityDependencies {
 
 export function createBookingAvailabilityService(deps: BookingAvailabilityDependencies) {
   return {
-    async preview(date: string, guestCount: number): Promise<BookingAvailability> {
+    async preview(date: string, guestCount: number, excludeReservationId?: number): Promise<BookingAvailability> {
       try {
-        const snapshot = await deps.readCapacitySnapshot(date);
+        const snapshot = excludeReservationId === undefined
+          ? await deps.readCapacitySnapshot(date)
+          : await deps.readCapacitySnapshot(date, { excludeReservationId });
         return assessDateAvailability({ date, guestCount, snapshot, includeProposed: true });
       } catch {
         throw new AppError(

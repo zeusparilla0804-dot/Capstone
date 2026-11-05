@@ -4,7 +4,15 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 
-import { readPasswordResetConfiguration } from '../config/environment.js';
+import { readFrontendOrigin, readPasswordResetConfiguration } from '../config/environment.js';
+
+test('production frontend origin requires HTTPS and rejects URL credentials', () => {
+  assert.equal(readFrontendOrigin('https://lachef.example/reset-password', 'production'), 'https://lachef.example');
+  assert.equal(readFrontendOrigin('http://localhost:4200', 'development'), 'http://localhost:4200');
+  assert.throws(() => readFrontendOrigin('http://lachef.example', 'production'), /HTTPS/);
+  assert.throws(() => readFrontendOrigin('javascript:alert(1)', 'production'), /HTTPS/);
+  assert.throws(() => readFrontendOrigin('https://user:secret@lachef.example', 'production'), /credentials/);
+});
 import {
   createPasswordResetToken,
   reconstructPasswordResetToken,

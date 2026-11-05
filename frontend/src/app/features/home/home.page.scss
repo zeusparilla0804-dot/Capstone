@@ -1,6 +1,13 @@
 .home-page {
   background: var(--color-background);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.6;
 }
+.home-page h1, .home-page h2 { font-family: var(--font-serif); line-height: 1.2; font-weight: 400; }
+.home-page .page-kicker, .hero__eyebrow { font-family: var(--font-sans); font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: .08em; }
+.home-page .btn { font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 1.5; letter-spacing: normal; }
 .hero {
   position: relative;
   display: grid;
@@ -34,28 +41,30 @@
 }
 .hero__eyebrow {
   color: #d7d9bd;
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 .hero h1 {
   max-width: 780px;
   margin-top: 20px;
-  font-size: clamp(3rem, 6vw, 5.5rem);
-  font-weight: 500;
+  font-size: clamp(2.5rem, 5.4vw, 4.5rem);
+  font-weight: 400;
+  line-height: 1.12;
   letter-spacing: 0;
   text-wrap: balance;
 }
 .hero h1 em {
   color: #d7d9bd;
-  font-weight: 500;
+  font-weight: 400;
 }
 .hero__content > p:not(.hero__eyebrow) {
   max-width: 530px;
   margin-top: 24px;
   color: rgba(255, 255, 255, 0.78);
-  font-size: 1.08rem;
+  font-size: 16px;
+  line-height: 1.6;
 }
 .hero__actions {
   display: flex;
@@ -80,7 +89,7 @@
 .popular h2,
 .home-cta h2 {
   margin-top: 10px;
-  font-size: clamp(2rem, 4vw, 3.1rem);
+  font-size: clamp(1.875rem, 3.4vw, 2.625rem);
 }
 .section-heading > p:last-child {
   margin-top: 14px;
@@ -129,13 +138,18 @@
 .service strong {
   margin-top: 18px;
   font-family: var(--font-serif);
-  font-size: 1.18rem;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
 }
 .service > span:last-child {
   max-width: 180px;
   margin-top: 5px;
   color: var(--color-text-muted);
-  font-size: 0.82rem;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 .popular {
   padding-block: 88px;
@@ -185,8 +199,8 @@
 .process h2,
 .gallery h2 {
   margin-top: 12px;
-  font-size: clamp(2rem, 4vw, 3.4rem);
-  font-weight: 500;
+  font-size: clamp(1.875rem, 3.4vw, 2.625rem);
+  font-weight: 400;
   text-wrap: balance;
 }
 .promise__grid {
@@ -200,21 +214,23 @@
 }
 .promise article > span {
   color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
 }
 .promise h3,
 .process h3 {
   margin: 18px 0 8px;
   font-family: var(--font-serif);
   font-size: 1.25rem;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1.35;
 }
 .promise article p,
 .process li p {
   color: var(--color-text-muted);
-  font-size: 0.9rem;
-  line-height: 1.7;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
 }
 .process {
   background: #fff;
@@ -246,8 +262,8 @@
 }
 .process li > span {
   color: var(--color-primary);
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
 }
 .process h3 {
   margin-top: 0;
@@ -263,7 +279,8 @@
 }
 .gallery__heading > p {
   color: var(--color-text-muted);
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.6;
 }
 .gallery__grid {
   display: grid;
@@ -306,18 +323,26 @@
   font-size: 1.65rem;
   text-decoration: none;
 }
-.site-footer__brand span {
-  color: var(--color-primary-light);
+.site-footer__brand-accent {
+  color: #d1a44d;
 }
 .site-footer p {
   max-width: 340px;
   margin-top: 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
 }
 .site-footer nav,
 .site-footer__contact {
   display: grid;
   align-content: start;
   gap: 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 .site-footer a {
   text-decoration: none;
@@ -327,6 +352,7 @@
 }
 .site-footer strong {
   color: #fff;
+  font-weight: 500;
 }
 .site-footer__bottom {
   display: flex;
@@ -335,7 +361,26 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   margin-top: 50px;
   padding-top: 22px;
-  font-size: 0.78rem;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+:host ::ng-deep .home-page .popular app-package-card {
+  h3, .package-card__price {
+    justify-self: stretch;
+    margin-inline: 0;
+    padding-inline: 0;
+    text-align: left;
+    text-indent: 0;
+  }
+  .package-card__category { font-family: var(--font-sans); font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: .08em; }
+  h3 { font-family: var(--font-serif); font-size: 26px; font-weight: 500; line-height: 1.25; }
+  .package-card__description { font-family: var(--font-sans); font-size: 14px; font-weight: 400; line-height: 1.6; }
+  .package-card__price { font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 1.5; font-variant-numeric: tabular-nums; }
+  .package-card__capacity { font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1.5; }
+  .package-card__details { font-family: var(--font-sans); font-size: 14px; font-weight: 500; line-height: 1.5; letter-spacing: normal; }
 }
 @media (max-width: 1023px) {
   .services__grid {

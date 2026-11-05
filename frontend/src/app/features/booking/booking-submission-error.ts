@@ -1,4 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { BookingSubmissionConflictError } from '../../core/services/booking.service';
 
 const GENERIC_MESSAGE = "We couldn't submit your booking. Please try again.";
 const CAPACITY_CONFLICT_CODES = new Set(['BOOKING_DATE_FULL', 'CAPACITY_CHANGED']);
@@ -17,6 +18,7 @@ export function isBookingCapacityConflict(error: unknown): boolean {
 }
 
 export function bookingSubmissionMessage(error: unknown): string {
+  if (error instanceof BookingSubmissionConflictError) return error.message;
   if (!(error instanceof HttpErrorResponse)) return GENERIC_MESSAGE;
   if (error.status === 0) {
     return 'Cannot connect to LA Chef. Make sure the backend is running, then try again.';

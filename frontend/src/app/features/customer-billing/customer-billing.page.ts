@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@a
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { BookingCalculationService } from '../../core/services/booking-calculation.service';
+import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -16,10 +16,12 @@ interface BillingRecord {
   readonly eventName: string;
   readonly eventDate: string;
   readonly status: BookingStatus;
+  readonly paymentStatus: string;
   readonly total: number;
   readonly paid: number;
   readonly balance: number;
   readonly acceptsPayment: boolean;
+  readonly cashPayment: boolean;
 }
 
 @Component({
@@ -31,14 +33,13 @@ interface BillingRecord {
 })
 export class CustomerBillingPageComponent {
   protected readonly bookingService = inject(BookingService);
-  private readonly calculationService = inject(BookingCalculationService);
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
 
   protected readonly records = computed<readonly BillingRecord[]>(() => this.bookingService.bookings().map((booking) => {
-    const total = this.calculationService.calculateTotals(booking).total;
+    const total = bookingTotal(booking);
     const balance = booking.status === 'cancelled' || booking.status === 'rejected'
       ? 0
       : Math.max(total - booking.amountPaid, 0);
@@ -49,10 +50,12 @@ export class CustomerBillingPageComponent {
       eventName: booking.eventName,
       eventDate: booking.eventDate,
       status: booking.status,
+      paymentStatus: customerPaymentStatus(booking),
       total,
       paid: booking.amountPaid,
       balance,
-      acceptsPayment: booking.status === 'awaiting_payment' || booking.status === 'payment_submitted',
+      acceptsPayment: hasCashPaymentAction(booking) || hasOnlinePaymentAction(booking),
+      cashPayment: booking.paymentMethod === 'cash',
     };
   }));
   protected readonly totalBilled = computed(() => this.records().reduce((sum, item) => sum + item.total, 0));
@@ -65,7 +68,7 @@ export class CustomerBillingPageComponent {
   }
 
   protected formatCurrency(value: number): string {
-    return `PHP ${value.toLocaleString('en-PH')}`;
+    return `₱${value.toLocaleString('en-PH')}`;
   }
 
   protected formatDate(value: string): string {

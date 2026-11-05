@@ -18,6 +18,7 @@ const { adminController, parseActiveFlag } = await import('../controllers/admin.
 const { adminService } = await import('./admin.service.js');
 const { bookingService } = await import('./booking.service.js');
 const bookingController = await import('../controllers/booking.controller.js');
+const { closeDatabase } = await import('../config/database.js');
 
 const transitions: [BookingStatus, readonly BookingStatus[]][] = [
   ['PENDING', ['APPROVED', 'REJECTED', 'CANCELLED']],
@@ -28,7 +29,8 @@ const transitions: [BookingStatus, readonly BookingStatus[]][] = [
   ['CONFIRMED', ['COMPLETED', 'CANCELLED']],
   ['REJECTED', []],
   ['CANCELLED', []],
-  ['COMPLETED', []]
+  ['COMPLETED', []],
+  ['EXPIRED', []]
 ];
 
 class BookingDb {
@@ -36,16 +38,25 @@ class BookingDb {
   customerId = 7;
   eventDate = '2026-12-01';
   guestCount = 100;
+  paymentMethod: string | undefined;
+  amountPaid = 0;
   activeBookingCount = 1;
   largestGuestCount = 100;
   hasMediumEvent = false;
   exists = true;
   stale = false;
-  failOn: 'history' | 'audit' | undefined;
+  failOn: 'history' | 'audit' | 'invoice' | 'invoice-items' | undefined;
   history: Record<string, unknown>[] = [];
   audit: Record<string, unknown>[] = [];
   outbox: Record<string, unknown>[] = [];
+  invoiceId?: number;
+  invoices: Record<string, unknown>[] = [];
+  invoiceItemWrites = 0;
+  invoiceSourceMissing = false;
   failQueue = false;
+  proofsSuperseded = false;
+  afterPaymentLock?: () => void;
+  afterCapacityLock?: () => void;
   queries: string[] = [];
   request = new FakeRequest(this) as unknown as sql.Request;
 }
@@ -57,18 +68,50 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string): Promise<{ recordset: Record<string, unknown>[]; rowsAffected: number[] }> {
     this.db.queries.push(command);
+    if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY/.test(command)) return { recordset: [], rowsAffected: [0] };
+    if (/UPDATE dbo\.PAYMENT_PROOF SET status='SUPERSEDED'/is.test(command)) {
+      this.db.proofsSuperseded = true;
+      return { recordset: [], rowsAffected: [1] };
+    }
     if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
-      return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }], rowsAffected: [1] };
+      return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: this.db.eventDate, guestCount: this.db.guestCount, paymentMethod: this.db.paymentMethod,
+        invoiceId: this.db.invoiceId, invoiceNumber: this.db.invoiceId ? 'INV-8' : undefined,
+        invoiceDueDate: this.db.eventDate, eventTime: '12:00', eventType: 'Wedding', venue: 'Venue', status: this.db.status,
+        totalAmount: 10000, amountPaid: this.db.amountPaid }], rowsAffected: [1] };
     }
     if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) {
       if (this.db.failQueue) throw new Error('outbox insert failed');
       this.db.outbox.push({ ...this.params }); return { recordset: [{ id: '9007199254740993' }], rowsAffected: [1] };
     }
+    if (/SELECT r\.reservation_id.*FROM dbo\.RESERVATION r WITH/is.test(command)) {
+      return { recordset: this.db.exists && !this.db.invoiceSourceMissing ? [{ reservation_id: 5, status: this.db.status, guest_count: this.db.guestCount,
+        event_date: this.db.eventDate, package_name_snapshot: 'Catering package', package_pricing_type: 'PER_HEAD',
+        package_unit_price: 100, package_total: 10000, subtotal: 10000, discount_amount: 0, total_amount: 10000 }] : [], rowsAffected: [1] };
+    }
+    if (/SELECT invoice_id FROM dbo\.INVOICE/.test(command)) {
+      return { recordset: this.db.invoiceId ? [{ invoice_id: this.db.invoiceId }] : [], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.INVOICE\(/.test(command)) {
+      if (this.db.failOn === 'invoice') throw new Error('invoice insert failed');
+      this.db.invoiceId = 8;
+      this.db.invoices.push({ ...this.params });
+      return { recordset: [{ invoice_id: 8 }], rowsAffected: [1] };
+    }
+    if (/INSERT dbo\.INVOICE_ITEM/.test(command)) {
+      if (this.db.failOn === 'invoice-items') throw new Error('invoice items insert failed');
+      this.db.invoiceItemWrites++;
+      return { recordset: [], rowsAffected: [1] };
+    }
     if (!/COUNT_BIG/i.test(command) && /SELECT.*FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) {
       return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.customerId,
         eventDate: this.db.eventDate, guestCount: this.db.guestCount }] : [], rowsAffected: [this.db.exists ? 1 : 0] };
     }
+    if (/SELECT payment_id paymentId.*FROM dbo\.PAYMENT/is.test(command)) {
+      this.db.afterPaymentLock?.();
+      return { recordset: [{ paymentId: 3, amountDue: 100, amountPaid: this.db.amountPaid, paymentMethod: this.db.paymentMethod }], rowsAffected: [1] };
+    }
     if (/^\s*SELECT\s+COUNT_BIG\s*\(\s*\*\s*\).*FROM dbo\.RESERVATION/is.test(command)) {
+      this.db.afterCapacityLock?.();
       return { recordset: [{ activeBookingCount: this.db.activeBookingCount,
         largestGuestCount: this.db.largestGuestCount, hasMediumEvent: this.db.hasMediumEvent ? 1 : 0 }], rowsAffected: [1] };
     }
@@ -114,6 +157,116 @@ function assertCodedStatus(error: unknown, statusCode: number, code: string) {
   return true;
 }
 
+test('ordinary admin approval and payment request remain available for every method', async () => {
+ for (const paymentMethod of ['CASH','BANK_TRANSFER','E-WALLET']) {
+  const db=new BookingDb();db.paymentMethod=paymentMethod;db.eventDate='2098-06-15';
+  for(const nextStatus of ['APPROVED','AWAITING_PAYMENT'] as const) {
+   await transitionBooking({reservationId:5,nextStatus,actor:{type:'ADMIN',id:2},mode:'GENERIC_ADMIN',request:db.request});
+   assert.equal(db.status,nextStatus);
+  }
+  assert.equal(db.amountPaid,0);assert.equal(db.history.length,2);
+  assert.equal(db.queries.some(query=>/BOOKING_POLICY/.test(query)),false);
+ }
+});
+
+for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED', 'AWAITING_PAYMENT']] as const) {
+  test(`cash ${nextStatus} uses the fixed preparation cutoff through exactly 6 PM`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T09:59:59.999Z') });
+    for (const now of ['2026-11-04T09:59:59.999Z', '2026-11-04T10:00:00.000Z']) {
+      t.mock.timers.setTime(Date.parse(now));
+      for (const [guestCount, eventDate] of [[499, '2026-11-07'], [500, '2026-11-09']] as const) {
+        const db = new BookingDb();
+        Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', guestCount, eventDate });
+        await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, capacityConfirmed: true, request: db.request });
+        assert.equal(db.status, nextStatus);
+        assert.equal(db.history.length, 1);
+      }
+    }
+  });
+
+  test(`cash ${nextStatus} rejects unpaid deposits strictly after the fixed cutoff`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T10:00:00.001Z') });
+    for (const [guestCount, eventDate] of [[499, '2026-11-07'], [500, '2026-11-09']] as const) {
+      const db = new BookingDb();
+      Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', amountPaid: 49.99, guestCount, eventDate });
+      await assert.rejects(
+        transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, capacityConfirmed: true, request: db.request }),
+        error => assertCodedStatus(error, 409, 'CASH_DEPOSIT_DEADLINE_PASSED'),
+      );
+      assert.equal(db.status, previousStatus);
+      assert.equal(db.history.length, 0);
+      assert.equal(db.audit.length, 0);
+      assert.equal(db.outbox.length, 0);
+      assert.equal(db.invoices.length, 0);
+      assert.equal(db.queries.some(query => /UPDATE dbo\.RESERVATION/.test(query)), false);
+    }
+  });
+
+  test(`cash ${nextStatus} preserves an already paid reservation deposit after cutoff`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-06T04:00:00Z') });
+    for (const amountPaid of [50, 100]) {
+      const db = new BookingDb();
+      Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', amountPaid, eventDate: '2026-11-07' });
+      await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request });
+      assert.equal(db.status, nextStatus);
+      assert.equal(db.amountPaid, amountPaid);
+    }
+  });
+
+  test(`cash ${nextStatus} rejects past Manila event dates even when the deposit is paid`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T16:00:00Z') });
+    for (const amountPaid of [0, 50]) {
+      const db = new BookingDb();
+      Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', amountPaid, eventDate: '2026-11-04' });
+      await assert.rejects(
+        transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request }),
+        error => assertCodedStatus(error, 409, 'CASH_EVENT_DATE_PASSED'),
+      );
+      assert.equal(db.status, previousStatus);
+      assert.equal(db.history.length, 0);
+      assert.equal(db.audit.length, 0);
+      assert.equal(db.outbox.length, 0);
+      assert.equal(db.invoices.length, 0);
+    }
+  });
+
+  test(`noncash ${nextStatus} retains its ordinary transitions after the cash cutoff`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T16:00:00Z') });
+    for (const paymentMethod of ['BANK_TRANSFER', 'E-WALLET', undefined]) {
+      const db = new BookingDb();
+      Object.assign(db, { status: previousStatus, paymentMethod, eventDate: '2026-11-04' });
+      await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request });
+      assert.equal(db.status, nextStatus);
+    }
+  });
+}
+
+test('cash approval checks the clock after acquiring capacity locks', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T09:59:59.999Z') });
+  const db = new BookingDb();
+  Object.assign(db, { paymentMethod: 'CASH', eventDate: '2026-11-07' });
+  db.afterCapacityLock = () => t.mock.timers.setTime(Date.parse('2026-11-04T10:00:00.001Z'));
+  await assert.rejects(
+    transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 2 }, request: db.request }),
+    error => assertCodedStatus(error, 409, 'CASH_DEPOSIT_DEADLINE_PASSED'),
+  );
+  assert.equal(db.status, 'PENDING');
+  assert.equal(db.history.length, 0);
+});
+
+test('cash payment request checks the clock after acquiring the payment lock', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T09:59:59.999Z') });
+  const db = new BookingDb();
+  Object.assign(db, { status: 'APPROVED', paymentMethod: 'CASH', eventDate: '2026-11-07' });
+  db.afterPaymentLock = () => t.mock.timers.setTime(Date.parse('2026-11-04T10:00:00.001Z'));
+  await assert.rejects(
+    transitionBooking({ reservationId: 5, nextStatus: 'AWAITING_PAYMENT', actor: { type: 'ADMIN', id: 2 }, request: db.request }),
+    error => assertCodedStatus(error, 409, 'CASH_DEPOSIT_DEADLINE_PASSED'),
+  );
+  assert.equal(db.status, 'APPROVED');
+  assert.equal(db.history.length, 0);
+});
+
 test('booking status exposes every approved transition and terminal state', () => {
   for (const [status, expected] of transitions) {
     assert.deepEqual(allowedBookingTransitions(status), expected, status);
@@ -128,7 +281,7 @@ test('catalog active flag accepts only literal JSON booleans', () => {
   }
 });
 
-for (const [previous, next] of [['PENDING', 'APPROVED'], ['PENDING', 'REJECTED'], ['PENDING', 'CANCELLED'],
+for (const [previous, next] of [['PENDING', 'REJECTED'], ['PENDING', 'CANCELLED'],
   ['PAYMENT_VERIFIED', 'CONFIRMED'], ['CONFIRMED', 'COMPLETED']] as const) {
   test(`email outbox booking ${next} queues once inside the supplied transaction without SMTP`, async () => {
     const db = new BookingDb(); db.status = previous;
@@ -138,15 +291,69 @@ for (const [previous, next] of [['PENDING', 'APPROVED'], ['PENDING', 'REJECTED']
   });
 }
 
+test('admin approval issues one invoice and consolidated email in the supplied transaction without requesting payment', async t => {
+  const db = new BookingDb();
+  t.mock.method(sql.Transaction.prototype, 'begin', async () => assert.fail('approval must not open a nested transaction'));
+  await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request });
+  assert.equal(db.status, 'APPROVED');
+  assert.equal(db.history.length, 1);
+  assert.equal(db.invoices.length, 1);
+  assert.equal(db.invoiceItemWrites, 2);
+  assert.deepEqual(db.audit.map(item => item['auditAction']), ['BOOKING_STATUS_CHANGED', 'INVOICE_ISSUED']);
+  assert.equal(db.outbox.length, 1);
+  assert.equal(db.outbox[0]!['templateKey'], 'INVOICE_ISSUED');
+  assert.equal(db.outbox[0]!['relatedEntityType'], 'INVOICE');
+  assert.equal(db.outbox[0]!['relatedEntityId'], '8');
+  assert.equal(JSON.parse(String(db.outbox[0]!['payload'])).invoiceNumber, 'INV-8');
+  assert.ok(db.queries.some(query => /NEXT VALUE FOR dbo\.INVOICE_NUMBER_SEQUENCE/.test(query)));
+  await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }), error => assertStatus(error, 409));
+  assert.equal(db.invoices.length, 1);
+  assert.equal(db.outbox.length, 1);
+  await transitionBooking({ reservationId: 5, nextStatus: 'AWAITING_PAYMENT', actor: { type: 'ADMIN', id: 3 }, request: db.request });
+  assert.equal(db.status, 'AWAITING_PAYMENT');
+  assert.equal(db.invoices.length, 1);
+  assert.equal(db.outbox.length, 1);
+});
+
+for (const failure of ['invoice', 'invoice-items', 'queue', 'missing-source'] as const) {
+  test(`admin approval rolls back all changes when ${failure} persistence fails`, async () => {
+    const db = new BookingDb();
+    if (failure === 'queue') db.failQueue = true;
+    else if (failure === 'missing-source') db.invoiceSourceMissing = true;
+    else db.failOn = failure;
+    const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
+    transaction.begin = async () => transaction;
+    transaction.request = () => db.request;
+    transaction.commit = async () => assert.fail('partial approval must not commit');
+    transaction.rollback = async () => {
+      db.status = 'PENDING'; db.history = []; db.audit = []; db.invoices = []; db.invoiceId = undefined;
+      db.invoiceItemWrites = 0; db.outbox = [];
+    };
+    await assert.rejects(withBookingStatusTransaction(transaction, request => transitionBooking({ reservationId: 5,
+      nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request })), failure === 'missing-source' ? error => assertStatus(error, 404) : /insert failed/);
+    assert.equal(db.status, 'PENDING');
+    assert.equal(db.history.length, 0);
+    assert.equal(db.audit.length, 0);
+    assert.equal(db.invoices.length, 0);
+    assert.equal(db.invoiceItemWrites, 0);
+    assert.equal(db.outbox.length, 0);
+  });
+}
+
 test('email outbox failure rolls back booking status history and audit', async () => {
   const db = new BookingDb(); db.failQueue = true;
   const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
   transaction.begin = async () => transaction; transaction.request = () => db.request;
   transaction.commit = async () => assert.fail('queue failure must not commit');
-  transaction.rollback = async () => { db.status = 'PENDING'; db.history = []; db.audit = []; db.outbox = []; };
+  transaction.rollback = async () => {
+    db.status = 'PENDING'; db.history = []; db.audit = []; db.outbox = []; db.invoices = [];
+    db.invoiceId = undefined; db.invoiceItemWrites = 0;
+  };
   await assert.rejects(withBookingStatusTransaction(transaction, request => transitionBooking({ reservationId: 5,
     nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request })), /outbox insert failed/);
   assert.equal(db.status, 'PENDING'); assert.equal(db.history.length, 0); assert.equal(db.audit.length, 0); assert.equal(db.outbox.length, 0);
+  assert.equal(db.invoices.length, 0);
+  assert.equal(db.invoiceItemWrites, 0);
 });
 
 test('booking status accepts every approved transition and records its old and new state', async () => {
@@ -162,7 +369,7 @@ test('booking status accepts every approved transition and records its old and n
       assert.equal(db.history[0]?.['actorType'], 'ADMIN');
       assert.equal(db.history[0]?.['actorId'], 3);
       assert.equal(db.history[0]?.['reason'], nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : null);
-      assert.equal(db.audit.length, 1);
+      assert.equal(db.audit.length, nextStatus === 'APPROVED' ? 2 : 1);
       assert.equal(db.audit[0]?.['auditAdminId'], 3);
       assert.equal(db.audit[0]?.['auditAction'], 'BOOKING_STATUS_CHANGED');
       assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditOldValues'])), { status: previous });
@@ -227,6 +434,8 @@ test('booking status records customer and system actors without admin audit', as
     assert.equal(db.history[0]?.['actorType'], actor.type);
     assert.equal(db.history[0]?.['actorId'], actor.type === 'SYSTEM' ? null : 7);
     assert.equal(db.audit.length, 0);
+    assert.equal(db.invoices.length, 0);
+    assert.equal(db.outbox[0]?.['templateKey'], 'BOOKING_APPROVED');
   }
 });
 
@@ -334,6 +543,8 @@ test('medium booking approval requires explicit capacity confirmation at both bo
         transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed, request: db.request }),
         error => assertCodedStatus(error, 400, 'CAPACITY_CONFIRMATION_REQUIRED'),
       );
+      assert.equal(db.invoices.length, 0);
+      assert.equal(db.outbox.length, 0);
       assert.equal(db.status, 'PENDING');
     }
   }
@@ -360,6 +571,8 @@ test('admin approval rejects a stale over-capacity date with a coded conflict', 
   );
   assert.equal(db.status, 'PENDING');
   assert.equal(db.history.length, 0);
+  assert.equal(db.invoices.length, 0);
+  assert.equal(db.outbox.length, 0);
 });
 
 test('confirmed medium approval records the explicit capacity decision in admin audit', async () => {
@@ -378,29 +591,13 @@ test('confirmed medium approval records the explicit capacity decision in admin 
   });
 });
 
-test('capacity confirmation accepts only a literal boolean and controller forwards true', async () => {
-  const db = new BookingDb();
-  await assert.rejects(
-    transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed: 'true' as never, request: db.request }),
-    error => assertStatus(error, 400),
-  );
-  assert.equal(db.queries.length, 0);
-
-  const calls: unknown[][] = [];
-  const updateMock = mock.method(adminService, 'updateStatus', async (...args: unknown[]) => { calls.push(args); });
-  try {
-    const errors: unknown[] = [];
-    const response = { json: (_body: unknown) => response };
-    await adminController.status({ params: { id: '5' }, admin: { id: 3 }, body: { status: 'APPROVED', capacityConfirmed: 'true' } } as never, response as never, (error: unknown) => { errors.push(error); });
-    assert.equal(calls.length, 0);
-    assert.equal(errors.length, 1);
-    assertStatus(errors[0], 400);
-
-    await adminController.status({ params: { id: '5' }, admin: { id: 3 }, body: { status: 'APPROVED', capacityConfirmed: true } } as never, response as never, (error: unknown) => { errors.push(error); });
-    assert.deepEqual(calls, [[3, 5, 'APPROVED', undefined, true]]);
-  } finally {
-    updateMock.mock.restore();
-  }
+test('capacity confirmation remains strictly boolean and is required before medium-event approval', async () => {
+ const db=new BookingDb();db.guestCount=250;db.hasMediumEvent=true;db.largestGuestCount=250;
+ await assert.rejects(transitionBooking({reservationId:5,nextStatus:'APPROVED',actor:{type:'ADMIN',id:3},capacityConfirmed:'true' as never,request:db.request}),e=>assertStatus(e,400));
+ assert.equal(db.queries.length,0);
+ await assert.rejects(transitionBooking({reservationId:5,nextStatus:'APPROVED',actor:{type:'ADMIN',id:3},mode:'GENERIC_ADMIN',request:db.request}),e=>assertCodedStatus(e,400,'CAPACITY_CONFIRMATION_REQUIRED'));
+ await transitionBooking({reservationId:5,nextStatus:'APPROVED',actor:{type:'ADMIN',id:3},mode:'GENERIC_ADMIN',capacityConfirmed:true,request:db.request});
+ assert.equal(db.status,'APPROVED');
 });
 
 test('booking status endpoint validates status and reason before dispatch', async () => {
@@ -420,6 +617,15 @@ test('booking status endpoint validates status and reason before dispatch', asyn
   } finally {
     updateMock.mock.restore();
   }
+});
+
+test('cancelling a confirmed event retires pending balance proofs while retaining their history', async () => {
+  const db = new BookingDb(); db.status = 'CONFIRMED';
+  await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 3 }, reason: 'Customer requested cancellation', request: db.request });
+  assert.equal(db.status, 'CANCELLED');
+  assert.equal(db.proofsSuperseded, true);
+  assert.ok(db.queries.some(query => /archived_transaction_reference=transaction_reference/.test(query)));
+  assert.equal(db.history.length, 1);
 });
 
 test('booking status customer cancellation records the owner and trimmed reason', async () => {

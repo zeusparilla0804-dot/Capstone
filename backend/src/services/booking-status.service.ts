@@ -6,6 +6,10 @@ import { AppError } from '../utils/app-error.js';
 import { queueBookingNotification } from './notification.service.js';
 import { readCapacitySnapshot } from '../repositories/booking-availability.repository.js';
 import { assessDateAvailability } from './booking-availability.service.js';
+import { lockedPayment, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
+import { hasRequiredReservationDeposit } from './reservation-billing-policy.js';
+import { cashDepositDeadline } from './cash-payment-policy.js';
+import { createInvoiceWithRequest } from '../repositories/invoice.repository.js';
 
 const transitions: Record<BookingStatus, readonly BookingStatus[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -16,7 +20,8 @@ const transitions: Record<BookingStatus, readonly BookingStatus[]> = {
   CONFIRMED: ['COMPLETED', 'CANCELLED'],
   REJECTED: [],
   CANCELLED: [],
-  COMPLETED: []
+  COMPLETED: [],
+  EXPIRED: []
 };
 
 export function allowedBookingTransitions(status: BookingStatus): readonly BookingStatus[] {
@@ -75,6 +80,9 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       throw new AppError(409, `Cannot change ${previousStatus} booking to ${input.nextStatus}.`);
     }
     let capacityWasConfirmed = false;
+    const preparingForPayment = (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED')
+      || (previousStatus === 'APPROVED' && input.nextStatus === 'AWAITING_PAYMENT');
+    const payment = preparingForPayment ? await lockedPayment(input.reservationId, request) : undefined;
     if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED') {
       const snapshot = await readCapacitySnapshot(current.eventDate, { request, lock: true });
       const availability = assessDateAvailability({
@@ -91,14 +99,37 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       }
       capacityWasConfirmed = availability.requiresAdminConfirmation && input.capacityConfirmed === true;
     }
+    if (payment?.paymentMethod?.toUpperCase() === 'CASH') {
+      // Read the clock after all locks, so a waiting review cannot use a stale cutoff.
+      const now = new Date();
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(now);
+      if (current.eventDate < today) {
+        throw new AppError(409, 'This cash booking event date has passed. Review the booking with the customer.', 'CASH_EVENT_DATE_PASSED');
+      }
+      const deadline = cashDepositDeadline(current.eventDate, current.guestCount);
+      if (!hasRequiredReservationDeposit(Number(payment.amountDue), Number(payment.amountPaid))
+        && now.getTime() > Date.parse(deadline.at)) {
+        throw new AppError(409, `The cash down payment deadline was ${deadline.date}, 6:00 PM Philippine Time. Review the booking with the customer.`, 'CASH_DEPOSIT_DEADLINE_PASSED');
+      }
+    }
     if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request, input.actor.type === 'CUSTOMER' ? input.actor.id : undefined)) {
       throw new AppError(409, 'Booking status changed. Refresh and try again.');
+    }
+    if (input.nextStatus === 'CANCELLED') {
+      await supersedeSubmittedProofs(input.reservationId, current.customerId, request);
     }
     await insertBookingStatusHistory({ reservationId: input.reservationId, previousStatus, nextStatus: input.nextStatus, actor: input.actor, reason }, request);
     if (input.actor.type === 'ADMIN') {
       await writeAdminAudit({ adminId: input.actor.id, action: 'BOOKING_STATUS_CHANGED', entityType: 'BOOKING', entityId: input.reservationId,
         oldValues: { status: previousStatus }, newValues: { status: input.nextStatus, reason: reason ?? null,
           ...(capacityWasConfirmed ? { capacityConfirmed: true } : {}) } }, request);
+    }
+    if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED' && input.actor.type === 'ADMIN') {
+      const invoiceId = await createInvoiceWithRequest(input.reservationId, input.actor.id, request);
+      if (!invoiceId) throw new AppError(404, 'Booking not found.');
+      return;
     }
     const notification = ({ APPROVED: 'BOOKING_APPROVED', REJECTED: 'BOOKING_REJECTED', CONFIRMED: 'BOOKING_CONFIRMED',
       CANCELLED: 'BOOKING_CANCELLED', COMPLETED: 'BOOKING_COMPLETED' } as const)[input.nextStatus as 'APPROVED' | 'REJECTED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED'];

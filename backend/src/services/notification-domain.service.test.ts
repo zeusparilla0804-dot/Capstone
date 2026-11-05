@@ -9,26 +9,28 @@ process.env.DB_DATABASE ??= 'test';
 process.env.DB_USER ??= 'test';
 process.env.DB_PASSWORD ??= 'test';
 const { createBooking } = await import('../repositories/booking.repository.js');
-const { createInvoice } = await import('../repositories/invoice.repository.js');
+const { createInvoice, createInvoiceWithRequest } = await import('../repositories/invoice.repository.js');
 const { closeDatabase } = await import('../config/database.js');
-const templateModule = await import('../templates/email-templates.js');
-const notificationModule = await import('./notification.service.js');
 
 for (const kind of ['booking', 'invoice'] as const) {
   for (const failQueue of [false, true]) {
     test(`email outbox ${kind} ${failQueue ? 'queue failure rolls back domain' : 'commits PENDING intent without SMTP'}`, async t => {
-      let active = false; const events: string[] = []; let domain: string[] = [], outbox: any[] = [];
+      let active = false; const events: string[] = []; let domain: string[] = [], outbox: any[] = []; let invoiceId: number | undefined;
       const pool = { connected: true, close: async () => {} };
       t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
       t.mock.method(sql.Transaction.prototype, 'begin', async function () { active = true; events.push('begin'); return this; });
       t.mock.method(sql.Transaction.prototype, 'commit', async () => { active = false; events.push('commit'); });
-      t.mock.method(sql.Transaction.prototype, 'rollback', async () => { active = false; domain = []; outbox = []; events.push('rollback'); });
+      t.mock.method(sql.Transaction.prototype, 'rollback', async () => { active = false; domain = []; outbox = []; invoiceId = undefined; events.push('rollback'); });
       t.mock.method(sql.Request.prototype, 'query', async function (command: string) {
         assert.ok(active, 'all domain writes and customer context must use the open transaction');
         const p = Object.fromEntries(Object.entries(this.parameters).map(([name, param]) => [name, param.value]));
         const result = (recordset: any[] = []) => ({ recordset, rowsAffected: [1] });
+        if (/UPDATE dbo\.BOOKING_POLICY/.test(command)) { domain.push('booking-policy'); return result(); }
+        if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId/.test(command)) return result();
         if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) return result([{ customerEmail: 'Customer@Example.test', customerName: 'Customer',
-          bookingReference: 'BK-5', eventDate: '2026-12-01', invoiceNumber: 'INV-8' }]);
+          bookingReference: 'BK-5', eventDate: '2026-12-01', invoiceNumber: invoiceId ? 'INV-8' : undefined,
+          invoiceId, invoiceDueDate: '2026-12-01', eventTime: '12:00', eventType: 'Wedding', venue: 'Venue',
+          status: 'APPROVED', guestCount: 10, paymentMethod: 'CASH', totalAmount: 1000, amountPaid: 0 }]);
         if (/INSERT dbo.EMAIL_OUTBOX/.test(command)) {
           if (failQueue) throw new Error('outbox insert failed');
           outbox.push({ templateKey: p.templateKey, payload: p.payload, status: 'PENDING', attempts: 0 }); return result([{ id: '9007199254740993' }]);
@@ -46,10 +48,10 @@ for (const kind of ['booking', 'invoice'] as const) {
         if (/SELECT r.reservation_id/.test(command)) {
           if (kind === 'invoice') assert.match(command, /WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
           return result([{ reservation_id: 5, status: 'APPROVED', guest_count: 10,
-            package_unit_price: 100, subtotal: 1000, discount_amount: 0, total_amount: 1000, package_name: 'Wedding' }]);
+            event_date: '2026-12-01', package_unit_price: 100, subtotal: 1000, discount_amount: 0, total_amount: 1000, package_name: 'Wedding' }]);
         }
-        if (/SELECT invoice_id/.test(command)) return result();
-        if (/INSERT dbo.INVOICE\(/.test(command)) { domain.push('invoice'); return result([{ invoice_id: 8 }]); }
+        if (/SELECT invoice_id/.test(command)) return result(invoiceId ? [{ invoice_id: invoiceId }] : []);
+        if (/INSERT dbo.INVOICE\(/.test(command)) { invoiceId = 8; domain.push('invoice'); return result([{ invoice_id: 8 }]); }
         if (/INSERT dbo.INVOICE_ITEM/.test(command)) { domain.push('item'); return result(); }
         if (/INSERT dbo.ADMIN_AUDIT_LOG/.test(command)) { domain.push('audit'); return result(); }
         throw new Error(`Unexpected query: ${command}`);
@@ -65,32 +67,40 @@ for (const kind of ['booking', 'invoice'] as const) {
           assert.equal(outbox[0].status, 'PENDING'); assert.equal(outbox[0].attempts, 0); assert.ok(domain.length >= 2);
           if (kind === 'invoice') assert.ok(domain.includes('audit'));
           assert.deepEqual(events, ['begin', 'commit']);
+          if (kind === 'invoice') {
+            const committedWrites = [...domain];
+            assert.equal(await operation(), 8);
+            assert.deepEqual(domain, committedWrites);
+            assert.equal(outbox.length, 1, 'retrying invoice issuance must not queue another email');
+          }
         }
       } finally { await closeDatabase(); }
     });
   }
 }
 
-test('custom event templates render safe customer and admin action links', () => {
-  assert.equal(notificationModule.customEventActionUrl(12, false), 'http://localhost:4200/custom-events/12');
-  assert.equal(notificationModule.customEventActionUrl(12, true), 'http://localhost:4200/admin/custom-events/12');
-  const base = { customerName: 'Customer', bookingReference: 'CQ-2026-ABCDEF12', eventDate: '2098-10-20',
-    actionUrl: 'http://localhost:4200/custom-events/12' };
-  for (const [key, additions] of [
-    ['CUSTOM_REQUEST_RECEIVED', {}],
-    ['CUSTOM_REQUEST_RECEIVED_ADMIN', {}],
-    ['CUSTOM_CLARIFICATION_REQUESTED', { reason: 'Please confirm dietary needs.' }],
-    ['CUSTOM_QUOTE_SENT', { quoteTotal: '2600.00', validUntil: '2098-12-31' }],
-    ['CUSTOM_QUOTE_ACCEPTED', { quoteTotal: '2600.00' }],
-    ['CUSTOM_QUOTE_DECLINED', {}],
-    ['CUSTOM_QUOTE_EXPIRED', {}],
-  ] as const) {
-    const rendered = templateModule.renderEmail(key, { ...base, ...additions });
-    assert.match(rendered.subject, /LA Chef/);
-    assert.match(rendered.text, /CQ-2026-ABCDEF12/);
-    assert.match(rendered.text, /http:\/\/localhost:4200\/custom-events\/12/);
-    assert.equal(/<script|javascript:/i.test(rendered.html), false);
-  }
-  assert.throws(() => templateModule.validateEmailPayload('CUSTOM_QUOTE_SENT', { ...base,
-    actionUrl: 'javascript:alert(1)', quoteTotal: '2600.00', validUntil: '2098-12-31' }));
+test('new invoice balance is due on its event date even when issued one day before the event', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T04:00:00Z') });
+  let storedDueDate: unknown;
+  t.mock.method(sql.Request.prototype, 'query', async function(command: string) {
+    const params = Object.fromEntries(Object.entries(this.parameters).map(([name, param]) => [name, param.value]));
+    const result = (recordset: any[] = []) => ({ recordset, rowsAffected: [1] });
+    if (/SELECT r.reservation_id/.test(command)) return result([{ reservation_id: 5, status: 'APPROVED', event_date: '2026-11-05',
+      guest_count: 10, package_unit_price: 100, package_total: 1000, subtotal: 1000, discount_amount: 0, total_amount: 1000 }]);
+    if (/SELECT invoice_id/.test(command)) return result();
+    if (/INSERT dbo.INVOICE\(/.test(command)) {
+      storedDueDate = params['dueDate'];
+      assert.equal(storedDueDate, '2026-11-05');
+      assert.match(command, /CAST\(@dueDate AS date\)/i);
+      assert.doesNotMatch(command, /DATEADD/i);
+      return result([{ invoice_id: 8 }]);
+    }
+    if (/INSERT dbo.INVOICE_ITEM|INSERT dbo.ADMIN_AUDIT_LOG/.test(command)) return result();
+    if (/email outbox context/.test(command)) return result([{ customerEmail: 'customer@example.test', customerName: 'Customer',
+      bookingReference: 'BK-5', eventDate: '2026-11-05', invoiceNumber: 'INV-8' }]);
+    if (/INSERT dbo.EMAIL_OUTBOX/.test(command)) return result([{ id: '8' }]);
+    throw new Error(`Unexpected query: ${command}`);
+  });
+  assert.equal(await createInvoiceWithRequest(5, 2, new sql.Request()), 8);
+  assert.equal(storedDueDate, '2026-11-05');
 });

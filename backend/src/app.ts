@@ -16,12 +16,14 @@ import { environment } from './config/environment.js';
 import { isAllowedFrontendOrigin } from './config/cors.js';
 import { paymentProofRoutes, proofFileRoutes } from './routes/payment-proof.routes.js';
 import customEventRoutes from './routes/custom-event.routes.js';
+import { createCsrfProtection } from './middleware/csrf.middleware.js';
 
 const app = express();
 
 app.disable('x-powered-by');
 app.set('trust proxy', environment.isProduction ? 1 : false);
 app.use(helmet());
+app.use('/api', createCsrfProtection(origin => isAllowedFrontendOrigin(origin, environment.frontendOrigin, environment.isProduction)));
 
 app.use(
   cors({
@@ -33,7 +35,8 @@ app.use(
 
       callback(new Error('Origin is not allowed by CORS.'));
     },
-    credentials: true
+    credentials: true,
+    exposedHeaders: ['X-Admin-Idle-Timeout']
   })
 );
 
@@ -64,6 +67,11 @@ const resetPasswordLimiter = rateLimit({
   message: { success: false, message: 'Too many password reset attempts. Please try again later.' }
 });
 
+const verificationLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false,
+  message: { success: false, message: 'Too many verification attempts. Please wait 15 minutes before trying again.' } });
+const verificationResendLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false,
+  message: { success: false, message: 'Too many code requests. Please wait 15 minutes before trying again.' } });
+
 app.get('/', (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
@@ -75,10 +83,13 @@ app.use('/api/health', healthRoutes);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/admin/login', authLimiter);
+app.use('/api/auth/admin/mfa/complete', authLimiter);
 app.use('/api/auth/password/forgot', forgotPasswordLimiter);
 app.use('/api/auth/admin/password/forgot', forgotPasswordLimiter);
 app.use('/api/auth/password/reset', resetPasswordLimiter);
 app.use('/api/auth/admin/password/reset', resetPasswordLimiter);
+app.use('/api/auth/email/verify', verificationLimiter);
+app.use('/api/auth/email/resend', verificationResendLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/add-ons', addOnRoutes);

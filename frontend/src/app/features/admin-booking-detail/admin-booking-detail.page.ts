@@ -3,10 +3,13 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
-import type { AdminBookingDetail, AdminBookingHistory, AdminBookingStatus } from '../../core/models';
+import type { AdminBookingDetail, AdminBookingHistory, AdminBookingStatus, AdminPaymentProof, PageResult } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
+import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
+import { paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
+import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 
 interface BookingAction {
   readonly status: AdminBookingStatus;
@@ -36,11 +39,12 @@ const actions: Record<AdminBookingStatus, readonly BookingAction[]> = {
   COMPLETED: [],
   REJECTED: [],
   CANCELLED: [],
+  EXPIRED: [],
 };
 
 @Component({
   selector: 'app-admin-booking-detail',
-  imports: [AdminShellComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, FormsModule, RouterLink],
+  imports: [AdminShellComponent, StatusBadgeComponent, SuccessDialogComponent, CurrencyPipe, DatePipe, FormsModule, RouterLink],
   templateUrl: './admin-booking-detail.page.html',
   styleUrl: './admin-booking-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,22 +58,39 @@ export class AdminBookingDetailPage {
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly feedback = signal('');
+  protected readonly approvedReference = signal('');
   protected readonly actionError = signal('');
   protected readonly mutationPending = signal(false);
   protected readonly pendingAction = signal<BookingAction | null>(null);
+  protected readonly proofHistory = signal<PageResult<AdminPaymentProof> | null>(null);
+  protected readonly proofHistoryLoading = signal(false);
+  protected readonly proofHistoryError = signal('');
+  protected readonly proofHistoryExpanded = signal(false);
+  protected readonly proofReviewPending = computed(() => this.booking()?.status === 'PAYMENT_SUBMITTED'
+    || this.proofHistory()?.items.some(proof => proof.status === 'SUBMITTED') === true);
+  protected readonly methodLabel = paymentMethodLabel;
   protected actionReason = '';
   protected readonly availableActions = computed(() => {
     const booking = this.booking();
     if (!booking) return [];
-    const available = actions[booking.status as AdminBookingStatus] ?? [];
-    if (!booking.capacity.requiresAdminConfirmation) return available;
-    return available.map((action) => action.status === 'APPROVED'
-      ? { ...action, label: 'Approve and confirm capacity', capacityConfirmation: true }
-      : action);
+    return (actions[booking.status as AdminBookingStatus] ?? [])
+      .filter(action => action.status !== 'CONFIRMED' || booking.amountPaid >= Math.round(booking.total * 100 * .5) / 100)
+      .map(action => action.status === 'APPROVED' && booking.capacity.requiresAdminConfirmation
+        ? { ...action, label: 'Approve and confirm capacity', capacityConfirmation: true } : action);
   });
   protected readonly outstandingBalance = computed(() =>
     Math.max(0, (this.booking()?.total ?? 0) - (this.booking()?.amountPaid ?? 0)),
   );
+  protected readonly cashDeadline = computed(() => {
+    const item = this.booking();
+    return item?.paymentMethod?.toUpperCase() === 'CASH' ? cashDepositDeadline(item.eventDate, item.guestCount) : null;
+  });
+  protected get cashDepositOverdue(): boolean {
+    const item = this.booking();
+    const deadline = this.cashDeadline();
+    return !!item && !!deadline && !['CANCELLED', 'REJECTED', 'COMPLETED'].includes(item.status)
+      && item.amountPaid < Math.round(item.total * 100 * 0.5) / 100 && Date.now() > new Date(deadline.at).getTime();
+  }
 
   constructor() {
     this.load();
@@ -84,9 +105,35 @@ export class AdminBookingDetailPage {
     this.loading.set(true);
     this.error.set('');
     this.api.booking(this.bookingId).pipe(finalize(() => this.loading.set(false))).subscribe({
-      next: (response) => this.booking.set(response.data),
+      next: (response) => {
+        this.booking.set(response.data);
+        this.loadProofHistory();
+      },
       error: () => this.error.set('Unable to load this reservation.'),
     });
+  }
+
+  protected loadProofHistory(page = 1): void {
+    if (!this.booking() || !Number.isSafeInteger(page) || page < 1) return;
+    if (this.booking()?.status === 'PAYMENT_SUBMITTED') this.proofHistoryExpanded.set(true);
+    this.proofHistoryLoading.set(true);
+    this.proofHistoryError.set('');
+    this.api.paymentProofs({ reservationId: this.bookingId, status: 'ALL', page, pageSize: 10, order: 'newest' })
+      .pipe(finalize(() => this.proofHistoryLoading.set(false)))
+      .subscribe({
+        next: response => {
+          this.proofHistory.set(response.data);
+          if (this.proofReviewPending()) this.proofHistoryExpanded.set(true);
+        },
+        error: () => {
+          this.proofHistoryError.set('Unable to load payment proof history.');
+          this.proofHistoryExpanded.set(true);
+        },
+      });
+  }
+
+  protected toggleProofHistory(event: Event): void {
+    this.proofHistoryExpanded.set((event.target as HTMLDetailsElement).open);
   }
 
   protected chooseAction(status: string): void {
@@ -109,6 +156,7 @@ export class AdminBookingDetailPage {
     }
     this.mutationPending.set(true);
     this.actionError.set('');
+    const bookingReference = this.booking()?.reference ?? '';
     const request = action.capacityConfirmation
       ? this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined, true)
       : this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined);
@@ -116,16 +164,16 @@ export class AdminBookingDetailPage {
       .pipe(finalize(() => this.mutationPending.set(false)))
       .subscribe({
         next: () => {
-          this.feedback.set('Reservation status updated.');
+          this.feedback.set(action.status === 'APPROVED' ? '' : 'Reservation status updated.');
+          if (action.status === 'APPROVED') this.approvedReference.set(bookingReference);
           this.pendingAction.set(null);
           this.actionReason = '';
           this.load();
         },
         error: (error) => {
           if (error?.status === 409) {
-            this.actionError.set(error?.error?.code === 'CAPACITY_CHANGED' && error?.error?.message
-              ? error.error.message
-              : 'This reservation changed in another session. The latest details are shown.');
+            this.actionError.set(error?.error?.message
+              || 'This reservation changed in another session. The latest details are shown.');
             this.pendingAction.set(null);
             this.load();
           } else {

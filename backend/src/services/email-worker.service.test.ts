@@ -78,10 +78,12 @@ class OutboxDb {
     assert.equal(typeof notificationModule?.createNotificationService, 'function', 'notification service must exist');
     return notificationModule.createNotificationService({ repository: this.repository(), nodeEnv });
   }
-  worker(transport?: any, overrides = {}, renderPasswordResetEmail = async () => undefined) {
+  worker(transport?: any, overrides = {}, renderPasswordResetEmail = async () => undefined,
+    renderUpcomingEventReminder = async () => undefined, renderEmailVerificationCode = async () => undefined) {
     assert.equal(typeof workerModule?.createEmailWorker, 'function', 'email outbox worker must exist');
     return workerModule.createEmailWorker({ repository: this.repository(), transport, settings: { ...settings, ...overrides },
-      from: { name: 'LA Chef Event Catering Services', address: 'chef@example.test' }, renderPasswordResetEmail });
+      from: { name: 'LA Chef Event Catering Services', address: 'chef@example.test' },
+      renderPasswordResetEmail, renderUpcomingEventReminder, renderEmailVerificationCode });
   }
   async seed() { await this.notification().queueNotification(input); }
 }
@@ -126,6 +128,48 @@ test('email outbox configured delivery marks SENT and clears old retry/error met
   assert.ok(messages[0].text.includes('BK-5')); assert.ok(messages[0].html.includes('BK-5'));
 });
 
+test('email code uses only its protected renderer and is never persisted in the outbox payload', async () => {
+  for (const available of [true, false]) {
+    const db = new OutboxDb();
+    await db.notification().queueNotification({ recipient: input.recipient, templateKey: 'EMAIL_VERIFICATION_CODE',
+      payload: { accountName: 'Juan', accountType: 'CUSTOMER', selector: 'a'.repeat(22) } });
+    let sent: any;
+    const result = await db.worker({ sendMail: async (message: unknown) => { sent = message; return {}; } }, {}, undefined, undefined,
+      (async () => available ? { subject: 'Verification', text: '012345', html: '<p>012345</p>' } : undefined) as any).processEmailBatch(now);
+    assert.equal(result.sent, available ? 1 : 0);
+    assert.equal(result.failed, available ? 0 : 1);
+    assert.equal(sent?.text, available ? '012345' : undefined);
+    assert.equal(JSON.stringify(db.rows[0].payload).includes('012345'), false);
+    await assert.rejects(db.notification().renderEmailPreview(db.rows[0].id), (error: any) => error.statusCode === 404);
+  }
+});
+
+test('email worker retires queued custom quotation messages without sending dead links', async () => {
+  const db = new OutboxDb();
+  await db.notification().queueNotification({
+    recipient: 'customer@example.test',
+    templateKey: 'CUSTOM_QUOTE_SENT',
+    payload: {
+      customerName: 'Customer',
+      bookingReference: 'CQ-2026-ABCDEF12',
+      eventDate: '2026-12-01',
+      quoteTotal: '2600.00',
+      validUntil: '2026-12-31',
+      actionUrl: 'http://localhost:4200/custom-events/12',
+    },
+    relatedEntityType: 'CUSTOM_EVENT_REQUEST',
+    relatedEntityId: '12',
+  });
+  let sends = 0;
+
+  const result = await db.worker({ sendMail: async () => { sends += 1; return {}; } }).processEmailBatch(now);
+
+  assert.equal(sends, 0);
+  assert.equal(result.failed, 1);
+  assert.equal(db.rows[0].status, 'FAILED');
+  assert.equal(db.rows[0].lastError, 'CUSTOM_QUOTATION_RETIRED');
+});
+
 test('email worker uses the protected renderer for reset messages and fails closed when token is unavailable', async () => {
   for (const available of [true, false]) {
     const db = new OutboxDb();
@@ -139,6 +183,32 @@ test('email worker uses the protected renderer for reset messages and fails clos
     assert.equal(result.failed, available ? 0 : 1);
     assert.equal(messages.length, available ? 1 : 0);
     assert.equal(db.rows[0].status, available ? 'SENT' : 'FAILED');
+  }
+});
+
+test('email worker revalidates upcoming reminders and refuses stale delivery', async () => {
+  for (const available of [true, false]) {
+    const db = new OutboxDb();
+    await db.notification().queueNotification({
+      recipient: 'customer@example.test',
+      templateKey: 'UPCOMING_EVENT_REMINDER' as any,
+      payload: { customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-10-05' },
+      relatedEntityType: 'BOOKING',
+      relatedEntityId: '5'
+    });
+    const messages: unknown[] = [];
+    const rendered = { subject: 'Upcoming event', text: 'Reminder', html: '<p>Reminder</p>' };
+    const result = await db.worker(
+      { sendMail: async (message: unknown) => { messages.push(message); return {}; } },
+      {},
+      async () => undefined,
+      async () => available ? rendered : undefined
+    ).processEmailBatch(now);
+    assert.equal(result.sent, available ? 1 : 0);
+    assert.equal(result.failed, available ? 0 : 1);
+    assert.equal(messages.length, available ? 1 : 0);
+    assert.equal(db.rows[0].status, available ? 'SENT' : 'FAILED');
+    if (!available) assert.equal(db.rows[0].lastError, 'REMINDER_NO_LONGER_APPLICABLE');
   }
 });
 
@@ -213,7 +283,8 @@ test('email outbox development preview escapes every value and does not mutate r
 test('email outbox every existing template renders truthful branded subject/text/HTML', () => {
   assert.equal(typeof templateModule?.renderEmail, 'function', 'email templates must exist');
   for (const key of ['BOOKING_RECEIVED', 'BOOKING_APPROVED', 'BOOKING_REJECTED', 'BOOKING_CONFIRMED', 'BOOKING_CANCELLED',
-    'BOOKING_COMPLETED', 'BOOKING_RESCHEDULED', 'INVOICE_ISSUED', 'PAYMENT_PROOF_SUBMITTED', 'PAYMENT_PROOF_VERIFIED', 'PAYMENT_PROOF_REJECTED']) {
+    'BOOKING_COMPLETED', 'BOOKING_RESCHEDULED', 'UPCOMING_EVENT_REMINDER', 'INVOICE_ISSUED', 'PAYMENT_PROOF_SUBMITTED',
+    'PAYMENT_PROOF_VERIFIED', 'PAYMENT_PROOF_REJECTED']) {
     const payload = { ...input.payload, ...(key === 'INVOICE_ISSUED' ? { invoiceNumber: 'INV-8' } : {}),
       ...(key === 'PAYMENT_PROOF_VERIFIED' ? { amount: '50.25' } : {}) };
     const rendered = templateModule.renderEmail(key, payload);
@@ -221,6 +292,10 @@ test('email outbox every existing template renders truthful branded subject/text
     if (key === 'PAYMENT_PROOF_SUBMITTED') assert.match(rendered.text, /verification/i);
     if (key === 'PAYMENT_PROOF_VERIFIED') { assert.match(rendered.text, /manually verified/i); assert.equal(/settled|online payment/i.test(rendered.text), false); }
   }
+  const registered = templateModule.renderEmail('ACCOUNT_REGISTERED', { displayName: 'Juan Customer' });
+  assert.match(registered.subject, /account/i);
+  assert.match(registered.text, /Juan Customer/);
+  assert.match(registered.text, /LA Chef Event Catering Services/);
 });
 
 test('email outbox SMTP absent is disabled; any partial or unsafe configuration fails', () => {

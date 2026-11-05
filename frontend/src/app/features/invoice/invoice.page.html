@@ -1,2 +1,221 @@
-@if(admin){<app-admin-shell title="Invoice" description="Review the issued customer billing document."><ng-container *ngTemplateOutlet="content"/></app-admin-shell>}@else{<app-public-header [isAuthenticated]="true"/><main class="invoice-page"><ng-container *ngTemplateOutlet="content"/></main>}
-<ng-template #content>@if(loading()){<p class="data-state">Loading invoice...</p>}@else if(error()){<p class="data-state data-state--error">{{error()}} <button class="btn btn-tertiary" (click)="load()">Try again</button></p>}@else if(invoice();as doc){<div class="invoice-actions no-print"><button class="btn btn-secondary" (click)="print()">Print Invoice</button></div><article class="invoice-document"><header class="invoice-header"><div class="invoice-brand"><strong><span>LA</span> Chef</strong><p>Catering Services</p></div><div><p>INVOICE</p><h1>{{doc.invoiceNumber}}</h1><dl><div><dt>Issue date</dt><dd>{{doc.issueDate|date:'mediumDate'}}</dd></div><div><dt>Due date</dt><dd>{{doc.dueDate?(doc.dueDate|date:'mediumDate'):'Not set'}}</dd></div><div><dt>Status</dt><dd><app-status-badge [status]="doc.status"/></dd></div></dl></div></header><section class="invoice-parties"><div><h2>Bill To</h2><strong>{{doc.customer.name}}</strong><p>{{doc.customer.email}}</p><p>{{doc.customer.phone}}</p></div><div><h2>Event Details</h2><dl><div><dt>Booking</dt><dd>{{doc.booking.reference}}</dd></div><div><dt>Event</dt><dd>{{doc.booking.eventType}}</dd></div><div><dt>Date</dt><dd>{{doc.booking.eventDate+'T00:00:00Z'|date:'longDate':'UTC'}}</dd></div><div><dt>Time</dt><dd>{{doc.booking.eventTime}}</dd></div><div><dt>Guests</dt><dd>{{doc.booking.guestCount}}</dd></div><div><dt>Venue</dt><dd>{{doc.booking.venue}}</dd></div></dl></div></section><div class="invoice-table-wrap"><table class="invoice-table"><thead><tr><th scope="col">Description</th><th scope="col">Quantity</th><th scope="col">Unit Price</th><th scope="col">Amount</th></tr></thead><tbody>@for(item of doc.items;track $index){<tr><td>{{item.description}}</td><td>{{item.quantity}}</td><td>{{item.unitPrice|currency:'PHP':'symbol-narrow':'1.2-2'}}</td><td>{{item.amount|currency:'PHP':'symbol-narrow':'1.2-2'}}</td></tr>}</tbody></table></div><section class="invoice-totals"><dl><div><dt>Subtotal</dt><dd>{{doc.subtotal|currency:'PHP':'symbol-narrow':'1.2-2'}}</dd></div><div><dt>Discount</dt><dd>-{{doc.discount|currency:'PHP':'symbol-narrow':'1.2-2'}}</dd></div><div class="total"><dt>Total</dt><dd>{{doc.totalAmount|currency:'PHP':'symbol-narrow':'1.2-2'}}</dd></div><div><dt>Amount Paid</dt><dd>{{doc.amountPaid|currency:'PHP':'symbol-narrow':'1.2-2'}}</dd></div><div class="balance"><dt>Balance Due</dt><dd>{{doc.remainingBalance|currency:'PHP':'symbol-narrow':'1.2-2'}}</dd></div></dl></section><section class="payment-history"><h2>Payment History</h2>@if(doc.payments.length){<table class="invoice-table"><thead><tr><th scope="col">Date</th><th scope="col">Reference</th><th scope="col">Method</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>@for(payment of doc.payments;track payment.id){<tr><td>{{payment.date|date:'mediumDate'}}</td><td>{{payment.reference||'—'}}</td><td>{{payment.method.replaceAll('_',' ')}}</td><td>{{payment.amount|currency:'PHP':'symbol-narrow':'1.2-2'}}</td><td>{{payment.status}}</td></tr>}</tbody></table>}@else{<p>No payments recorded yet.</p>}</section><footer>Thank you for choosing LA Chef Catering Services.</footer></article>}@else{<p class="data-state">Invoice not found.</p>}</ng-template>
+@if (admin) {
+  <app-admin-shell
+    title="Invoice"
+    description="Review and print the issued customer billing agreement."
+  >
+    <ng-container *ngTemplateOutlet="content" />
+  </app-admin-shell>
+} @else {
+  <app-public-header [isAuthenticated]="true" />
+  <main class="invoice-page">
+    <ng-container *ngTemplateOutlet="content" />
+  </main>
+}
+
+<ng-template #content>
+  @if (loading()) {
+    <p class="data-state" role="status">Loading invoice...</p>
+  } @else if (error()) {
+    <p class="data-state data-state--error" role="alert">
+      {{ error() }}
+      <button class="btn btn-tertiary" type="button" (click)="load()">Try again</button>
+    </p>
+  } @else if (invoice(); as doc) {
+    <div class="invoice-actions no-print">
+      <button
+        class="btn btn-secondary"
+        type="button"
+        data-action="print-billing-agreement"
+        (click)="print()"
+      >
+        Print billing agreement
+      </button>
+    </div>
+
+    <article class="invoice-document">
+      <header class="invoice-header">
+        <div class="invoice-brand">
+          <strong><span>LA</span> Chef</strong>
+          <p>Event Catering Services</p>
+        </div>
+
+        <div class="invoice-heading">
+          <p>INVOICE &amp; BILLING AGREEMENT</p>
+          <h1>{{ doc.invoiceNumber }}</h1>
+          <dl>
+            <div>
+              <dt>Issue date</dt>
+              <dd>{{ doc.issueDate | date: 'mediumDate' }}</dd>
+            </div>
+            <div>
+              <dt>Balance due</dt>
+              <dd>{{ doc.dueDate ? (doc.dueDate | date: 'mediumDate': 'UTC') : 'Not set' }}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd><app-status-badge [status]="doc.status" /></dd>
+            </div>
+          </dl>
+        </div>
+      </header>
+
+      <section class="invoice-parties" aria-label="Customer and event details">
+        <div>
+          <h2>Bill To</h2>
+          <strong>{{ doc.customer.name }}</strong>
+          <p>{{ doc.customer.email }}</p>
+          <p>{{ doc.customer.phone }}</p>
+        </div>
+
+        <div>
+          <h2>Event Details</h2>
+          <dl>
+            <div>
+              <dt>Reservation</dt>
+              <dd>{{ doc.booking.reference }}</dd>
+            </div>
+            <div>
+              <dt>Event</dt>
+              <dd>{{ doc.booking.eventType }}</dd>
+            </div>
+            <div>
+              <dt>Date</dt>
+              <dd>{{ doc.booking.eventDate + 'T00:00:00Z' | date: 'longDate': 'UTC' }}</dd>
+            </div>
+            <div>
+              <dt>Time</dt>
+              <dd>{{ doc.booking.eventTime }}</dd>
+            </div>
+            <div>
+              <dt>Guests</dt>
+              <dd>{{ doc.booking.guestCount }}</dd>
+            </div>
+            <div>
+              <dt>Venue</dt>
+              <dd>{{ doc.booking.venue }}</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <div class="invoice-table-wrap">
+        <table class="invoice-table">
+          <thead>
+            <tr>
+              <th scope="col">Description</th>
+              <th scope="col">Quantity</th>
+              <th scope="col">Unit Price</th>
+              <th scope="col">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of doc.items; track $index) {
+              <tr>
+                <td>{{ item.description }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.unitPrice | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</td>
+                <td>{{ item.amount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <section class="invoice-totals" aria-label="Billing totals">
+        <dl>
+          <div>
+            <dt>Subtotal</dt>
+            <dd>{{ doc.subtotal | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+          </div>
+          <div>
+            <dt>Discount</dt>
+            <dd>-{{ doc.discount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+          </div>
+          <div class="total">
+            <dt>Total</dt>
+            <dd>{{ doc.totalAmount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+          </div>
+          <div>
+            <dt>Amount Paid</dt>
+            <dd>{{ doc.amountPaid | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+          </div>
+          <div class="balance">
+            <dt>Balance Due</dt>
+            <dd>{{ doc.remainingBalance | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="invoice-agreement" aria-labelledby="agreement-title">
+        <div class="invoice-agreement__heading">
+          <h2 id="agreement-title">Terms and agreement</h2>
+          <p>Please review these reservation and payment terms before signing.</p>
+        </div>
+
+        <ol>
+          <li>A 50% down payment is required to confirm the reservation.</li>
+          <li>The remaining balance is due on the event date.</li>
+          <li>
+            Upon signing this agreement, cancellation by the client will result in forfeiture
+            of 50% of the total reservation amount.
+          </li>
+        </ol>
+
+        <div class="invoice-signatures" aria-label="Agreement signatures">
+          <div class="invoice-signature">
+            <span aria-hidden="true"></span>
+            <strong>Customer signature</strong>
+            <small>Printed name and date</small>
+          </div>
+          <div class="invoice-signature">
+            <span aria-hidden="true"></span>
+            <strong>Authorized LA Chef representative</strong>
+            <small>Printed name and date</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="payment-history no-print">
+        <h2>Payment History</h2>
+        @if (doc.payments.length) {
+          <div class="invoice-table-wrap">
+            <table class="invoice-table">
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Reference</th>
+                  <th scope="col">Method</th>
+                  <th scope="col">Amount</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (payment of doc.payments; track payment.id) {
+                  <tr>
+                    <td>{{ payment.date | date: 'mediumDate' }}</td>
+                    <td>
+                      @if (payment.reference) {
+                        {{ payment.reference }}
+                      } @else {
+                        &mdash;
+                      }
+                    </td>
+                    <td>{{ payment.method.replaceAll('_', ' ') }}</td>
+                    <td>{{ payment.amount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</td>
+                    <td>{{ payment.status }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <p>No payments recorded yet.</p>
+        }
+      </section>
+
+      <footer>Thank you for choosing LA Chef Event Catering Services.</footer>
+    </article>
+  } @else {
+    <p class="data-state">Invoice not found.</p>
+  }
+</ng-template>

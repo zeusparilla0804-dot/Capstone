@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PasswordRecoveryPage } from './password-recovery.page';
@@ -15,10 +15,8 @@ describe('PasswordRecoveryPage', () => {
     user: ReturnType<typeof signal<null>>;
   };
   let admin: { requestPasswordReset: ReturnType<typeof vi.fn>; resetPassword: ReturnType<typeof vi.fn> };
-  let router: Router;
-  let route: ActivatedRoute;
 
-  async function setup(audience: 'customer' | 'admin', mode: 'forgot' | 'reset', token?: string) {
+  async function setup(audience: 'customer' | 'admin', mode: 'forgot' | 'reset', token?: string, source: 'fragment' | 'query' = 'fragment') {
     customer = {
       requestPasswordReset: vi.fn().mockResolvedValue(undefined),
       resetPassword: vi.fn().mockResolvedValue(undefined),
@@ -29,7 +27,8 @@ describe('PasswordRecoveryPage', () => {
     const routeValue = {
       snapshot: {
         data: { audience, mode },
-        queryParamMap: convertToParamMap(token === undefined ? {} : { token }),
+        queryParamMap: convertToParamMap(source === 'query' && token !== undefined ? { token } : {}),
+        fragment: source === 'fragment' && token !== undefined ? `token=${token}` : null,
       },
     };
     await TestBed.configureTestingModule({
@@ -42,8 +41,6 @@ describe('PasswordRecoveryPage', () => {
       ],
     }).compileComponents();
     fixture = TestBed.createComponent(PasswordRecoveryPage);
-    router = TestBed.inject(Router);
-    route = TestBed.inject(ActivatedRoute);
     fixture.detectChanges();
     return fixture.componentInstance as any;
   }
@@ -85,6 +82,52 @@ describe('PasswordRecoveryPage', () => {
     expect(fixture.nativeElement.querySelector('a[href="/admin/login"]')).not.toBeNull();
   });
 
+  it('renders the approved administrator forgot-password presentation without changing its route', async () => {
+    await setup('admin', 'forgot');
+
+    const page = fixture.nativeElement.querySelector('.recovery-page') as HTMLElement;
+    const approvedLogo = fixture.nativeElement.querySelector('.recovery-brand__approved-logo') as HTMLImageElement;
+    const returnLink = fixture.nativeElement.querySelector('.return-link') as HTMLAnchorElement;
+
+    expect(page.classList.contains('recovery-page--admin-forgot')).toBe(true);
+    expect(approvedLogo).not.toBeNull();
+    expect(approvedLogo.getAttribute('src')).toBe('assets/brand/la-chef-admin-branding.jpeg');
+    expect(fixture.nativeElement.querySelector('.recovery-email-control svg')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Reset your password');
+    expect(fixture.nativeElement.textContent).toContain('Enter the email registered to your administrator account.');
+    expect(fixture.nativeElement.textContent).not.toContain('Secure access for the team behind every event.');
+    expect(fixture.nativeElement.textContent).not.toContain('Authorized personnel only');
+    expect(returnLink.getAttribute('href')).toBe('/admin/login');
+    expect(returnLink.textContent?.trim()).toBe('Return to sign in');
+  });
+
+  it('renders the approved customer forgot-password presentation without affecting admin styling', async () => {
+    await setup('customer', 'forgot');
+
+    const page = fixture.nativeElement.querySelector('.recovery-page') as HTMLElement;
+    const approvedLogo = fixture.nativeElement.querySelector('.recovery-brand__customer-logo') as HTMLImageElement;
+    const returnLink = fixture.nativeElement.querySelector('.return-link') as HTMLAnchorElement;
+
+    expect(page.classList.contains('recovery-page--admin-forgot')).toBe(false);
+    expect(page.classList.contains('recovery-page--customer-forgot')).toBe(true);
+    expect(approvedLogo).not.toBeNull();
+    expect(approvedLogo.getAttribute('src')).toBe('assets/brand/la-chef-admin-branding.jpeg');
+    expect(fixture.nativeElement.querySelector('.recovery-email-control svg')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Customer account');
+    expect(fixture.nativeElement.textContent).toContain('Enter the email registered to your customer account.');
+    expect(fixture.nativeElement.textContent).not.toContain('A simple way back to your account.');
+    expect(returnLink.getAttribute('href')).toBe('/login');
+    expect(returnLink.textContent?.trim()).toBe('Return to sign in');
+  });
+
+  it('does not apply the customer forgot-password presentation to customer reset mode', async () => {
+    await setup('customer', 'reset', 'selector.proof');
+
+    const page = fixture.nativeElement.querySelector('.recovery-page') as HTMLElement;
+    expect(page.classList.contains('recovery-page--customer-forgot')).toBe(false);
+    expect(fixture.nativeElement.querySelector('.recovery-brand__customer-logo')).toBeNull();
+  });
+
   it('blocks reset when the token is missing and never renders a token value', async () => {
     const component = await setup('customer', 'reset');
     component.resetForm.setValue({ password: 'new-password-123', confirmPassword: 'new-password-123' });
@@ -122,16 +165,26 @@ describe('PasswordRecoveryPage', () => {
     expect(fixture.nativeElement.querySelector('a[href="/admin/forgot-password"]')).not.toBeNull();
   });
 
-  it('shows success and removes the token-bearing URL with replaceUrl navigation', async () => {
+  it('reads a fragment token and clears the visible URL before reset submission', async () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
     const component = await setup('customer', 'reset', 'selector.proof');
-    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    expect(replaceState).toHaveBeenCalled();
     component.resetForm.setValue({ password: 'new-password-123', confirmPassword: 'new-password-123' });
     await component.submitReset();
     fixture.detectChanges();
 
     expect(component.success()).toBe(true);
-    expect(navigate).toHaveBeenCalledWith([], { relativeTo: route, queryParams: {}, replaceUrl: true });
+    expect(customer.resetPassword).toHaveBeenCalledWith('selector.proof', 'new-password-123', 'new-password-123');
     expect(fixture.nativeElement.textContent).toContain('Your password has been changed');
     expect(fixture.nativeElement.querySelector('a[href="/login"]')).not.toBeNull();
+  });
+
+  it('accepts an older query token and clears it before reset submission', async () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    const component = await setup('admin', 'reset', 'selector.proof', 'query');
+    expect(replaceState).toHaveBeenCalled();
+    component.resetForm.setValue({ password: 'new-password-123', confirmPassword: 'new-password-123' });
+    await component.submitReset();
+    expect(admin.resetPassword).toHaveBeenCalledWith('selector.proof', 'new-password-123', 'new-password-123');
   });
 });

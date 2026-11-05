@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@a
 import { Router, RouterLink } from '@angular/router';
 import type { Booking, BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { BookingCalculationService } from '../../core/services/booking-calculation.service';
+import { bookingTotal, customerPaymentStatus } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -23,7 +23,7 @@ interface PlanningProgress {
 })
 export class CustomerDashboardPageComponent {
   protected readonly bookingService = inject(BookingService);
-  private readonly calculationService = inject(BookingCalculationService);
+  protected readonly paymentStatus = customerPaymentStatus;
   protected readonly badgeState = inject(PortalBadgeStateService);
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
@@ -36,14 +36,14 @@ export class CustomerDashboardPageComponent {
   protected readonly paymentSummary = computed(() => {
     const booking = this.nextBooking();
     if (!booking) return undefined;
-    const totals = this.calculationService.calculateTotals(booking);
+    const total = bookingTotal(booking);
     return {
       bookingId: booking.id,
       invoiceId: booking.invoiceId,
       eventName: booking.eventName,
-      total: totals.total,
+      total,
       paid: booking.amountPaid,
-      balance: Math.max(totals.total - booking.amountPaid, 0),
+      balance: Math.max(total - booking.amountPaid, 0),
     };
   });
 

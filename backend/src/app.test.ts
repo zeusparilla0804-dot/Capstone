@@ -5,6 +5,8 @@ import type { Server } from 'node:http';
 
 import app from './app.js';
 import { passwordRecoveryService } from './services/password-recovery.service.js';
+import { emailVerificationService } from './services/email-verification.service.js';
+import { authService } from './services/auth.service.js';
 
 let server: Server;
 let origin: string;
@@ -40,7 +42,7 @@ test('password recovery has dedicated forgot and reset limits without consuming 
   t.mock.method(passwordRecoveryService, 'reset', async () => undefined);
   const post = (path: string, body: Record<string, unknown>) => fetch(`${origin}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1' },
     body: JSON.stringify(body),
   });
 
@@ -64,8 +66,48 @@ test('password recovery has dedicated forgot and reset limits without consuming 
 });
 
 test('all-device logout routes require the matching authenticated account type', async () => {
-  const customer = await fetch(`${origin}/api/auth/logout-all`, { method: 'POST' });
-  const administrator = await fetch(`${origin}/api/auth/admin/logout-all`, { method: 'POST' });
+  const customer = await fetch(`${origin}/api/auth/logout-all`, { method: 'POST', headers: { 'x-la-chef-request': '1' } });
+  const administrator = await fetch(`${origin}/api/auth/admin/logout-all`, { method: 'POST', headers: { 'x-la-chef-request': '1' } });
   assert.equal(customer.status, 401);
   assert.equal(administrator.status, 401);
+});
+
+test('admin password step with MFA does not issue a session cookie', async t => {
+  t.mock.method(authService, 'adminLogin', async () => ({ requiresMfa: true as const, challenge: 'test-challenge', setupSecret: 'SETUPKEY' }));
+  const response = await fetch(`${origin}/api/auth/admin/login`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1' },
+    body: JSON.stringify({ identity: 'admin@example.test', password: 'existing-password' }) });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.has('set-cookie'), false);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal((await response.json()).data.requiresMfa, true);
+});
+
+test('admin MFA completion issues the session only after verification', async t => {
+  t.mock.method(authService, 'completeAdminMfa', async () => ({
+    user: { id: 7, fullName: 'Admin', email: 'admin@example.test', role: 'admin' as const },
+    session: { token: 'session-token', expiresAt: new Date(Date.now() + 60_000) },
+    recoveryCodes: ['A'.repeat(20)],
+  }));
+  const response = await fetch(`${origin}/api/auth/admin/mfa/complete`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1' },
+    body: JSON.stringify({ challenge: 'a'.repeat(43), code: '123456' }) });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('set-cookie') ?? '', /la_chef_admin_session=session-token/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.deepEqual((await response.json()).data.recoveryCodes, ['A'.repeat(20)]);
+});
+
+test('email verification and resend have independent IP limits and never issue a session cookie', async t => {
+  t.mock.method(emailVerificationService, 'verify', async () => undefined);
+  t.mock.method(emailVerificationService, 'requestCode', async () => undefined);
+  for (const [path, count, success] of [['verify', 20, 200], ['resend', 5, 202]] as const) {
+    for (let attempt = 0; attempt <= count; attempt++) {
+      const response = await fetch(`${origin}/api/auth/email/${path}`, { method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-la-chef-request': '1' },
+        body: JSON.stringify({ email: 'person@example.test', code: '012345' }) });
+      assert.equal(response.status, attempt < count ? success : 429);
+      assert.equal(response.headers.has('set-cookie'), false);
+    }
+  }
 });

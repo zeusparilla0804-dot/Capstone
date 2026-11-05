@@ -21,10 +21,11 @@ const file = { path: 'temp', originalFilename: 'receipt.png', declaredMimeType: 
 const input = { method: 'BANK_TRANSFER', claimedAmount: 50.25, transactionReference: ' TX-1 ', paymentDate: '2026-10-02' };
 
 class FakeDb {
+  policy?: Record<string, unknown>;
   status = 'AWAITING_PAYMENT';
   owner = 7;
   exists = true;
-  payment: { id: number; due: number; paid: number } | null = { id: 3, due: 100, paid: 10 };
+  payment: { id: number; due: number; paid: number; method?: string } | null = { id: 3, due: 100, paid: 10 };
   proofs: Record<string, unknown>[] = [];
   outbox: Record<string, unknown>[] = [];
   failQueue = false;
@@ -75,6 +76,13 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string) {
     const p = this.params; this.db.queries.push(command);
+    if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return { recordset: this.db.policy ? [this.db.policy] : [], rowsAffected: [0] };
+    if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
+      for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'VerificationDueAt', 'UpdatedAt']) {
+        if (`policy${field}` in p) this.db.policy![field[0]!.toLowerCase() + field.slice(1)] = p[`policy${field}`];
+      }
+      return { recordset: [], rowsAffected: [1] };
+    }
     if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
       assert.equal(this.context, 'transaction');
       return { recordset: [{ customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01' }], rowsAffected: [1] };
@@ -90,7 +98,7 @@ class FakeRequest {
       return { recordset: this.db.proofs.filter(proof => proof.storageKey === p['storageKey']), rowsAffected: [1] };
     }
     if (/FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.owner }] : [], rowsAffected: [1] };
-    if (/FROM dbo\.PAYMENT\b/is.test(command)) return { recordset: this.db.payment ? [{ paymentId: this.db.payment.id, amountDue: this.db.payment.due, amountPaid: this.db.payment.paid }] : [], rowsAffected: [1] };
+    if (/FROM dbo\.PAYMENT\b/is.test(command)) return { recordset: this.db.payment ? [{ paymentId: this.db.payment.id, amountDue: this.db.payment.due, amountPaid: this.db.payment.paid, paymentMethod: this.db.payment.method }] : [], rowsAffected: [1] };
     if (/UPDATE dbo\.PAYMENT_PROOF/is.test(command)) { for (const proof of this.db.proofs) if (proof.status === 'SUBMITTED' && proof.reservationId === p['reservationId'] && proof.customerId === p['customerId']) proof.status = 'SUPERSEDED'; return { recordset: [], rowsAffected: [1] }; }
     if (/INSERT dbo\.PAYMENT_PROOF/is.test(command)) {
       if (this.db.duplicateError) throw this.db.duplicateError;
@@ -126,6 +134,22 @@ test('eligible owner submits exact bytes and initial transition records customer
   assert.deepEqual(db.events, ['begin', 'commit']); assert.deepEqual(db.deleted, []);
   assert.match(db.queries[0]!, /UPDLOCK.*HOLDLOCK/i);
 });
+
+for (const lifecycle of ['PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED']) {
+  test(`remaining-balance proof and replacement preserve ${lifecycle} lifecycle`, async () => {
+    const db = new FakeDb(); db.status = lifecycle; db.payment!.paid = 50;
+    await db.service.submitCustomerProof(7, 5, { ...input, claimedAmount: 50 }, file);
+    await db.service.submitCustomerProof(7, 5, { ...input, claimedAmount: 50, transactionReference: 'TX-REPLACEMENT' }, file);
+    assert.equal(db.status, lifecycle); assert.equal(db.history.length, 0);
+    assert.deepEqual(db.proofs.map(proof => proof.status), ['SUPERSEDED', 'SUBMITTED']);
+    assert.equal(db.outbox.length, 2);
+  });
+  test(`fully paid ${lifecycle} rejects new proof without changing lifecycle`, async () => {
+    const db = new FakeDb(); db.status = lifecycle; db.payment!.paid = 100;
+    await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
+    assert.equal(db.status, lifecycle); assert.equal(db.proofs.length, 0);
+  });
+}
 
 test('email outbox proof submissions and replacements queue safe intent within domain transaction', async () => {
   const db = new FakeDb(); await db.service.submitCustomerProof(7, 5, input, file);
@@ -166,10 +190,21 @@ test('method, reference, date, amount, and identifiers are validated before SQL'
   const db = new FakeDb(); await assert.rejects(db.service.submitCustomerProof(7, Number.MAX_SAFE_INTEGER + 1, input, file), status(400));
 });
 
-test('cash may omit reference but transfer may not', async () => {
-  const db = new FakeDb(); await db.service.submitCustomerProof(7, 5, { ...input, method: 'CASH', transactionReference: undefined }, file);
-  assert.equal(db.proofs[0]?.transactionReference, null);
+test('cash is recorded by office staff and cannot be submitted as an online proof', async () => {
+  const db = new FakeDb();
+  await assert.rejects(db.service.submitCustomerProof(7, 5, { ...input, method: 'CASH', transactionReference: undefined }, file), status(400));
+  assert.equal(db.saved.length, 0);
+  assert.equal(db.proofs.length, 0);
   const other = new FakeDb(); await assert.rejects(other.service.submitCustomerProof(7, 5, { ...input, method: 'E_WALLET', transactionReference: undefined }, file), status(400));
+});
+
+test('a cash booking cannot bypass office payment by submitting an online method', async () => {
+  const db = new FakeDb();
+  db.payment!.method = 'CASH';
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
+  assert.equal(db.proofs.length, 0);
+  assert.equal(db.status, 'AWAITING_PAYMENT');
+  assert.deepEqual(db.deleted, db.saved);
 });
 
 test('global duplicate reference maps to conflict and deletes new stored file', async () => {
@@ -273,7 +308,9 @@ test('replacement preserves reviewed and unrelated proofs and locks the balance 
   await db.service.submitCustomerProof(7, 5, { ...input, transactionReference: 'NEW' }, file);
   assert.deepEqual(db.proofs.map(row => row.status), ['SUPERSEDED', 'SUPERSEDED', 'REJECTED', 'SUBMITTED', 'SUBMITTED', 'SUBMITTED']);
   assert.match(db.queries[1]!, /PAYMENT WITH\(UPDLOCK,HOLDLOCK\)/);
-  assert.match(db.queries[2]!, /reservation_id=@reservationId AND customer_id=@customerId AND status='SUBMITTED'/);
+  const proofWrite = db.queries.findIndex(command => /UPDATE dbo\.PAYMENT_PROOF/.test(command));
+  assert.ok(proofWrite > 1, 'proof mutation must follow the locked payment read');
+  assert.match(db.queries[proofWrite]!, /reservation_id=@reservationId AND customer_id=@customerId AND status='SUBMITTED'/);
   assert.equal(db.history.length, 0);
   assert.equal(db.payment!.paid, 10);
 });
@@ -346,7 +383,7 @@ test('finite whole amounts above the balance are domain conflicts, including lar
 
 test('storage completes before transaction acquisition and all locked eligibility checks run afterward', async () => {
   for (const { mutate, code } of [{ mutate: (db: FakeDb) => { db.owner = 8; }, code: 404 },
-    { mutate: (db: FakeDb) => { db.status = 'CONFIRMED'; }, code: 409 },
+    { mutate: (db: FakeDb) => { db.status = 'CANCELLED'; }, code: 409 },
     { mutate: (db: FakeDb) => { db.payment = null; }, code: 409 },
     { mutate: (db: FakeDb) => { db.payment!.paid = 100; }, code: 409 }]) {
     const db = new FakeDb(); const save = db.storage.save;
@@ -408,4 +445,12 @@ test('payment proof routes expose upload, list, and authorized file endpoints', 
   assert.ok(bookingPaths.some(([path, methods]) => path === '/:id/payment-proofs' && (methods as Record<string, boolean>).post));
   assert.ok(bookingPaths.some(([path, methods]) => path === '/:id/payment-proofs' && (methods as Record<string, boolean>).get));
   assert.ok((proofFileRoutes as unknown as { stack: { route?: { path: string } }[] }).stack.some(layer => layer.route?.path === '/:id/file'));
+});
+
+test('expired historical booking cannot acquire a new payment claim without saved payment approval', async () => {
+  const db = new FakeDb(); db.status = 'EXPIRED';
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
+  assert.equal(db.proofs.length, 0);
+  assert.equal(db.status, 'EXPIRED');
+  assert.deepEqual(db.deleted, db.saved);
 });

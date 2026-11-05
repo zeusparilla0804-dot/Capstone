@@ -1,5 +1,5 @@
 <header class="dashboard-mobile-header">
-  <a class="dashboard-mobile-header__brand" [routerLink]="brandRoute()" aria-label="LA Chef portal home"><span>LA</span> Chef</a>
+  <a class="dashboard-mobile-header__brand" [routerLink]="brandRoute()" [attr.aria-label]="brandRoute() === '/' ? 'LA Chef home' : 'LA Chef portal home'"><span class="dashboard-brand__accent">LA</span> Chef</a>
   <button #menuToggle type="button" [attr.aria-expanded]="isOpen()" aria-controls="dashboard-navigation" aria-label="Toggle dashboard navigation" (click)="toggleMenu()">
     <span></span><span></span><span></span>
   </button>
@@ -7,25 +7,44 @@
 
 <button class="dashboard-sidebar__backdrop" [class.is-open]="isOpen()" type="button" aria-label="Close dashboard navigation" (click)="closeMenu(true)"></button>
 
-<aside id="dashboard-navigation" class="dashboard-sidebar" [class.is-open]="isOpen()" [class.is-collapsed]="collapsed()" [attr.inert]="mobileViewport() && !isOpen() ? '' : null" [attr.aria-hidden]="mobileViewport() && !isOpen() ? 'true' : null">
+<aside id="dashboard-navigation" class="dashboard-sidebar" [class.dashboard-sidebar--editorial]="appearance() === 'editorial'" [class.dashboard-sidebar--branded]="hasEditorialBrand()" [class.is-open]="isOpen()" [class.is-collapsed]="collapsed()" [attr.inert]="mobileViewport() && !isOpen() ? '' : null" [attr.aria-hidden]="mobileViewport() && !isOpen() ? 'true' : null">
   <div class="dashboard-sidebar__top">
-    <a class="dashboard-sidebar__brand" [routerLink]="brandRoute()" aria-label="LA Chef portal home" (click)="closeMenu()"><span>LA</span><span class="dashboard-sidebar__brand-name"> Chef</span></a>
+    @if (hasEditorialBrand()) {
+      <a class="dashboard-sidebar__editorial-brand" [routerLink]="brandRoute()" [attr.aria-label]="brandRoute() === '/' ? 'LA Chef home' : 'LA Chef portal home'" (click)="closeMenu()">
+        <strong class="dashboard-sidebar__editorial-name"><span class="dashboard-brand__accent">LA</span><span> Chef</span></strong>
+        <span class="dashboard-sidebar__editorial-tagline">Event Catering Services</span>
+      </a>
+    } @else {
+      <a class="dashboard-sidebar__brand" [routerLink]="brandRoute()" [attr.aria-label]="brandRoute() === '/' ? 'LA Chef home' : 'LA Chef portal home'" (click)="closeMenu()"><span class="dashboard-brand__accent">LA</span><span class="dashboard-sidebar__brand-name"> Chef</span></a>
+    }
     <button class="dashboard-sidebar__collapse" type="button" [attr.aria-expanded]="!collapsed()" aria-controls="dashboard-navigation" [attr.aria-label]="collapsed() ? 'Expand dashboard navigation' : 'Collapse dashboard navigation'" [title]="collapsed() ? 'Expand navigation' : 'Collapse navigation'" (click)="toggleCollapsed()">
       <svg class="dashboard-sidebar__icon" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="collapsed() ? 'm9 18 6-6-6-6' : 'm15 18-6-6 6-6'" /></svg>
     </button>
     <button #drawerClose class="dashboard-sidebar__close" type="button" aria-label="Close dashboard navigation" (click)="closeMenu(true)"><span aria-hidden="true">&times;</span></button>
   </div>
 
-  <div class="dashboard-sidebar__profile">
-    <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ initials() }}</div>
-    <div class="dashboard-sidebar__profile-copy"><strong [title]="title()">{{ title() }}</strong><span>{{ subtitle() }}</span></div>
-  </div>
+  @if (appearance() === 'editorial') {
+    <a
+      class="dashboard-sidebar__profile dashboard-sidebar__profile--link"
+      [routerLink]="profileRoute()"
+      [attr.aria-label]="'Open profile for ' + title()"
+      (click)="closeMenu()"
+    >
+      <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ initials() }}</div>
+      <div class="dashboard-sidebar__profile-copy"><strong [title]="title()">{{ title() }}</strong><span>{{ subtitle() }}</span></div>
+    </a>
+  } @else {
+    <div class="dashboard-sidebar__profile">
+      <div class="dashboard-sidebar__avatar" aria-hidden="true">{{ initials() }}</div>
+      <div class="dashboard-sidebar__profile-copy"><strong [title]="title()">{{ title() }}</strong><span>{{ subtitle() }}</span></div>
+    </div>
+  }
 
   <nav aria-label="Dashboard navigation">
     <div class="dashboard-sidebar__primary-nav">
       @for (item of navItems(); track item.label) {
         @if (!item.isAction) {
-          <a [routerLink]="item.route" [routerLinkActive]="item.showActiveState === false ? [] : ['is-active']" [routerLinkActiveOptions]="{ exact: item.route === '/dashboard' || item.route === '/admin/dashboard' }" [class.has-icon]="item.icon" [attr.title]="collapsed() ? item.label : null" (click)="closeMenu()">
+          <a [routerLink]="item.route" [routerLinkActive]="item.showActiveState === false ? [] : ['is-active']" [routerLinkActiveOptions]="appearance() === 'editorial' ? { paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' } : { exact: item.route === '/dashboard' || item.route === '/admin/dashboard' }" [ariaCurrentWhenActive]="appearance() === 'editorial' ? 'page' : undefined" [class.has-icon]="item.icon" [attr.title]="collapsed() ? item.label : null" (click)="closeMenu()">
             @if (item.icon) { <ng-container [ngTemplateOutlet]="navIcon" [ngTemplateOutletContext]="{ icon: item.icon }" /> }
             <span class="dashboard-sidebar__label">{{ item.label }}</span>
             @if ((item.badge ?? 0) > 0) { <span class="dashboard-sidebar__badge" [attr.aria-label]="item.badge + ' ' + (item.badgeLabel ?? item.label)">{{ item.badge }}</span> }

@@ -1,7 +1,9 @@
 <app-admin-shell title="Packages & Menu" description="Manage customer-facing catering packages, menu options, pricing, and availability.">
-  <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Package</button>
+  @if (!showForm()) {
+    <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Package</button>
+  }
 
-  <nav class="admin-toolbar" aria-label="Packages and menu sections">
+  <nav class="admin-toolbar admin-section-tabs" aria-label="Packages and menu sections">
     <a class="btn btn-primary btn-sm" routerLink="/admin/packages" aria-current="page">Packages</a>
     <a class="btn btn-secondary btn-sm" routerLink="/admin/add-ons">Add-ons</a>
   </nav>

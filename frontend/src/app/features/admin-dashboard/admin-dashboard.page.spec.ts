@@ -25,7 +25,7 @@ describe('AdminDashboardPageComponent', () => {
   let api: { dashboard: ReturnType<typeof vi.fn> };
   beforeEach(async () => {
     api = { dashboard: vi.fn(() => of({ success: true, data: dashboard })) };
-    await TestBed.configureTestingModule({ imports: [AdminDashboardPageComponent], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [AdminDashboardPageComponent], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
     fixture = TestBed.createComponent(AdminDashboardPageComponent);
     fixture.detectChanges();
   });
@@ -67,6 +67,16 @@ describe('AdminDashboardPageComponent', () => {
     expect(balance).not.toBeNull();
     expect(balance?.textContent?.replace(/\s/g, '')).toContain('125,000');
     expect(fixture.nativeElement.querySelector('.section-number')).toBeNull();
+  });
+
+  it('keeps the reporting month label, input, and action in one control row', () => {
+    const input = fixture.nativeElement.querySelector('#reporting-period') as HTMLInputElement;
+    const label = fixture.nativeElement.querySelector('label[for="reporting-period"]') as HTMLLabelElement;
+
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toContain('Reporting month');
+    expect(label?.nextElementSibling).toBe(input);
+    expect(input.nextElementSibling?.tagName).toBe('BUTTON');
   });
 });
 

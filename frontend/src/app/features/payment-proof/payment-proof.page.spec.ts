@@ -24,6 +24,52 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+
+  it('shows office-only cash instructions instead of an online proof form', () => {
+    bookingState.set([{ ...booking, paymentMethod: 'cash' }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cash payment instructions');
+    expect(fixture.nativeElement.textContent).toContain('LA Chef office');
+    expect(fixture.nativeElement.textContent).toContain('December 7, 2026');
+    expect(fixture.nativeElement.textContent).toContain('8:00 AM');
+    expect(fixture.nativeElement.textContent).toContain('6:00 PM');
+    expect(fixture.nativeElement.textContent).toContain('No online payment proof is required');
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+    (fixture.componentInstance as any).submit();
+    expect(proofApi.submitProof).not.toHaveBeenCalled();
+    expect(bookingState()[0]!.amountPaid).toBe(10000);
+  });
+
+  it('keeps cash instructions and the remaining balance available after the deposit is recorded', () => {
+    bookingState.set([{ ...booking, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 42500 }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cash payment instructions');
+    expect(fixture.nativeElement.textContent).toContain('Deposit requirement completed');
+    expect(fixture.nativeElement.textContent).not.toContain('Payment proof is not available');
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+  });
+
+  it('uses a five-day cutoff for big cash events and warns without cancelling an overdue deposit', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-12-05T10:00:01Z'));
+    bookingState.set([{ ...booking, guestCount: 500, paymentMethod: 'cash' }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('December 5, 2026');
+    expect(fixture.nativeElement.textContent).toContain('The deposit deadline has passed');
+    expect(bookingState()[0]!.status).toBe('awaiting_payment');
+    bookingState.set([{ ...booking, guestCount: 500, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 212500 }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('The deposit deadline has passed');
+    vi.useRealTimers();
+  });
+
+  it('initializes bank-transfer bookings with their selected online payment method', () => {
+    bookingState.set([{ ...booking, paymentMethod: 'bank-transfer' }]);
+    fixture.detectChanges();
+    expect((fixture.componentInstance as any).form.controls.method.value).toBe('BANK_TRANSFER');
+  });
+
   let fixture: ComponentFixture<PaymentProofPageComponent>;
   let bookingState: ReturnType<typeof signal<readonly Booking[]>>;
   let submitEvents: Subject<unknown>;
@@ -49,10 +95,45 @@ describe('PaymentProofPageComponent', () => {
 
   it('shows the submission tool only for eligible booking states', () => {
     expect(fixture.nativeElement.querySelector('input[type="file"]')).not.toBeNull();
-    bookingState.set([{ ...booking, status: 'confirmed' }]);
+    bookingState.set([{ ...booking, status: 'cancelled' }]);
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('input[type="file"]')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Payment proof is not available');
+  });
+
+  for (const lifecycle of ['payment_verified', 'confirmed', 'completed'] as const) {
+    it('accepts an online outstanding balance proof for ' + lifecycle + ' and hides the form when paid', () => {
+      bookingState.set([{ ...booking, status: lifecycle, paymentMethod: 'bank-transfer', amountPaid: 42500 }]);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('input[type="file"]')).not.toBeNull();
+      expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(42500);
+      bookingState.set([{ ...booking, status: lifecycle, paymentMethod: 'bank-transfer', amountPaid: 85000 }]);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('input[type="file"]')).toBeNull();
+    });
+  }
+
+  it('defaults to only the remaining amount needed for the 50% reservation deposit', () => {
+    const component = fixture.componentInstance as unknown as {
+      form: { controls: { claimedAmount: { value: number | null } } };
+    };
+
+    expect(component.form.controls.claimedAmount.value).toBe(32_500);
+    expect(fixture.nativeElement.textContent).toContain('50% down payment');
+    expect(fixture.nativeElement.querySelector('[data-payment-choice="deposit"]')?.textContent).toContain('₱32,500.00');
+    expect(fixture.nativeElement.textContent).toContain('Pay full balance');
+  });
+
+  it('lets the customer deliberately switch from the deposit to the full balance', () => {
+    const component = fixture.componentInstance as unknown as {
+      form: { controls: { claimedAmount: { value: number | null } } };
+      selectPaymentAmount(choice: 'deposit' | 'full'): void;
+    };
+
+    component.selectPaymentAmount('full');
+    fixture.detectChanges();
+
+    expect(component.form.controls.claimedAmount.value).toBe(75_000);
   });
 
   it('rejects unsupported or over-5-MiB files before submission', () => {
@@ -64,7 +145,8 @@ describe('PaymentProofPageComponent', () => {
     expect(proofApi.submitProof).not.toHaveBeenCalled();
   });
 
-  it('prevents duplicate submissions and renders success as For verification', () => {
+  it('prevents duplicate submissions and presents a dismissible verification success dialog', () => {
+    vi.useFakeTimers();
     const component = fixture.componentInstance as unknown as {
       form: { setValue(value: unknown): void };
       selectedFile: { set(file: File): void };
@@ -78,8 +160,19 @@ describe('PaymentProofPageComponent', () => {
     submitEvents.next(new HttpResponse({ body: { success: true, data: submittedProof } }));
     submitEvents.complete();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('For verification');
+    const dialog = fixture.nativeElement.querySelector('[role="dialog"]') as HTMLElement | null;
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain('Payment proof submitted');
+    expect(dialog?.textContent).toContain('For verification');
+    expect(fixture.nativeElement.querySelector('.form-message--success')).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('Payment successful');
+
+    (dialog?.querySelector('[aria-label="Close success message"]') as HTMLButtonElement).click();
+    vi.advanceTimersByTime(160);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[role="dialog"]')).toBeNull();
+    vi.useRealTimers();
   });
 
   it('keeps form data and shows a specific duplicate-reference conflict', () => {

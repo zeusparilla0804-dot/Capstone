@@ -13,6 +13,45 @@ const booking: Booking = {
 };
 
 describe('BookingCardComponent pending actions', () => {
+  it('links cash customers to instructions instead of requesting an online payment', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', { ...booking, paymentMethod: 'cash', status: 'awaiting_payment' });
+    fixture.detectChanges();
+    const action = fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]') as HTMLAnchorElement;
+    expect(action?.textContent).toContain('View Cash Instructions');
+    expect(fixture.nativeElement.querySelector('app-status-badge')?.textContent).toContain('Awaiting Cash Payment');
+    fixture.componentRef.setInput('booking', { ...booking, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 27000 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).not.toBeNull();
+  });
+
+  it('groups reservation status and available actions in one labelled side rail', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', booking);
+    fixture.detectChanges();
+
+    const sideRail = fixture.nativeElement.querySelector('[aria-label="Reservation status and actions"]') as HTMLElement;
+
+    expect(sideRail).not.toBeNull();
+    expect(sideRail.querySelector('app-status-badge')).not.toBeNull();
+    expect(sideRail.querySelector('.booking-card__actions')).not.toBeNull();
+  });
+
+  it('keeps venue close to the date in a compact left-aligned details grid', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', booking);
+    fixture.detectChanges();
+
+    const details = fixture.nativeElement.querySelector('.booking-card dl') as HTMLElement;
+    const styles = getComputedStyle(details);
+
+    expect(styles.justifyContent).toBe('start');
+    expect(styles.gridTemplateColumns).toContain('260px');
+  });
+
   it('offers an edit link only while the booking is pending', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);

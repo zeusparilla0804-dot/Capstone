@@ -1,3 +1,4 @@
+import { paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
@@ -32,6 +33,10 @@ export class AdminPaymentReviewPage {
   protected correctionReason = '';
   protected rejectionReason = '';
   protected readonly canReview = computed(() => this.detail()?.proof.status === 'SUBMITTED');
+  protected readonly returnBookingId = computed(() => {
+    const id = this.detail()?.booking.id;
+    return id && this.route.snapshot.queryParamMap?.get('booking') === String(id) ? id : null;
+  });
   protected readonly amountCorrected = computed(() =>
     Math.round(this.verifiedAmount() * 100) !== Math.round((this.detail()?.proof.claimedAmount ?? 0) * 100),
   );
@@ -95,7 +100,7 @@ export class AdminPaymentReviewPage {
   }
 
   protected methodLabel(method: string): string {
-    return method === 'E_WALLET' ? 'GCash / e-wallet' : method === 'BANK_TRANSFER' ? 'Bank transfer' : 'Cash';
+    return paymentMethodLabel(method);
   }
 
   protected previewUrl(fileUrl: string): string {

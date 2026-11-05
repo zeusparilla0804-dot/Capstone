@@ -1,11 +1,12 @@
 .stepper { margin-top: 30px; }
-.stepper ol { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; padding: 0; list-style: none; }
-.stepper li { position: relative; display: flex; align-items: center; gap: 9px; color: var(--color-text-muted); font-size: .82rem; font-weight: 600; }
-.stepper li:not(:last-child)::after { position: absolute; z-index: 0; top: 15px; right: 12px; left: 42px; height: 1px; background: var(--color-border); content: ''; }
-.stepper li > span { position: relative; z-index: 1; display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid var(--color-border); border-radius: 50%; background: var(--color-background); font-size: .76rem; }
-.stepper li.is-current { color: var(--color-text); }
-.stepper li.is-current > span { border-color: var(--color-primary); background: var(--color-primary); color: #fff; }
-.stepper li.is-complete { color: var(--color-success); }
-.stepper li.is-complete > span { border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-border)); color: var(--color-success); }
-.stepper__mobile { display: none; }
-@media (max-width: 767px) { .stepper ol { grid-template-columns: repeat(4, 1fr); } .stepper li { justify-content: center; } .stepper li strong { display: none; } .stepper li:not(:last-child)::after { right: -20px; left: calc(50% + 20px); } .stepper__mobile { display: flex; justify-content: space-between; margin-bottom: 14px; color: var(--color-text-muted); font-size: .82rem; } .stepper__mobile strong { color: var(--color-text); } }
+.stepper ol { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.stepper li { min-width: 0; color: var(--color-text-muted); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 400; line-height: 1.4; }
+.stepper button { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: baseline; column-gap: 5px; row-gap: 10px; width: 100%; min-width: 0; margin: 0; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; }
+.stepper button::before { grid-column: 1 / -1; height: 3px; background: var(--color-border); content: ''; }
+.stepper button > span, .stepper button > strong { font: inherit; }
+.stepper button > strong { overflow-wrap: anywhere; }
+.stepper button:not(:disabled) { cursor: pointer; }
+.stepper button, .stepper button > strong { text-decoration: none; }
+.stepper button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }
+.stepper li.is-current { color: var(--color-text); font-weight: 600; }
+.stepper li.is-current button::before { background: var(--color-primary); }

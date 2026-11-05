@@ -1,0 +1,46 @@
+dialog {
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: auto;
+  padding: 32px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+  color: #202020;
+  box-shadow: 0 16px 48px rgb(23 24 22 / 16%);
+  font-family: var(--font-sans);
+  text-align: center;
+}
+dialog::backdrop { background: rgb(23 24 22 / 58%); }
+.registration-success__mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, #fff);
+}
+svg { width: 24px; height: 24px; }
+h2 { margin: 0; font-family: var(--font-serif); font-size: 29px; font-weight: 400; line-height: 1.2; letter-spacing: 0; text-wrap: balance; }
+p { margin: 14px 0 24px; color: #666; font-size: 14px; font-weight: 400; line-height: 1.6; }
+button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #111;
+  border-radius: 6px;
+  background: #111;
+  color: #fff;
+  font: 500 14px/1.5 var(--font-sans);
+  cursor: pointer;
+}
+button:hover { background: #222; border-color: #222; }
+button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }
+@media (max-width: 480px) { dialog { padding: 28px 24px; } h2 { font-size: 28px; } }

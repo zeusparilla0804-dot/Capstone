@@ -34,30 +34,55 @@ describe('PackageExperienceComponent', () => {
     expect(element.textContent).not.toContain('Buy');
   });
 
-  it('expands full inclusions and emits plan, inclusion, and customization intent', () => {
+  it('expands and collapses inclusions when more than three are available', () => {
     TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
     const fixture = TestBed.createComponent(PackageExperienceComponent);
-    fixture.componentRef.setInput('cateringPackage', debutPackage);
+    fixture.componentRef.setInput('cateringPackage', {
+      ...debutPackage,
+      features: [...debutPackage.features, { label: 'Welcome drinks' }],
+    });
     const component = fixture.componentInstance;
-    const plan = vi.fn();
     const inclusions = vi.fn();
-    const customize = vi.fn();
-    component.planPackage.subscribe(plan);
     component.viewInclusions.subscribe(inclusions);
-    component.customizePackage.subscribe(customize);
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelectorAll('[data-testid="full-inclusion"]')).toHaveLength(0);
     element.querySelector<HTMLButtonElement>('[data-testid="view-inclusions"]')?.click();
     fixture.detectChanges();
-    expect(element.querySelectorAll('[data-testid="full-inclusion"]')).toHaveLength(3);
+    expect(element.querySelectorAll('[data-testid="full-inclusion"]')).toHaveLength(4);
+    expect(element.textContent).toContain('Welcome drinks');
     expect(inclusions).toHaveBeenCalledWith(debutPackage.id);
 
-    element.querySelector<HTMLButtonElement>('[data-testid="plan-package"]')?.click();
-    element.querySelector<HTMLButtonElement>('[data-testid="customize-package"]')?.click();
-    expect(plan).toHaveBeenCalledWith(debutPackage.id);
-    expect(customize).toHaveBeenCalledWith(debutPackage.id);
+    element.querySelector<HTMLButtonElement>('[data-testid="view-inclusions"]')!.click();
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('Welcome drinks');
+    expect(element.querySelector('[data-testid="view-inclusions"]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it.each([0, 1, 3])('does not offer an inclusions toggle for %i already-visible inclusions', (count) => {
+    TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
+    const fixture = TestBed.createComponent(PackageExperienceComponent);
+    fixture.componentRef.setInput('cateringPackage', { ...debutPackage, features: debutPackage.features.slice(0, count) });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelectorAll('.package-experience__inclusions li')).toHaveLength(count);
+    expect(element.querySelector('[data-testid="view-inclusions"]')).toBeNull();
+  });
+
+  it('offers one package planning action and emits the selected package', () => {
+    TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
+    const fixture = TestBed.createComponent(PackageExperienceComponent);
+    fixture.componentRef.setInput('cateringPackage', debutPackage);
+    const plan = vi.fn();
+    fixture.componentInstance.planPackage.subscribe(plan);
+    fixture.detectChanges();
+
+    const actions = fixture.nativeElement.querySelectorAll('.package-experience__actions button') as NodeListOf<HTMLButtonElement>;
+    expect(actions).toHaveLength(1);
+    actions[0]!.click();
+    expect(plan).toHaveBeenCalledExactlyOnceWith('20');
   });
 
   it('navigates gallery images through click zones, keyboard keys, and horizontal swipes', () => {
@@ -87,6 +112,27 @@ describe('PackageExperienceComponent', () => {
     component.onTouchEnd({ changedTouches: [{ clientX: 155 }] });
     fixture.detectChanges();
     expect(status()).toBe('Design image 1 of 3');
+  });
+
+  it('keeps long gallery pagination compact without hiding the full image count', () => {
+    TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
+    const fixture = TestBed.createComponent(PackageExperienceComponent);
+    fixture.componentRef.setInput('cateringPackage', {
+      ...debutPackage,
+      galleryImageUrls: Array.from({ length: 29 }, (_, index) => `client-debut-${index + 1}.jpg`),
+    });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelectorAll('.gallery-dots span')).toHaveLength(7);
+    expect(element.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe('Design image 1 of 29');
+
+    element.querySelector<HTMLElement>('.package-experience__media')?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'End' }),
+    );
+    fixture.detectChanges();
+    expect(element.querySelectorAll('.gallery-dots span')).toHaveLength(7);
+    expect(element.querySelector('[aria-live="polite"]')?.textContent?.trim()).toBe('Design image 29 of 29');
   });
 
   it('marks the media as reduced motion when the customer requests it', () => {

@@ -6,6 +6,7 @@ import { AdminBooking, PageResult } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
+import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 
 const genericActions: Record<string, readonly string[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -17,7 +18,7 @@ const genericActions: Record<string, readonly string[]> = {
 
 @Component({
   selector: 'app-admin-bookings',
-  imports: [AdminShellComponent, StatusBadgeComponent, FormsModule, CurrencyPipe, DatePipe, RouterLink],
+  imports: [AdminShellComponent, StatusBadgeComponent, SuccessDialogComponent, FormsModule, CurrencyPipe, DatePipe, RouterLink],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './admin-bookings.page.html',
   styleUrl: './admin-bookings.page.scss'
@@ -29,8 +30,10 @@ export class AdminBookingsPage {
   protected readonly loading = signal(false);
   protected readonly error = signal('');
   protected readonly message = signal('');
+  protected readonly approvedReference = signal('');
   protected readonly actionError = signal('');
   protected readonly actionPending = signal(false);
+  protected readonly approving = signal(false);
   protected readonly pendingAction = signal<{
     booking: AdminBooking;
     status: string;
@@ -43,7 +46,7 @@ export class AdminBookingsPage {
   protected eventType = '';
   protected date = '';
   protected page = 1;
-  readonly statuses = ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED', 'REJECTED', 'CANCELLED'];
+  readonly statuses = ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED'];
 
   constructor() { this.load(); }
 
@@ -102,26 +105,30 @@ export class AdminBookingsPage {
 
   private sendAction(item: AdminBooking, status: string, reason?: string, capacityConfirmed = false) {
     this.actionPending.set(true);
+    this.approving.set(status === 'APPROVED');
     const request = capacityConfirmed
       ? this.api.updateBookingStatus(item.id, status, reason, true)
       : this.api.updateBookingStatus(item.id, status, reason);
     request.subscribe({
       next: () => {
         this.actionPending.set(false);
+        this.approving.set(false);
         this.pendingAction.set(null);
         this.actionReason = '';
         this.actionError.set('');
-        this.message.set('Reservation status updated.');
+        this.message.set(status === 'APPROVED' ? '' : 'Reservation status updated.');
+        if (status === 'APPROVED') this.approvedReference.set(item.reference);
         this.load();
       },
       error: (error) => {
         this.actionPending.set(false);
+        this.approving.set(false);
         if (error?.status === 409 && error?.error?.code === 'CAPACITY_CHANGED') {
           this.pendingAction.set(null);
           this.actionError.set(error?.error?.message || 'Date capacity changed. Review the refreshed availability.');
           this.load();
         } else {
-          this.actionError.set('Unable to update this reservation. Refresh the list and try again.');
+          this.actionError.set(error?.error?.message || 'Unable to update this reservation. Refresh the list and try again.');
         }
       }
     });

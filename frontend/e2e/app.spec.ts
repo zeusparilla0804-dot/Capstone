@@ -36,6 +36,40 @@ async function packageEventType(packageExperience: ReturnType<Page['locator']>):
   return text?.replace(/\s+catering\s*$/i, '').trim().toLowerCase() ?? '';
 }
 
+test('About and Contact publish confirmed details without responsive overflow', async ({ page }) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+
+    await page.goto('/about');
+    await expect(
+      page.getByRole('heading', { name: 'Gatherings made personal, from the table outward.' }),
+    ).toBeVisible();
+    await expect(page.getByText('LA-Chef Event Catering Services').first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Explore packages' })).toHaveAttribute(
+      'href',
+      '/packages',
+    );
+    await assertNoHorizontalOverflow(page);
+    await page.screenshot({ path: `test-results/about-${width}.png`, fullPage: true });
+
+    await page.goto('/contact');
+    await expect(
+      page.getByRole('heading', { name: 'Plan your celebration with us.' }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: '0939 298 7324' })).toHaveAttribute(
+      'href',
+      'tel:+639392987324',
+    );
+    await expect(page.getByRole('link', { name: 'Open Messenger' })).toHaveAttribute(
+      'href',
+      'https://www.facebook.com/share/1F8DnqJnB9/',
+    );
+    await expect(page.getByRole('link', { name: 'Message LA Chef on Messenger' })).toHaveCount(0);
+    await assertNoHorizontalOverflow(page);
+    await page.screenshot({ path: `test-results/contact-${width}.png`, fullPage: true });
+  }
+});
+
 test('Messenger contact stays safe, visible, and clear of viewport edges outside admin routes', async ({ page }) => {
   await page.goto('/packages');
   const contact = page.getByRole('link', { name: 'Message LA Chef on Messenger' });

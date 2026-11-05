@@ -1,6 +1,6 @@
 <app-admin-shell title="Reservations" description="Review customer reservation requests and manage their status.">
   <form class="admin-toolbar" (ngSubmit)="load(1)">
-    <input name="search" [(ngModel)]="search" placeholder="Search reference or customer" aria-label="Search reservations" />
+    <input #approvalReturnFocus name="search" [(ngModel)]="search" placeholder="Search reference or customer" aria-label="Search reservations" />
     <select name="status" [(ngModel)]="status" aria-label="Filter status">
       <option value="">All statuses</option>
       @for (item of statuses; track item) { <option [value]="item">{{ item.replaceAll('_', ' ') }}</option> }
@@ -10,6 +10,7 @@
     <button class="btn btn-secondary btn-sm">Apply filters</button>
   </form>
 
+  @if (approving()) { <p class="approval-progress" role="status"><span class="approval-spinner" aria-hidden="true"></span>Approving...</p> }
   @if (message()) { <p class="admin-feedback" role="status">{{ message() }}</p> }
   @if (actionError()) { <p class="admin-action-error" role="alert">{{ actionError() }}</p> }
   @if (loading()) {
@@ -52,7 +53,7 @@
                 @if (pendingAction(); as action) {
                   @if (action.booking.id === item.id) {
                     <tr class="admin-status-reason-row"><td colspan="9">
-                      <div class="admin-status-reason">
+                      <div class="admin-status-reason" [class.approval-confirmation]="action.status === 'APPROVED'">
                         @if (action.capacityConfirmation) {
                           <div><strong>Confirm accommodation for {{ item.guestCount }} guests</strong><p>Approving confirms that LA Chef can serve this event on {{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}.</p></div>
                         } @else {
@@ -79,3 +80,17 @@
     </section>
   }
 </app-admin-shell>
+
+@if (approvedReference(); as reference) {
+  <app-success-dialog
+    class="booking-approval-confirmation"
+    [nativeModal]="true"
+    title="Reservation approved"
+    message="The booking status has been updated successfully."
+    detailLabel="Booking reference"
+    [detailValue]="reference"
+    primaryLabel="Done"
+    [restoreFocusTo]="approvalReturnFocus"
+    (dismissed)="approvedReference.set('')"
+  />
+}

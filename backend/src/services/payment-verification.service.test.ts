@@ -29,6 +29,7 @@ const proof: PaymentProofRecord = {
 };
 
 class ReviewDb {
+  policy?: Record<string, unknown>;
   booking: { status: string; customerId: number } | undefined = { status: 'PAYMENT_SUBMITTED', customerId: 7 };
   payment: { paymentId: number; amountDue: number; amountPaid: number; status: string } | undefined = {
     paymentId: 3, amountDue: 100, amountPaid: 10, status: 'PARTIALLY_PAID'
@@ -56,7 +57,7 @@ class ReviewDb {
         this.queue = new Promise<void>(resolve => { release = resolve; });
         await preceding;
         await this.beforeLocks?.(); this.beforeLocks = undefined;
-        const snapshot = structuredClone({ booking: this.booking, payment: this.payment, invoice: this.invoice,
+        const snapshot = structuredClone({ policy: this.policy, booking: this.booking, payment: this.payment, invoice: this.invoice,
           proofs: this.proofs, credits: this.credits, history: this.history, audits: this.audits, outbox: this.outbox });
         this.events.push('begin');
         try {
@@ -83,6 +84,14 @@ class ReviewDb {
       query: async (command: string) => {
         const p = { ...params }; this.queries.push({ command, params: p, transactional });
         const result = (recordset: unknown[] = [], affected = 1) => ({ recordset, rowsAffected: [affected] });
+        if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return result(this.policy ? [this.policy] : []);
+        if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
+          for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'UpdatedAt']) {
+            if (`policy${field}` in p) this.policy![field[0]!.toLowerCase() + field.slice(1)] = p[`policy${field}`];
+          }
+          return result();
+        }
+        if (/SELECT COUNT\(\*\) pendingCount/i.test(command)) return result([{ pendingCount: this.proofs.filter(item => item.status === 'SUBMITTED').length }]);
         if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
           assert.ok(transactional); return result([{ customerName: 'Customer', customerEmail: 'customer@example.test', bookingReference: 'BK-5', eventDate: '2026-12-01' }]);
         }
@@ -136,6 +145,7 @@ class ReviewDb {
             paymentTransactionId: p['paymentTransactionId'] ?? undefined, invoiceId: p['invoiceId'] ?? undefined });
           return result();
         }
+        if (/UPDATE dbo\.RESERVATION SET status='EXPIRED'/i.test(command)) { this.booking!.status = 'EXPIRED'; return result(); }
         if (/UPDATE dbo\.RESERVATION/i.test(command)) {
           if (this.failOn === 'staleBooking') return result([], 0);
           assert.equal(this.booking!.status, p['previousStatus']); this.booking!.status = String(p['nextStatus']); return result();
@@ -168,7 +178,8 @@ class ReviewDb {
           }
           assert.equal(depth, 0, 'emitted queue SQL must have balanced parentheses');
           if (p['dateTo'] === '9999-12-31' && /DATEADD\(day,1,/i.test(command)) throw new Error('SQL date overflow');
-          const rows = this.proofs.filter(row => (!p['status'] || row.status === p['status']) && (!p['method'] || row.method === p['method']) &&
+          const rows = this.proofs.filter(row => (!p['status'] || p['status'] === 'ALL' || row.status === p['status']) &&
+            (!p['reservationId'] || row.reservationId === p['reservationId']) && (!p['method'] || row.method === p['method']) &&
             (!p['date'] || row.paymentDate === p['date']) && (!p['dateFrom'] || row.paymentDate >= String(p['dateFrom'])) &&
             (!p['dateTo'] || row.paymentDate <= String(p['dateTo'])) && (!p['search'] || row.transactionReference?.includes(String(p['search']))));
           const newest = /ORDER BY pp\.created_at DESC,\s*pp\.payment_proof_id DESC/i.test(command);
@@ -303,6 +314,7 @@ async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void
   // Exercise the existing manual-payment repository; replace only SQL execution.
   t.mock.method(sql.Request.prototype, 'query', async function (this: sql.Request, command: string) {
     const values = Object.fromEntries(Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]));
+    if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return { recordset: [], rowsAffected: [0] };
     if (/SELECT status,customer_id customerId[\s\S]*FROM dbo\.RESERVATION/i.test(command)) {
       assert.match(command, /UPDLOCK,HOLDLOCK/);
       return { recordset: [{ status: db.booking!.status, customerId: db.booking!.customerId,
@@ -312,6 +324,7 @@ async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void
       assert.match(command, /UPDLOCK,HOLDLOCK/);
       return { recordset: [{ payment_id: 3, amount_due: 100, amount_paid: 10 }], rowsAffected: [] };
     }
+    if (/FROM dbo\.PAYMENT_TRANSACTION WITH\(UPDLOCK,HOLDLOCK\)/i.test(command)) return { recordset: [], rowsAffected: [] };
     if (/UPDATE dbo\.PAYMENT_PROOF SET status='SUPERSEDED'/i.test(command)) {
       for (const item of db.proofs) if (item.status === 'SUBMITTED') item.status = 'SUPERSEDED';
     } else if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
@@ -390,7 +403,7 @@ test('transaction identity above MAX_SAFE_INTEGER remains exact in FK binding, r
   const page = await db.service().listPendingProofs({ status: 'VERIFIED' }); assert.equal(page.items[0].paymentTransactionId, '9007199254740993');
   const insert = db.queries.find(query => /INSERT dbo\.PAYMENT_TRANSACTION/.test(query.command)); assert.ok(insert);
   assert.match(insert.command, /OUTPUT CONVERT\(varchar\(20\),\s*INSERTED\.payment_transaction_id\) id/i);
-  for (const query of db.queries.filter(query => /FROM dbo\.PAYMENT_PROOF/.test(query.command))) {
+  for (const query of db.queries.filter(query => /SELECT payment_proof_id id/i.test(query.command))) {
     assert.match(query.command, /CONVERT\(varchar\(20\),\s*payment_transaction_id\) paymentTransactionId/i);
   }
 });
@@ -445,7 +458,7 @@ test('booking, proof linkage/status and balance are revalidated under ordered lo
     (db: ReviewDb) => { db.proofs[0]!.customerId = 9; },
     (db: ReviewDb) => { db.proofs[0]!.paymentId = 9; },
     (db: ReviewDb) => { db.proofs[0]!.status = 'SUPERSEDED'; },
-    (db: ReviewDb) => { db.booking!.status = 'CONFIRMED'; },
+    (db: ReviewDb) => { db.booking!.status = 'CANCELLED'; },
     (db: ReviewDb) => { db.booking = undefined; },
     (db: ReviewDb) => { db.payment = undefined; },
     (db: ReviewDb) => { db.payment!.amountPaid = 11; },
@@ -459,7 +472,7 @@ test('booking, proof linkage/status and balance are revalidated under ordered lo
 
 test('overpayment is a conflict and rejection also revalidates booking/proof links', async () => {
   const db = new ReviewDb(); await assert.rejects(db.service().verifyProof(2, proof.id, 90.01, 'Correction'), status(409)); unchanged(db);
-  for (const mutate of [(db: ReviewDb) => { db.proofs[0]!.reservationId = 6; }, (db: ReviewDb) => { db.booking!.status = 'CONFIRMED'; }]) {
+  for (const mutate of [(db: ReviewDb) => { db.proofs[0]!.reservationId = 6; }, (db: ReviewDb) => { db.booking!.status = 'CANCELLED'; }]) {
     const other = new ReviewDb(); other.beforeLocks = () => mutate(other);
     await assert.rejects(other.service().rejectProof(2, proof.id, 'bad'), status(409)); assert.equal(other.proofs[0]!.status, 'SUBMITTED');
   }
@@ -553,7 +566,7 @@ test('admin routes require real admin authentication, validate HTTP inputs and r
   const { closeDatabase } = await import('../config/database.js');
   const pool = { connected: true, request: () => {
     let token: unknown;
-    return { input(_name: string, _type: unknown, value: unknown) { token = value; return this; },
+    return { input(name: string, _type: unknown, value: unknown) { if (name === 'tokenHash') token = value; return this; },
       query: async () => ({ recordset: token === hashSessionToken('admin') ? [{ admin_id: 2, full_name: 'Admin', email: 'admin@example.test' }] : [] }) };
   }, close: async () => {} };
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
@@ -597,4 +610,48 @@ test('admin routes require real admin authentication, validate HTTP inputs and r
     db = new ReviewDb(); const rejected = await request(`/${proof.id}/reject`, { reason: ' Invalid receipt ' });
     assert.equal(rejected.status, 200); assert.equal(db.booking!.status, 'AWAITING_PAYMENT'); assert.equal(db.payment!.amountPaid, 10);
   } finally { server.close(); await once(server, 'close'); await closeDatabase(); }
+});
+
+for (const lifecycle of ['PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED']) {
+  for (const action of ['verifyProof', 'rejectProof'] as const) {
+    test(action + ' for an outstanding balance preserves ' + lifecycle, async () => {
+      const db = new ReviewDb(); db.booking!.status = lifecycle; db.payment!.amountPaid = 50;
+      db.proofs[0]!.claimedAmount = 50;
+      const reviewed = await db.service()[action](2, proof.id, action === 'verifyProof' ? 50 : 'Unclear receipt');
+      assert.equal(reviewed.status, action === 'verifyProof' ? 'VERIFIED' : 'REJECTED');
+      assert.equal(db.booking!.status, lifecycle); assert.equal(db.history.length, 0);
+      assert.equal(db.payment!.amountPaid, action === 'verifyProof' ? 100 : 50);
+      assert.equal(db.credits.length, action === 'verifyProof' ? 1 : 0);
+      assert.equal(db.audits.length, 1); assert.equal(db.outbox.length, 1);
+      await assert.rejects(db.service().verifyProof(2, proof.id, 50), status(409));
+      assert.equal(db.credits.length, action === 'verifyProof' ? 1 : 0);
+    });
+  }
+}
+
+test('proof history scopes ALL statuses and pagination to one reservation', async () => {
+  const db = new ReviewDb();
+  db.proofs.push({ ...proof, id: 99, status: 'REJECTED' }, { ...proof, id: 100, reservationId: 8 });
+  const first = await db.service().listPendingProofs({ reservationId: '5', status: 'ALL', pageSize: 1 });
+  assert.equal(first.totalItems, 2); assert.equal(first.totalPages, 2); assert.equal(first.items[0].reservationId, 5);
+  const second = await db.service().listPendingProofs({ reservationId: 5, status: 'ALL', page: 2, pageSize: 1 });
+  assert.equal(first.items[0].id, 99); assert.equal(second.items[0].id, proof.id);
+  const query = db.queries.at(-1)!;
+  assert.equal(query.params['reservationId'], 5);
+  assert.ok(query.command.includes('@reservationId IS NULL OR pp.reservation_id=@reservationId'));
+  assert.ok(query.command.includes("@status='ALL' OR pp.status=@status"));
+  for (const reservationId of [0, -1, 1.1, '1.5', '0x5', '', ['5'], 2147483648]) {
+    const invalid = new ReviewDb();
+    await assert.rejects(invalid.service().listPendingProofs({ reservationId }), status(400));
+    assert.equal(invalid.queries.length, 0);
+  }
+});
+
+test('expired historical booking cannot credit a proof without saved payment approval', async () => {
+  const db = new ReviewDb(); db.booking!.status = 'EXPIRED';
+  await assert.rejects(db.service().verifyProof(2, proof.id, 90), status(409));
+  assert.equal(db.credits.length, 0);
+  assert.equal(db.payment!.amountPaid, 10);
+  assert.equal(db.proofs[0]!.status, 'SUBMITTED');
+  assert.equal(db.booking!.status, 'EXPIRED');
 });

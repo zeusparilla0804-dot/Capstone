@@ -1,0 +1,77 @@
+:host ::ng-deep app-admin-shell .admin-page-header .page-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+:host ::ng-deep app-admin-shell .admin-page-header h1 { font-size: 30px; font-weight: 600; }
+:host ::ng-deep app-admin-shell .admin-page-header p:last-child { font-size: 14px; font-weight: 400; }
+button[admin-actions] { font-family: var(--font-admin); font-size: 13px; font-weight: 500; }
+.payment-proof-records .page-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+.payment-proof-records .admin-panel__heading h2 { font-family: var(--font-admin); font-size: 16px; font-weight: 600; }
+.payment-proof-records .data-state { font-size: 14px; font-weight: 400; }
+.payment-proof-records .admin-table :is(th, td).is-number { text-align: left; font-variant-numeric: tabular-nums; }
+.payment-proof-records .claimed-amount-text { display: block; text-align: inherit; }
+.admin-toolbar input, .admin-toolbar input::placeholder, .admin-toolbar select { font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
+.admin-toolbar .btn { font-size: 13px; font-weight: 500; }
+.admin-form label { font-size: 12px; font-weight: 500; }
+.admin-form input, .admin-form input::placeholder, .admin-form select { font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
+.admin-form .btn { font-size: 13px; font-weight: 500; }
+.admin-table--payments th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+.admin-table--payments td { font-size: 13px; font-weight: 400; }
+.payment-records td[data-label='Booking'] strong { font-size: 13px; font-weight: 600; }
+.payment-records td[data-label='Customer'] { font-weight: 500; }
+.admin-table--payments td.is-number { font-weight: 600; font-variant-numeric: tabular-nums; }
+.admin-table--payments td[data-label='Method'] { font-size: 12px; font-weight: 500; }
+.payment-records ::ng-deep .status-badge { font-size: 11px; font-weight: 500; }
+.admin-pagination > span { font-size: 12px; font-weight: 400; }
+.admin-pagination .btn { font-size: 12px; font-weight: 500; }
+
+@media (min-width: 768px) {
+  .payment-records .admin-table--payments :is(th, td):nth-child(5) {
+    padding-left: 37px;
+  }
+
+  .payment-records .admin-table--payments {
+    min-width: 1140px;
+    table-layout: fixed;
+  }
+
+  .payment-records .admin-table--payments th:nth-child(1) {
+    width: 180px;
+  }
+
+  .payment-records .admin-table--payments th:nth-child(2) {
+    width: 150px;
+  }
+
+  .payment-records .admin-table--payments th:nth-child(3),
+  .payment-records .admin-table--payments th:nth-child(4) {
+    width: 110px;
+  }
+
+  .payment-records .admin-table--payments th:nth-child(5),
+  .payment-records .admin-table--payments th:nth-child(6),
+  .payment-records .admin-table--payments th:nth-child(7) {
+    width: 150px;
+  }
+
+  .payment-records .admin-table--payments th:nth-child(8) {
+    width: 140px;
+  }
+
+  .payment-records .admin-table--payments :is(th, td):is(:nth-child(3), :nth-child(4)) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .payment-records .admin-table--payments :is(th, td):nth-child(8) {
+    text-align: center;
+  }
+
+  .payment-records .admin-table--payments td:nth-child(8) app-status-badge {
+    --status-badge-width: 120px;
+  }
+
+  .payment-records .admin-table--payments td:is(:nth-child(5), :nth-child(6), :nth-child(7)) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

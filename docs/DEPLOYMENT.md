@@ -42,13 +42,32 @@ Use the hosting platform's secret store. Committed `.env*.example` files contain
 | `DB_TRUST_SERVER_CERTIFICATE` | Normally `false` |
 | `PAYMENT_PROOF_UPLOAD_ROOT` | Absolute path on durable private storage |
 | `PASSWORD_RESET_HMAC_SECRET` | Required in production; at least 32 random bytes, stored only in the secret manager |
+| `ADMIN_MFA_ENCRYPTION_KEY` | Required in production; base64 of 32 random bytes, shared across API instances and retained for existing authenticator enrollments |
 | `SMTP_*` | Optional SMTP transport values from the secret store |
 | `EMAIL_WORKER_ENABLED` | Enable only when all SMTP settings are valid |
 | `EMAIL_WORKER_*` | Polling, batch, retry, and lease controls |
 
 `VERIFY_DB_*` values are verification-only credentials for a principal allowed to create and drop databases in CI or isolated staging. They must never be supplied to the application runtime. `VERIFY_DB_CONFIRM_DISPOSABLE` remains `false` by default and is set to `true` only for an intentional verifier run. A public domain routes HTTPS traffic to the frontend/API; it never receives SQL credentials.
 
+Provision the runtime and migration SQL logins through the infrastructure secret store, without placing passwords in this repository. Then run `operations/sql-server/least-privilege.sql` once as an approved database operator. Override its SQLCMD variables for the target database and login names. The script refuses principals that are `sysadmin`, `dbcreator`, or directly hold database-provisioning server permissions; it grants the runtime principal only schema DML, execution, and metadata visibility. Only the migration principal joins `db_ddladmin`.
+
+After provisioning, connect as the runtime login and prove that normal API queries succeed while `CREATE TABLE`, `ALTER TABLE`, login management, and database creation fail. Record this negative-permission test in the release evidence. Do not run migrations or the disposable database verifier with the runtime principal.
+
+Run the read-only permission probe as the runtime login after applying the grants. Supply the password through the process-scoped `SQLCMDPASSWORD` environment variable, never through `-P`, source control, or shell history:
+
+```powershell
+$env:SQLCMDPASSWORD = '<runtime secret from the staging secret manager>'
+sqlcmd -S '<server>,<port>' -d '<database>' -U '<runtime login>' -b -r1 `
+  -i operations/sql-server/verify-runtime-permissions.sql `
+  -v DatabaseName='<database>' RuntimeLogin='<runtime login>'
+Remove-Item Env:SQLCMDPASSWORD
+```
+
+Success prints `PASS` with the expected runtime login and database. The probe performs only permission metadata checks plus an empty `SELECT`; it never attempts mutating DDL as a negative test. Any missing data permission or effective schema, database, login, or server administration permission stops `sqlcmd` with a non-zero exit code.
+
 Authentication uses opaque random tokens whose hashes are stored in SQL Server. Session cookies are `HttpOnly`, `Secure` in production, and `SameSite=Lax`.
+
+Before starting the MFA-enabled production API, back up the database and apply `021_admin_mfa.sql` through the migration principal. The migration creates the administrator MFA table and revokes existing administrator sessions. Generate the MFA key with a cryptographically secure random generator and store it in the secret manager; do not rotate or lose it without a planned administrator re-enrollment procedure. A newly signed-in administrator adds the displayed key to an authenticator app, confirms a six-digit code, and saves ten one-use backup codes. Password verification alone never issues a session while MFA is configured. Keep the backup codes out of logs and screenshots. Confirm enrollment and a subsequent code-based sign-in in staging before production rollout.
 
 Customer logout requires confirmation and ends the current session. The administrator portal additionally exposes **Sign out all devices**, which revokes every active session for that administrator, including the current browser. Session revocation deletes only matching session rows and does not remove profile, booking, invoice, payment, or other business data. The API also removes expired customer and administrator session rows once at startup and then every hour. Cleanup uses the SQL Server UTC clock, prevents overlapping runs within one process, fails safely, and waits for an active run during graceful shutdown. In a multi-instance deployment, monitor the small redundant cleanup query load or assign routine cleanup to a single scheduled worker before materially increasing instance count.
 
@@ -73,6 +92,8 @@ https://example.com/api/  -> Express API
 
 Forward the original HTTPS protocol and configure exactly one trusted proxy hop. Never combine wildcard CORS with credentialed requests.
 
+The repository Nginx configuration sets CSP, frame denial, MIME sniffing protection, referrer policy, permissions policy, cross-origin isolation headers, SPA shell no-store caching, immutable hashed-bundle caching, and a 6 MB request ceiling for the 5 MB proof upload plus multipart overhead. Validate the emitted headers against the deployed HTTPS URL after the CDN or load balancer, because an upstream can replace them. Configure `Strict-Transport-Security` only at the TLS-terminating public edge after every production subdomain is HTTPS-ready; the internal HTTP container deliberately does not emit HSTS.
+
 ## Private Payment Proofs
 
 - Accept only JPEG, PNG, or WebP images whose signature, extension, and declared MIME type agree.
@@ -91,9 +112,30 @@ Back up SQL metadata and proof files as one recovery set:
 
 Restoring only the database can leave missing files; restoring only files can leave unreferenced private data.
 
+Before a staging drill, create a guarded recovery-set plan from the repository root. Use new destination paths for every run:
+
+```powershell
+node scripts/recovery-rehearsal.mjs `
+  --database "la_chef_staging" `
+  --backup-path "D:\SQLBackups\la_chef_staging_20261018.bak" `
+  --proof-root "D:\LA-Chef\uploads" `
+  --proof-snapshot-path "D:\LA-Chef\recovery\20261018\proofs" `
+  --manifest "D:\LA-Chef\recovery\20261018\manifest.json"
+```
+
+The preflight verifies that `sqlcmd` is available, the private proof root is a real directory, all paths are absolute, destinations do not already exist, and backup artifacts are outside the live proof root. It writes one immutable `PLANNED` manifest that pairs the SQL backup and proof snapshot identifiers without storing credentials. `--skip-sqlcmd-check` is only for manifest planning or automated tests; do not use it as staging-readiness evidence.
+
+A `PLANNED` manifest does not complete the recovery rehearsal. Pause writes, execute the guarded SQL backup, create the matching private proof snapshot without following links, record checksums in separate execution evidence, restore both copies in isolation, reconcile sampled storage keys, and run smoke tests before closing the recovery finding. Never edit or overwrite an earlier manifest.
+
+`operations/sql-server/backup.sql` creates a copy-only, compressed, checksummed backup and immediately runs `RESTORE VERIFYONLY`. `operations/sql-server/restore-verification.sql` refuses the source database and any target outside the `LA_CHEF_RESTORE_VERIFY_*` namespace, restores to new operator-supplied data/log paths, runs `DBCC CHECKDB`, and leaves the restored database read-only for smoke checks. Use `RESTORE FILELISTONLY` output to supply the logical file names. Backups with more than one data or log file require an additional `MOVE` clause for every file before the rehearsal.
+
+The restore script never drops its verification database. After application smoke checks and sampled `PAYMENT_PROOF.storage_key` reconciliation against the matching private-storage snapshot, remove the isolated database only through a separately approved operator action. A successful `RESTORE VERIFYONLY` alone is not a recovery rehearsal.
+
 ## Email Outbox
 
 Business transactions write notification intent to `dbo.EMAIL_OUTBOX`. When SMTP is absent or `EMAIL_WORKER_ENABLED=false`, transactions still succeed and messages remain truthfully `PENDING`; administrators can inspect previews in Email Operations. Do not mark these messages as sent manually.
+
+Customer registration commits its `ACCOUNT_REGISTERED` intent atomically with the new account. An hourly scheduler uses the `Asia/Manila` calendar to queue one `UPCOMING_EVENT_REMINDER` intent for each active customer's confirmed booking from three days before the event through event day. Existing intent rows prevent duplicate reminders. Immediately before SMTP delivery, the worker rechecks that the customer remains active and the booking remains confirmed, on the same date, and not in the past; stale reminders fail closed.
 
 When SMTP is enabled, monitor:
 
@@ -137,7 +179,9 @@ The optional `operations-e2e` CI job runs only when repository variable `LA_CHEF
 6. Promote the frontend/reverse proxy and verify security headers at the public edge.
 7. For a genuinely new environment, supply strong one-time `ADMIN_*` values from the secret manager and run `npm run admin:create`; remove those values immediately afterward.
 8. Run `STAGING_BASE_URL=https://staging.example.com node scripts/staging-smoke.mjs` in staging.
-9. Verify customer/admin password recovery, all-device and ordinary logout, expired-session cleanup, customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, and audit log.
+9. Verify customer/admin password recovery, registration confirmation, one upcoming-event reminder without duplicates, all-device and ordinary logout, expired-session cleanup, customer login, booking status, proof submission, admin review, invoice/payment history, email outbox, and audit log.
+
+The smoke script validates both status codes and JSON API contracts. Do not run it against the Angular development server as deployment evidence: the development SPA fallback can return HTML for `/api/*` paths and does not represent the Nginx same-origin proxy.
 
 Health endpoints:
 

@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
@@ -19,18 +19,18 @@ type RecoveryMode = 'forgot' | 'reset';
 export class PasswordRecoveryPage {
   private readonly customerAuth = inject(AuthService);
   private readonly adminAuth = inject(AdminAuthService);
-  private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
   protected readonly audience = this.route.snapshot.data['audience'] as RecoveryAudience;
   protected readonly mode = this.route.snapshot.data['mode'] as RecoveryMode;
+  private readonly resetToken = this.mode === 'reset'
+    ? new URLSearchParams(this.route.snapshot.fragment ?? '').get('token') ?? this.route.snapshot.queryParamMap.get('token')
+    : null;
   protected readonly busy = signal(false);
   protected readonly sent = signal(false);
   protected readonly success = signal(false);
   protected readonly error = signal('');
-  protected readonly invalidLink = signal(
-    this.mode === 'reset' && !this.route.snapshot.queryParamMap.get('token'),
-  );
+  protected readonly invalidLink = signal(this.mode === 'reset' && !this.resetToken);
   protected readonly showPassword = signal(false);
   protected readonly showConfirmation = signal(false);
 
@@ -43,11 +43,11 @@ export class PasswordRecoveryPage {
   protected readonly resetForm = new FormGroup({
     password: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(12), Validators.maxLength(128)],
+      validators: [Validators.required, Validators.minLength(15), Validators.maxLength(128)],
     }),
     confirmPassword: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(12), Validators.maxLength(128)],
+      validators: [Validators.required, Validators.minLength(15), Validators.maxLength(128)],
     }),
   });
 
@@ -58,6 +58,15 @@ export class PasswordRecoveryPage {
   protected passwordsMismatch(): boolean {
     const { password, confirmPassword } = this.resetForm.getRawValue();
     return Boolean(confirmPassword) && password !== confirmPassword;
+  }
+
+  constructor() {
+    if (this.resetToken) {
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete('token');
+      cleanUrl.hash = '';
+      window.history.replaceState(window.history.state, '', cleanUrl.pathname + cleanUrl.search);
+    }
   }
 
   protected async submitForgot(): Promise<void> {
@@ -86,7 +95,7 @@ export class PasswordRecoveryPage {
       this.resetForm.markAllAsTouched();
       return;
     }
-    const token = this.route.snapshot.queryParamMap.get('token');
+    const token = this.resetToken;
     if (!token) {
       this.invalidLink.set(true);
       return;
@@ -98,12 +107,12 @@ export class PasswordRecoveryPage {
       if (this.isAdmin) await this.adminAuth.resetPassword(token, password, confirmPassword);
       else await this.customerAuth.resetPassword(token, password, confirmPassword);
       this.success.set(true);
-      await this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
     } catch (failure) {
       if (failure instanceof HttpErrorResponse && failure.error?.code === 'PASSWORD_RESET_INVALID') {
         this.invalidLink.set(true);
       } else {
-        this.error.set('We could not change your password. Please try again.');
+        this.error.set(failure instanceof HttpErrorResponse && failure.error?.code === 'PASSWORD_TOO_COMMON'
+          ? failure.error.message : 'We could not change your password. Please try again.');
       }
     } finally {
       this.busy.set(false);

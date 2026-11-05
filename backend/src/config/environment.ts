@@ -24,6 +24,18 @@ export function validEmailAddress(value: string): boolean {
   return value.length <= 320 && /^[^\s<>@,;"\\\x00-\x1f\x7f]+@[^\s<>@,;"\\\x00-\x1f\x7f]+\.[^\s<>@,;"\\\x00-\x1f\x7f]+$/.test(value);
 }
 
+export function readAdminMfaConfiguration(env: NodeJS.ProcessEnv, nodeEnv: NodeEnvironment): { key?: Buffer } {
+  const value = env.ADMIN_MFA_ENCRYPTION_KEY?.trim();
+  if (!value) {
+    if (nodeEnv === 'production') throw new Error('Missing required environment variable: ADMIN_MFA_ENCRYPTION_KEY');
+    return {};
+  }
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) throw new Error('ADMIN_MFA_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+  const key = Buffer.from(value, 'base64');
+  if (key.length !== 32) throw new Error('ADMIN_MFA_ENCRYPTION_KEY must be a base64-encoded 32-byte key.');
+  return { key };
+}
+
 export function readEmailConfiguration(env: NodeJS.ProcessEnv) {
   const names = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM_ADDRESS', 'SMTP_FROM_NAME'];
   const configured = names.some(name => env[name] !== undefined);
@@ -75,9 +87,9 @@ function booleanValue(name: string, fallback: boolean): boolean {
   return value === 'true';
 }
 
-function positiveInteger(name: string, fallback: number): number {
+function positiveInteger(name: string, fallback: number, max = 65535): number {
   const value = Number(process.env[name] ?? fallback);
-  if (!Number.isInteger(value) || value < 1 || value > 65535) {
+  if (!Number.isInteger(value) || value < 1 || value > max) {
     throw new Error(`${name} must be a valid positive integer.`);
   }
   return value;
@@ -89,21 +101,35 @@ if (!['development', 'test', 'production'].includes(nodeEnv)) {
 }
 
 const frontendUrl = required('FRONTEND_URL');
-let frontendOrigin: string;
-try {
-  frontendOrigin = new URL(frontendUrl).origin;
-} catch {
-  throw new Error('FRONTEND_URL must be an absolute URL.');
+const emailVerificationSecret = (process.env.EMAIL_VERIFICATION_HMAC_SECRET ?? process.env.PASSWORD_RESET_HMAC_SECRET)?.trim();
+if (emailVerificationSecret && Buffer.byteLength(emailVerificationSecret, 'utf8') < 32) {
+  throw new Error('Email verification HMAC secret must be at least 32 bytes.');
 }
+export function readFrontendOrigin(value: string, nodeEnv: NodeEnvironment): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('FRONTEND_URL must be an absolute URL.');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('FRONTEND_URL must use HTTP or HTTPS.');
+  if (nodeEnv === 'production' && url.protocol !== 'https:') throw new Error('FRONTEND_URL must use HTTPS in production.');
+  if (url.username || url.password) throw new Error('FRONTEND_URL must not contain credentials.');
+  return url.origin;
+}
+const frontendOrigin = readFrontendOrigin(frontendUrl, nodeEnv);
 
 export const environment = Object.freeze({
   nodeEnv,
   isProduction: nodeEnv === 'production',
   port: positiveInteger('PORT', 3000),
+  adminIdleMinutes: positiveInteger('ADMIN_IDLE_TIMEOUT_MINUTES', 30, 1440),
   frontendOrigin,
   paymentProofUploadRoot: required('PAYMENT_PROOF_UPLOAD_ROOT'),
   email: readEmailConfiguration(process.env),
   passwordReset: readPasswordResetConfiguration(process.env, nodeEnv),
+  adminMfa: readAdminMfaConfiguration(process.env, nodeEnv),
+  emailVerificationSecret,
   db: {
     server: required('DB_SERVER'),
     port: positiveInteger('DB_PORT', 1433),

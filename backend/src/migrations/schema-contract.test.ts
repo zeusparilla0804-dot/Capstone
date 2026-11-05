@@ -85,7 +85,7 @@ test('missing keys constraints indexes defaults and sequence produce named viola
   ]);
 });
 
-test('fresh migration history requires 000-006 and 008-015 without 007', () => {
+test('fresh migration history requires 000-006 and 008-017 without 007', () => {
   const snapshot = validSnapshot();
   snapshot.migrations.push('007_starter_catalog.sql');
   assert.deepEqual(findSchemaContractViolations(snapshot, { migrationHistory: 'fresh' }), [
@@ -100,7 +100,7 @@ test('fresh migration history requires 000-006 and 008-015 without 007', () => {
 });
 
 test('schema contract includes active customer account state from migration 015', () => {
-  assert.equal(EXPECTED_MIGRATIONS.at(-1), '015_customer_account_status.sql');
+  assert.ok(EXPECTED_MIGRATIONS.includes('015_customer_account_status.sql'));
   assert.ok(EXPECTED_SCHEMA_CONTRACT.columns.some((column) =>
     column.table === 'CUSTOMER' && column.name === 'status' && column.type === 'nvarchar' && !column.nullable,
   ));

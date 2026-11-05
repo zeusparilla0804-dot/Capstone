@@ -1,5 +1,5 @@
-<app-admin-shell title="Reservation detail" description="Review the event record, payment position, and complete the next valid action.">
-  <a admin-actions class="admin-back-link" routerLink="/admin/bookings">&larr; All reservations</a>
+<app-admin-shell title="Reservation detail" description="Review and manage this reservation.">
+  <a #approvalReturnFocus admin-actions class="admin-back-link" routerLink="/admin/bookings">&larr; All reservations</a>
 
   @if (loading()) {
     <p class="data-state" role="status">Loading reservation...</p>
@@ -10,7 +10,11 @@
     </section>
   } @else if (booking(); as item) {
     <section class="booking-lead" aria-labelledby="booking-reference">
-      <div><p class="section-label">Reservation record</p><h2 id="booking-reference">{{ item.reference }}</h2><p>{{ item.eventType }} for {{ item.customerName }}</p></div>
+      <div>
+        <h2 id="booking-reference">{{ item.reference }}</h2>
+        <p>{{ item.eventType }} for {{ item.customerName }}</p>
+        <p class="booking-lead__schedule"><time [attr.datetime]="item.eventDate">{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</time> &middot; {{ item.eventTime || 'Time not provided' }} &middot; {{ item.guestCount }} guests</p>
+      </div>
       <app-status-badge [status]="item.status" />
     </section>
 
@@ -19,51 +23,33 @@
 
     <section class="financial-strip" aria-label="Reservation financial summary">
       <dl>
-        <div><dt>Reservation total</dt><dd>{{ item.total | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-        <div><dt>Verified payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-        <div class="balance"><dt>Outstanding</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-        <div><dt>Invoice</dt><dd>{{ item.invoiceNumber || 'Not issued' }}</dd><span>{{ item.invoiceStatus || 'No invoice status' }}</span></div>
+        <div><dt>Total</dt><dd>{{ item.total | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div><dt>Paid</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div class="balance"><dt>Balance</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
       </dl>
       @if (!item.invoiceId && item.status === 'APPROVED') { <button class="btn btn-secondary" type="button" (click)="issueInvoice()" [disabled]="mutationPending()">Issue invoice</button> }
       @if (item.invoiceId) { <a class="btn btn-secondary" [routerLink]="['/admin/invoices', item.invoiceId]">View invoice</a> }
     </section>
 
+    @if (cashDeadline(); as deadline) {
+      <section class="cash-summary" aria-label="Cash down payment terms">
+        <p><span>Cash deposit due</span><strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM PHT</strong></p>
+        @if (cashDepositOverdue) {
+          <p class="cash-summary__warning" role="alert">Deposit overdue. Review availability before approval.</p>
+        }
+      </section>
+    }
+
     <section class="capacity-strip" aria-labelledby="capacity-title">
-      <div class="capacity-strip__heading">
-        <p class="section-label">Date capacity</p>
-        <h2 id="capacity-title">{{ capacityStatusLabel(item.capacity.status) }}</h2>
-        <p>{{ item.capacity.message }}</p>
+      <div>
+        <h2 id="capacity-title">Date capacity</h2>
+        <p><time [attr.datetime]="item.capacity.date">{{ item.capacity.date + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</time><span>{{ item.capacity.activeBookingCount }} of {{ item.capacity.capacityLimit }} reservations</span><strong>{{ item.capacity.remainingRequestSlots }} slots available</strong></p>
       </div>
-      <dl>
-        <div><dt>Current load</dt><dd>{{ item.capacity.activeBookingCount }} active reservations</dd></div>
-        <div><dt>Daily threshold</dt><dd>{{ item.capacity.capacityLimit }} reservation limit</dd></div>
-        <div><dt>After this request</dt><dd>{{ item.capacity.remainingRequestSlots }} slots remaining</dd></div>
-      </dl>
-      @if (item.capacity.requiresAdminConfirmation && item.status === 'PENDING') {
-        <p class="capacity-strip__notice">Approval requires an explicit capacity confirmation for this event size.</p>
-      }
+      <span class="capacity-state" [attr.data-status]="item.capacity.status">{{ capacityStatusLabel(item.capacity.status) }}</span>
     </section>
 
-    <div class="detail-grid">
-      <section class="detail-section" aria-labelledby="event-details-title">
-        <div class="section-heading"><span>01</span><div><h2 id="event-details-title">Event details</h2><p>The information supplied with this reservation request.</p></div></div>
-        <dl class="fact-list">
-          <div><dt>Date</dt><dd>{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div>
-          <div><dt>Time</dt><dd>{{ item.eventTime || 'Not provided' }}</dd></div>
-          <div><dt>Venue</dt><dd>{{ item.venue || 'Not provided' }}</dd></div>
-          <div><dt>Guests</dt><dd>{{ item.guestCount }}</dd></div>
-          <div><dt>Package</dt><dd>{{ item.packageName || 'Not assigned' }}</dd></div>
-          @for (addOn of item.addOns; track addOn.name) { <div><dt>Add-on</dt><dd>{{ addOn.name }} · {{ addOn.price | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div> }
-        </dl>
-      </section>
-      <section class="detail-section" aria-labelledby="customer-details-title">
-        <div class="section-heading"><span>02</span><div><h2 id="customer-details-title">Customer</h2><p>Contact details for event coordination.</p></div></div>
-        <dl class="fact-list"><div><dt>Name</dt><dd>{{ item.customerName }}</dd></div><div><dt>Email</dt><dd><a [href]="'mailto:' + item.email">{{ item.email || 'Not provided' }}</a></dd></div><div><dt>Phone</dt><dd><a [href]="'tel:' + item.phone">{{ item.phone || 'Not provided' }}</a></dd></div></dl>
-      </section>
-    </div>
-
     <section class="operations" aria-labelledby="booking-actions-title">
-      <div><p class="section-label">Next action</p><h2 id="booking-actions-title">Move this reservation forward</h2><p>Only actions allowed from the current status are available.</p></div>
+      <h2 id="booking-actions-title">Reservation actions</h2>
       <div class="action-list">
         @for (action of availableActions(); track action.status) { <button type="button" class="btn" [class.btn-primary]="action.tone === 'primary'" [class.btn-secondary]="action.tone !== 'primary'" [class.danger-action]="action.tone === 'danger'" (click)="chooseAction(action.status)" [disabled]="mutationPending()">{{ action.label }}</button> }
         @empty { <p>No manual actions are available for this status.</p> }
@@ -71,19 +57,86 @@
     </section>
 
     @if (pendingAction(); as action) {
-      <section class="action-confirmation" aria-labelledby="confirm-action-title">
-        <div><p class="section-label">Confirmation</p><h2 id="confirm-action-title">{{ action.label }}</h2><p>@if (action.capacityConfirmation) { This approval confirms that LA Chef can accommodate {{ item.guestCount }} guests on this date. } @else { {{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }} }</p></div>
+      <section class="action-confirmation" [class.approval-confirmation]="action.status === 'APPROVED'" aria-labelledby="confirm-action-title">
+        <div><h2 id="confirm-action-title">{{ action.label }}</h2><p>@if (action.capacityConfirmation) { This approval confirms that LA Chef can accommodate {{ item.guestCount }} guests on this date. } @else { {{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }} }</p></div>
         @if (action.reasonRequired) { <label for="action-reason">Reason<textarea id="action-reason" [(ngModel)]="actionReason" maxlength="1000" rows="4"></textarea></label> }
-        <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()">{{ mutationPending() ? 'Updating...' : action.capacityConfirmation ? 'Approve and confirm capacity' : 'Confirm action' }}</button></div>
+        <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()" [attr.aria-busy]="mutationPending()">
+          @if (mutationPending() && action.status === 'APPROVED') { <span class="approval-spinner" aria-hidden="true"></span> }
+          <span aria-live="polite">{{ mutationPending() ? (action.status === 'APPROVED' ? 'Approving...' : 'Updating...') : action.capacityConfirmation ? 'Approve and confirm capacity' : 'Confirm action' }}</span>
+        </button></div>
       </section>
     }
 
-    <section class="history-section" aria-labelledby="history-title">
-      <div class="section-heading"><span>03</span><div><h2 id="history-title">Status history</h2><p>An auditable timeline of reservation decisions.</p></div></div>
-      <ol class="history-list">
-        @for (entry of item.statusHistory; track entry.id) { <li><div class="history-marker" aria-hidden="true"></div><div><div class="history-row"><strong>{{ entry.nextStatus.replaceAll('_', ' ') }}</strong><time>{{ entry.createdAt | date:'medium':'UTC' }}</time></div><p>{{ historyTitle(entry) }}</p>@if (entry.reason) { <blockquote>{{ entry.reason }}</blockquote> }</div></li> }
+    @if (item.paymentMethod?.toUpperCase() !== 'CASH' || proofHistoryLoading() || proofHistoryError() || (proofHistory()?.totalItems ?? 0) > 0) {
+      <details class="disclosure proof-history-section" aria-labelledby="proof-history-title" [open]="proofHistoryExpanded()" (toggle)="toggleProofHistory($event)">
+        <summary><h2 id="proof-history-title">Payment proof history</h2>@if (proofReviewPending()) { <span class="review-needed">Needs review</span> } @else if (proofHistory(); as history) { <span>{{ history.totalItems }} {{ history.totalItems === 1 ? 'record' : 'records' }}</span> }</summary>
+        <div class="disclosure-content">
+          @if (proofHistoryLoading()) { <p class="data-state" role="status">Loading payment proofs...</p> }
+          @else if (proofHistoryError()) { <p class="data-state admin-action-error" role="alert">{{ proofHistoryError() }} <button class="btn btn-tertiary" type="button" (click)="loadProofHistory(proofHistory()?.page || 1)">Try again</button></p> }
+          @else if (proofHistory(); as history) {
+            <ul class="proof-history-list">
+              @for (proof of history.items; track proof.id) {
+                <li [attr.data-proof-id]="proof.id">
+                  <div><strong>{{ methodLabel(proof.method) }} &middot; {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><p>{{ proof.transactionReference || 'No reference provided' }} &middot; Submitted {{ proof.createdAt | date:'MMM d, y, h:mm a':'+0800' }} PHT</p>@if (proof.status === 'VERIFIED') { <p>Verified: {{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</p> }@if (proof.rejectionReason) { <p>{{ proof.rejectionReason }}</p> }</div>
+                  <app-status-badge [status]="proof.status" />
+                  <a class="btn btn-secondary btn-sm" [routerLink]="['/admin/payments/proofs', proof.id]" [queryParams]="{ booking: bookingId }">{{ proof.status === 'SUBMITTED' ? 'Review proof' : 'View receipt' }}</a>
+                </li>
+              } @empty { <li class="empty-history">No payment proofs submitted for this reservation.</li> }
+            </ul>
+            @if (history.totalPages > 1) {
+              <nav class="proof-history-pagination" aria-label="Payment proof history pages"><button class="btn btn-secondary btn-sm" type="button" [disabled]="history.page <= 1" (click)="loadProofHistory(history.page - 1)">Previous</button><span>Page {{ history.page }} of {{ history.totalPages }}</span><button class="btn btn-secondary btn-sm" type="button" [disabled]="history.page >= history.totalPages" (click)="loadProofHistory(history.page + 1)">Next</button></nav>
+            }
+          }
+        </div>
+      </details>
+    }
+
+    <div class="detail-grid">
+      <section class="detail-section" aria-labelledby="event-details-title">
+        <div class="section-heading"><h2 id="event-details-title">Event details</h2></div>
+        <dl class="fact-list">
+          <div><dt>Venue</dt><dd>{{ item.venue || 'Not provided' }}</dd></div>
+          <div><dt>Package</dt><dd>{{ item.packageName || 'Not assigned' }}</dd></div>
+          @for (addOn of item.addOns; track addOn.name) { <div><dt>Add-on</dt><dd>{{ addOn.name }} &middot; {{ addOn.price | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div> }
+        </dl>
+      </section>
+      <section class="detail-section" aria-labelledby="customer-details-title">
+        <div class="section-heading"><h2 id="customer-details-title">Customer</h2></div>
+        <dl class="fact-list"><div><dt>Name</dt><dd>{{ item.customerName }}</dd></div><div><dt>Email</dt><dd><a [href]="'mailto:' + item.email">{{ item.email || 'Not provided' }}</a></dd></div><div><dt>Phone</dt><dd><a [href]="'tel:' + item.phone">{{ item.phone || 'Not provided' }}</a></dd></div></dl>
+      </section>
+    </div>
+
+    <details class="disclosure additional-details">
+      <summary><h2>More details</h2></summary>
+      <div class="disclosure-content supplementary-details">
+        <dl class="fact-list"><div><dt>Invoice</dt><dd>{{ item.invoiceNumber || 'Not issued' }}</dd></div>@if (item.invoiceStatus) { <div><dt>Invoice status</dt><dd>{{ item.invoiceStatus }}</dd></div> }</dl>
+        @if (cashDeadline(); as deadline) {
+          <section aria-label="Cash payment instructions"><h3>Cash payment</h3><p>Office open daily, 8:00 AM-6:00 PM Philippine Time. The 50% deposit is required {{ deadline.preparationDays }} calendar days before the event, by 6:00 PM. Approval does not change this deadline.</p><p>Record only cash actually received. An overdue deadline does not automatically cancel the booking or change recorded payments.</p></section>
+        }
+        <section aria-label="Capacity details"><h3>Date capacity</h3><p>{{ item.capacity.message }}</p><p>Counts active reservations on {{ item.capacity.date + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}. Pending requests are included.</p>@if (item.capacity.requiresAdminConfirmation && item.status === 'PENDING') { <p>Approval requires an explicit capacity confirmation for this event size.</p> }</section>
+      </div>
+    </details>
+
+    <details class="disclosure history-section" aria-labelledby="history-title">
+      <summary><h2 id="history-title">Status history</h2><span>{{ item.statusHistory.length }} {{ item.statusHistory.length === 1 ? 'entry' : 'entries' }}</span></summary>
+      <ol class="history-list disclosure-content">
+        @for (entry of item.statusHistory; track entry.id) { <li><div class="history-marker" aria-hidden="true"></div><div><div class="history-row"><strong>{{ entry.nextStatus.replaceAll('_', ' ') }}</strong><time>{{ entry.createdAt | date:'medium':'+0800' }}</time></div><p>{{ historyTitle(entry) }}</p>@if (entry.reason) { <blockquote>{{ entry.reason }}</blockquote> }</div></li> }
         @empty { <li class="empty-history">No history entries are available.</li> }
       </ol>
-    </section>
+    </details>
   }
 </app-admin-shell>
+
+@if (approvedReference(); as reference) {
+  <app-success-dialog
+    class="booking-approval-confirmation"
+    [nativeModal]="true"
+    title="Reservation approved"
+    message="The booking status has been updated successfully."
+    detailLabel="Booking reference"
+    [detailValue]="reference"
+    primaryLabel="Done"
+    [restoreFocusTo]="approvalReturnFocus"
+    (dismissed)="approvedReference.set('')"
+  />
+}

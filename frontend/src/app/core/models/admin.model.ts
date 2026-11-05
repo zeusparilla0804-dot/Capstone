@@ -1,6 +1,5 @@
 import type { BookingAvailability } from './availability.model';
 import type { PackagePricingType } from './package.model';
-import type { CustomEventDetail, CustomEventStatus, CustomQuote } from './custom-event.model';
 
 export interface PageResult<T>{readonly items:readonly T[];readonly page:number;readonly pageSize:number;readonly totalItems:number;readonly totalPages:number;}
 export interface AdminDashboard{readonly period:string;readonly priority:{readonly pendingBookingReviews:number;readonly proofsAwaitingVerification:number;readonly confirmedEventsNextSevenDays:number;readonly outstandingBalanceTotal:number;readonly failedEmailNotifications:number;};readonly ledger:{readonly confirmedRevenue:number;readonly submittedProofValue:number;readonly overdueOutstanding:number;readonly averageConfirmedBookingValue:number;};readonly actionQueues:readonly {readonly key:string;readonly count:number;readonly href:string;}[];readonly attention:readonly AdminAttentionItem[];}
@@ -29,9 +28,9 @@ export interface AdminPaymentReportItem{readonly invoiceNumber:string;readonly b
 export interface AdminReservationReport{readonly filters:AdminReservationReportFilter;readonly summary:{readonly reservationCount:number;readonly totalGuests:number;};readonly items:readonly AdminReservationReportItem[];readonly upcomingItems:readonly AdminReservationReportItem[];}
 export interface AdminPaymentReport{readonly filters:AdminPaymentReportFilter;readonly summary:{readonly totalBilled:number;readonly verifiedPayments:number;readonly outstandingBalance:number;};readonly items:readonly AdminPaymentReportItem[];}
 
-export type AdminBookingStatus = 'PENDING'|'APPROVED'|'AWAITING_PAYMENT'|'PAYMENT_SUBMITTED'|'PAYMENT_VERIFIED'|'CONFIRMED'|'COMPLETED'|'REJECTED'|'CANCELLED';
+export type AdminBookingStatus = 'PENDING'|'APPROVED'|'AWAITING_PAYMENT'|'PAYMENT_SUBMITTED'|'PAYMENT_VERIFIED'|'CONFIRMED'|'COMPLETED'|'REJECTED'|'CANCELLED'|'EXPIRED';
 export interface AdminBookingHistory{readonly id:number;readonly previousStatus:AdminBookingStatus|null;readonly nextStatus:AdminBookingStatus;readonly actorType:'ADMIN'|'CUSTOMER'|'SYSTEM';readonly actorId:number|null;readonly reason:string|null;readonly createdAt:string;}
-export interface AdminBookingDetail extends AdminBooking{readonly phone:string;readonly packageUnitPrice:number;readonly subtotal:number;readonly discount:number;readonly amountPaid:number;readonly invoiceNumber?:string;readonly invoiceStatus?:string;readonly addOns:readonly {readonly name:string;readonly price:number;}[];readonly statusHistory:readonly AdminBookingHistory[];}
+export interface AdminBookingDetail extends AdminBooking{readonly paymentMethod?:string;readonly phone:string;readonly packageUnitPrice:number;readonly subtotal:number;readonly discount:number;readonly amountPaid:number;readonly invoiceNumber?:string;readonly invoiceStatus?:string;readonly addOns:readonly {readonly name:string;readonly price:number;}[];readonly statusHistory:readonly AdminBookingHistory[];}
 export type AdminPaymentProofStatus='SUBMITTED'|'VERIFIED'|'REJECTED'|'SUPERSEDED';
 export type AdminPaymentProofMethod='CASH'|'BANK_TRANSFER'|'E_WALLET';
 export interface AdminPaymentProof{readonly id:string;readonly reservationId:number;readonly customerId:number;readonly paymentId?:number;readonly paymentTransactionId?:string;readonly invoiceId?:number;readonly method:AdminPaymentProofMethod;readonly claimedAmount:number;readonly transactionReference?:string;readonly paymentDate:string;readonly originalFilename:string;readonly mimeType:string;readonly byteSize:number;readonly status:AdminPaymentProofStatus;readonly rejectionReason?:string;readonly reviewedBy?:number;readonly reviewedAt?:string;readonly verifiedAmount?:number;readonly createdAt:string;readonly updatedAt:string;readonly fileUrl:string;}
@@ -43,8 +42,3 @@ export type EmailOutboxStatus='PENDING'|'PROCESSING'|'SENT'|'FAILED';
 export interface AdminEmailOutboxItem{readonly id:string;readonly recipient:string;readonly templateKey:string;readonly payload:Readonly<Record<string,unknown>>;readonly relatedEntityType:string;readonly relatedEntityId?:string;readonly status:EmailOutboxStatus;readonly attemptCount:number;readonly nextAttemptAt?:string;readonly lastError?:string;readonly createdAt:string;readonly sentAt?:string;readonly updatedAt:string;}
 export interface AdminEmailPreview{readonly subject:string;readonly text:string;readonly html:string;}
 export interface AdminAuditLogItem{readonly id:string;readonly adminId:number;readonly adminUsername:string;readonly action:string;readonly entityType:string;readonly entityId:number;readonly oldValues?:Readonly<Record<string,unknown>>;readonly newValues?:Readonly<Record<string,unknown>>;readonly createdAt:string;}
-export interface AdminCustomEventQueueItem{readonly id:number;readonly reservationId:number;readonly reference:string;readonly customerName:string;readonly eventType:string;readonly eventDate:string;readonly guestCount:number;readonly sourcePackageName:string|null;readonly targetBudget:number|null;readonly status:CustomEventStatus;readonly currentQuoteTotal:number|null;readonly createdAt:string;}
-export type AdminCustomEventDetail=CustomEventDetail;
-export interface AdminCustomQuoteLineInput{readonly description:string;readonly quantity:number;readonly unitPrice:number;}
-export interface AdminCustomQuoteInput{readonly items:readonly AdminCustomQuoteLineInput[];readonly requiredDownPayment:number;readonly validUntil:string;readonly terms?:string;}
-export type AdminCustomQuote=CustomQuote;

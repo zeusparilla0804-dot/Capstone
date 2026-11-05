@@ -28,8 +28,14 @@ jobs:
         if: matrix.project == 'frontend'
       - run: npm test
         if: matrix.project == 'backend'
+      - run: node --test ../scripts/staging-smoke.test.mjs
+        if: matrix.project == 'backend'
+      - run: node --test ../scripts/sql-server-permissions.test.mjs
+        if: matrix.project == 'backend'
+      - run: node --test ../scripts/recovery-rehearsal.test.mjs
+        if: matrix.project == 'backend'
       - run: npm run build
-      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --audit-level=moderate
 
   operations-e2e:
     if: ${{ vars.LA_CHEF_E2E_ENABLED == 'true' }}

@@ -1,0 +1,46 @@
+:host ::ng-deep app-admin-shell .admin-page-header .page-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+:host ::ng-deep app-admin-shell .admin-page-header h1 { font-size: 30px; font-weight: 600; }
+:host ::ng-deep app-admin-shell .admin-page-header p:last-child { font-size: 14px; font-weight: 400; }
+.admin-toolbar input, .admin-toolbar input::placeholder { font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
+.admin-toolbar .btn { font-size: 13px; font-weight: 500; }
+.admin-table--customers th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+.admin-table--customers td { font-size: 13px; font-weight: 400; }
+.admin-table--customers td[data-label='Customer'] strong { font-size: 13px; font-weight: 600; }
+.admin-table--customers td[data-label='Email'] { overflow-wrap: anywhere; }
+.admin-table--customers td[data-label='Bookings'] { font-weight: 500; }
+.admin-table--customers td[data-label='Outstanding'] { font-weight: 600; font-variant-numeric: tabular-nums; }
+.customers-records ::ng-deep .status-badge { font-size: 11px; font-weight: 500; }
+.admin-table--customers td[data-label='History'] .btn { font-size: 12px; font-weight: 500; }
+.admin-pagination > span { font-size: 12px; font-weight: 400; }
+.admin-pagination .btn { font-size: 12px; font-weight: 500; }
+
+/* Keep the outstanding header and currency value on the same visual axis. */
+@media (min-width: 768px) {
+  .customers-records .admin-table--customers :is(th, td):is(:nth-child(3), :nth-child(4), :nth-child(5)) {
+    text-align: center;
+  }
+
+  .customers-records .admin-table--customers :is(th, td):is(:nth-child(4), :nth-child(5)) {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .customers-records .admin-table--customers th:nth-child(6) {
+    width: 180px;
+  }
+
+  .customers-records .admin-table--customers th:nth-child(7) {
+    width: 170px;
+  }
+
+  .customers-records .admin-table--customers th:nth-child(8) {
+    width: 180px;
+  }
+
+  .customers-records .admin-table--customers :is(th, td):is(:nth-child(6), :nth-child(7), :nth-child(8)) {
+    text-align: center;
+    padding-inline: 24px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+}

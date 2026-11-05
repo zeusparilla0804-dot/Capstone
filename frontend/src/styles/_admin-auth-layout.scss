@@ -1,0 +1,105 @@
+body .admin-auth-layout.admin-auth-layout {
+  display: flex;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  background: #1f211b;
+  padding: 24px;
+}
+
+body .admin-auth-layout .admin-auth-layout__shell {
+  display: grid;
+  width: min(960px, 100%);
+  height: 645px;
+  min-height: 0;
+  grid-template-columns: 52.5% 47.5%;
+  overflow: hidden;
+  border: 1px solid rgba(201, 166, 108, 0.82);
+  border-radius: 15px;
+  background: #100f0b;
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.3);
+}
+
+body .admin-auth-layout .admin-auth-layout__brand.admin-auth-layout__brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #100f0b;
+  background-image: none;
+  padding: 38px;
+}
+
+body .admin-auth-layout .admin-auth-layout__brand img.admin-auth-layout__logo {
+  display: block;
+  width: min(92%, 430px);
+  height: auto;
+  max-height: 100%;
+  mix-blend-mode: normal;
+  object-fit: contain;
+}
+
+body .admin-auth-layout .admin-auth-layout__panel {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  flex-direction: column;
+  justify-content: center;
+  margin-bottom: 0;
+  background: #faf7f0;
+  padding: 46px 50px;
+}
+
+@media (max-width: 900px) {
+  body .admin-auth-layout.admin-auth-layout {
+    align-items: flex-start;
+    padding: 20px;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__shell {
+    width: min(620px, 100%);
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__brand.admin-auth-layout__brand {
+    display: flex;
+    min-height: 300px;
+    padding: 28px;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__brand img.admin-auth-layout__logo {
+    width: min(82%, 330px);
+  }
+
+  body .admin-auth-layout .admin-auth-layout__panel {
+    min-height: 0;
+    padding: 46px clamp(28px, 8vw, 54px) 52px;
+  }
+}
+
+@media (max-width: 480px) {
+  body .admin-auth-layout.admin-auth-layout {
+    padding: 12px;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__shell {
+    border-radius: 12px;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__brand.admin-auth-layout__brand {
+    min-height: 248px;
+    padding: 20px;
+  }
+
+  body .admin-auth-layout .admin-auth-layout__brand img.admin-auth-layout__logo {
+    width: min(88%, 276px);
+  }
+
+  body .admin-auth-layout .admin-auth-layout__panel {
+    padding: 38px 24px 44px;
+  }
+}

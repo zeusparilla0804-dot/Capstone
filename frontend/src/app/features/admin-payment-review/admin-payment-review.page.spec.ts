@@ -39,7 +39,7 @@ describe('AdminPaymentReviewPage', () => {
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '9007199254740993' }) } } },
         { provide: AdminService, useValue: api },
-        { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }
+        { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }
       ]
     }).compileComponents();
     fixture = TestBed.createComponent(AdminPaymentReviewPage);
@@ -58,6 +58,21 @@ describe('AdminPaymentReviewPage', () => {
     expect(fixture.nativeElement.querySelector('[aria-label="Zoom in"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[aria-label="Zoom out"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[aria-label="Reset zoom"]')).toBeTruthy();
+  });
+
+  it('reopens reviewed receipts as read-only and returns to their reservation history', () => {
+    (TestBed.inject(ActivatedRoute).snapshot as any).queryParamMap = convertToParamMap({ booking: '42' });
+    api.paymentProof.mockReturnValue(of({ success: true, data: { ...review, proof: { ...review.proof, status: 'VERIFIED', verifiedAmount: 5000 } } }));
+    (fixture.componentInstance as any).load();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.admin-back-link').getAttribute('href')).toBe('/admin/bookings/42');
+    expect(fixture.nativeElement.querySelector('img[alt="Customer payment receipt"]')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('This proof is verified.');
+    expect(fixture.nativeElement.querySelector('[data-testid="verify-proof"]')).toBeNull();
+    (fixture.componentInstance as any).verify();
+    (fixture.componentInstance as any).reject();
+    expect(api.verifyPaymentProof).not.toHaveBeenCalled();
+    expect(api.rejectPaymentProof).not.toHaveBeenCalled();
   });
 
   it('distinguishes the required deposit from the full outstanding balance', () => {

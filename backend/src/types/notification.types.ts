@@ -1,6 +1,8 @@
 export type EmailOutboxStatus = 'PENDING' | 'PROCESSING' | 'SENT' | 'FAILED';
 
 export type EmailTemplateKey =
+  | 'ACCOUNT_REGISTERED'
+  | 'EMAIL_VERIFICATION_CODE'
   | 'BOOKING_RECEIVED'
   | 'BOOKING_APPROVED'
   | 'BOOKING_REJECTED'
@@ -13,6 +15,7 @@ export type EmailTemplateKey =
   | 'BOOKING_CANCELLED'
   | 'BOOKING_RESCHEDULED'
   | 'BOOKING_COMPLETED'
+  | 'UPCOMING_EVENT_REMINDER'
   | 'PASSWORD_RESET_REQUESTED'
   | 'PASSWORD_CHANGED'
   | 'CUSTOM_REQUEST_RECEIVED'
@@ -44,7 +47,7 @@ export interface QueueNotificationInput {
   recipient: string;
   templateKey: EmailTemplateKey;
   payload: Record<string, unknown>;
-  relatedEntityType?: 'BOOKING' | 'INVOICE' | 'PAYMENT_PROOF' | 'CUSTOM_EVENT_REQUEST';
+  relatedEntityType?: 'CUSTOMER' | 'BOOKING' | 'INVOICE' | 'PAYMENT_PROOF' | 'CUSTOM_EVENT_REQUEST';
   relatedEntityId?: string;
 }
 

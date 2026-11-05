@@ -79,6 +79,8 @@ test('issue enforces a locked account cooldown without invalidating or queuing',
   assert.equal(db.notifications.length, 0);
   assert.equal(db.commands.length, 2);
   assert.match(db.commands[0].sql, /UPDLOCK,HOLDLOCK/);
+  assert.match(db.commands[0].sql, /LOWER\(email\)=@principalEmail/i);
+  assert.equal(db.commands[0].params.principalEmail, 'customer@example.test');
   assert.match(db.commands[1].sql, /UPDLOCK,HOLDLOCK/);
   assert.deepEqual(db.commands[1].params.cooldownCutoff, new Date(+now - 60_000));
 });
@@ -144,6 +146,8 @@ test('administrator consume uses only administrator password and session tables'
   assert.match(db.commands[1].sql, /UPDATE dbo\.ADMIN SET password=@passwordHash/);
   assert.match(db.commands[4].sql, /DELETE dbo\.ADMIN_SESSION/);
   assert.equal(db.commands.some(command => /AUTH_SESSION/.test(command.sql) && !/ADMIN_SESSION/.test(command.sql)), false);
+  assert.ok(db.commands.some(command => /AUTH_SECURITY_EVENT/.test(command.sql) && command.params.securityEvent === 'PASSWORD_RESET'));
+  assert.ok(db.commands.some(command => /DELETE dbo.AUTH_LOGIN_ATTEMPT/.test(command.sql)));
 });
 
 test('queue failure aborts issuance and consumption transactions', async () => {
@@ -164,12 +168,14 @@ test('queue failure aborts issuance and consumption transactions', async () => {
   }
 });
 
-test('isDeliverable checks selector, role, time, active state, and all terminal token flags', async () => {
+test('isDeliverable binds queued mail to the current recipient as well as token validity', async () => {
   const db = harness([{ rows: [{ deliverable: 1 }] }]);
-  assert.equal(await db.repository.isDeliverable('a'.repeat(22), 'ADMIN', now), true);
+  assert.equal(await db.repository.isDeliverable('a'.repeat(22), 'ADMIN', now, 'old@example.test'), true);
   assert.match(db.commands[0].sql, /principal_type=@principalType/);
   assert.match(db.commands[0].sql, /used_at IS NULL/);
   assert.match(db.commands[0].sql, /invalidated_at IS NULL/);
   assert.match(db.commands[0].sql, /expires_at>@now/);
   assert.match(db.commands[0].sql, /status='ACTIVE'/);
+  assert.match(db.commands[0].sql, /LOWER\(a\.email\)=@recipient/i);
+  assert.equal(db.commands[0].params.recipient, 'old@example.test');
 });

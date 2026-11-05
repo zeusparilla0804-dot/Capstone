@@ -1,0 +1,109 @@
+<app-public-header />
+
+<main class="info-page">
+  @if (page === 'about') {
+    <header class="info-hero" aria-labelledby="about-title">
+      <div
+        class="info-hero__image"
+        role="img"
+        aria-label="LA Chef event catering table setup"
+      ></div>
+      <div class="page-container info-hero__content">
+        <p class="info-hero__identity">LA-Chef Event Catering Services</p>
+        <h1 id="about-title">Gatherings made personal, from the table outward.</h1>
+        <p>
+          Catering and event service for weddings, debuts, birthdays, corporate gatherings,
+          anniversaries, and private celebrations in Santa Rosa, Laguna.
+        </p>
+      </div>
+    </header>
+
+    <section class="info-story" aria-labelledby="about-story-title">
+      <div class="page-container info-story__layout">
+        <div class="info-story__heading">
+          <h2 id="about-story-title">Food, setup, and service planned as one experience.</h2>
+        </div>
+        <div class="info-story__copy">
+          <p>
+            LA Chef brings together prepared menus, buffet service, dining essentials, and event
+            enhancements so customers can shape a celebration around their occasion and guest count.
+          </p>
+          <p>
+            Begin with a published catering package, choose the guest count, and add special
+            requests to the reservation for LA Chef to review.
+          </p>
+          <a class="btn btn-primary" routerLink="/packages">Explore packages</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-details" aria-label="LA Chef service details">
+      <div class="page-container info-details__grid">
+        <div>
+          <span>Celebrations</span>
+          <p>Weddings, debuts, birthdays, anniversaries, corporate events, and custom occasions.</p>
+        </div>
+        <div>
+          <span>Service base</span>
+          <p>Panorama Ville, Dita, Santa Rosa, Laguna.</p>
+        </div>
+        <div>
+          <span>Planning</span>
+          <p>Choose a package, confirm the guest count, and submit the event date for review.</p>
+        </div>
+      </div>
+    </section>
+  } @else {
+    <header class="contact-intro" aria-labelledby="contact-title">
+      <div class="page-container contact-intro__layout">
+        <div>
+          <p class="contact-intro__identity">LA-Chef Event Catering Services</p>
+          <h1 id="contact-title">Plan your celebration with us.</h1>
+        </div>
+        <p>
+          Ask about packages, available dates, and event requirements. For a reservation request,
+          use the booking flow so your details stay complete and reviewable.
+        </p>
+      </div>
+    </header>
+
+    <section class="contact-directory" aria-labelledby="contact-directory-title">
+      <div class="page-container">
+        <h2 id="contact-directory-title">Contact LA Chef</h2>
+
+        <div class="contact-directory__row">
+          <div>
+            <h3>Visit or write</h3>
+            <address>Panorama Ville, Dita, Santa Rosa, Laguna</address>
+          </div>
+          <app-messenger-contact appearance="inline" />
+        </div>
+
+        <div class="contact-directory__row contact-directory__row--phones">
+          <div>
+            <h3>Call or message</h3>
+            <p>Use the number that is most convenient for you.</p>
+          </div>
+          <ul aria-label="LA Chef phone numbers">
+            @for (number of contactNumbers; track number.href) {
+              <li>
+                <span>{{ number.label }}</span>
+                <a [href]="number.href">{{ number.display }}</a>
+              </li>
+            }
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact-booking" aria-labelledby="contact-booking-title">
+      <div class="page-container contact-booking__layout">
+        <div>
+          <h2 id="contact-booking-title">Ready to request a date?</h2>
+          <p>Submit your event details and LA Chef will review the reservation.</p>
+        </div>
+        <a class="btn btn-primary" routerLink="/book-event">Start a reservation</a>
+      </div>
+    </section>
+  }
+</main>

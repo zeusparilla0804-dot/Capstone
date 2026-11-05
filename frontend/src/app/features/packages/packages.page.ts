@@ -32,13 +32,9 @@ export class PackagesPageComponent {
   private readonly document = inject(DOCUMENT);
 
   protected readonly categories: readonly CategoryFilter[] = [
-    { label: 'All Events', value: 'all' },
+    { label: 'All Packages', value: 'all' },
     { label: 'Standard Catering', value: 'standard' },
-    { label: 'Weddings', value: 'wedding' },
-    { label: 'Birthdays', value: 'birthday' },
-    { label: 'Corporate', value: 'corporate' },
-    { label: 'Debuts', value: 'debut' },
-    { label: 'Anniversaries', value: 'anniversary' },
+    { label: 'Debut Packages', value: 'debut' },
   ];
   protected readonly selectedCategory = signal<PackageCategory>(this.readInitialCategory());
   private readonly requestedPackageId = this.route.snapshot.queryParamMap.get('package');
@@ -68,11 +64,7 @@ export class PackagesPageComponent {
   }
 
   protected planPackage(packageId: string): void {
-    void this.router.navigate(['/book-event'], { queryParams: { package: packageId } });
-  }
-
-  protected customizePackage(packageId: string): void {
-    void this.router.navigate(['/book-event'], { queryParams: { package: packageId } });
+    void this.router.navigate(['/book-event'], { queryParams: { package: packageId, new: 1 } });
   }
 
   private readInitialCategory(): PackageCategory {

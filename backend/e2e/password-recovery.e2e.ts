@@ -1,3 +1,4 @@
+import { verifyFixtureEmail } from './verify-fixture-email.js';
 import 'dotenv/config';
 
 import assert from 'node:assert/strict';
@@ -6,7 +7,8 @@ import sql from 'mssql';
 
 const hmacSecret = randomBytes(48).toString('base64url');
 process.env['PASSWORD_RESET_HMAC_SECRET'] = hmacSecret;
-process.env['EMAIL_WORKER_ENABLED'] = 'false';
+// These fixtures import app.ts, never server.ts; no mail worker is started.
+process.env['EMAIL_WORKER_ENABLED'] = 'true';
 
 const [{ default: app }, database, { environment }, password, resetTokens] = await Promise.all([
   import('../src/app.js'),
@@ -35,10 +37,13 @@ function cookie(response: Response): string {
 async function api(base: string, path: string, init: RequestInit = {}, expected = 200) {
   const response = await fetch(`${base}${path}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1', ...(init.headers ?? {}) },
   });
   const body = response.status === 204 ? undefined : await response.json();
   assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path}: ${JSON.stringify(body)}`);
+  if (path === '/auth/register' && response.status === 201) {
+    await verifyFixtureEmail(base, JSON.parse(String(init.body)).email);
+  }
   return { response, body };
 }
 
@@ -112,7 +117,11 @@ try {
       password: originalPassword,
     }),
   }, 201);
-  const customerSession = cookie(registration.response);
+  assert.equal(registration.response.headers.get('set-cookie'), null);
+  const customerLogin = await api(base, '/auth/login', {
+    method: 'POST', body: JSON.stringify({ email: customerEmail, password: originalPassword }),
+  });
+  const customerSession = cookie(customerLogin.response);
   const adminLogin = await api(base, '/auth/admin/login', {
     method: 'POST',
     body: JSON.stringify({ identity: adminEmail, password: originalPassword }),
@@ -161,7 +170,7 @@ try {
   const adminRecovery = await recoveryRecord('ADMIN');
   const resetAdmin = () => fetch(`${base}/auth/admin/password/reset`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1' },
     body: JSON.stringify({
       token: adminRecovery.token,
       password: adminPassword,

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { AdminDashboard, Booking } from '../models';
 import { PortalBadgeStateService } from './portal-badge-state.service';
+import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 describe('PortalBadgeStateService', () => {
   let service: PortalBadgeStateService;
@@ -36,6 +37,15 @@ describe('PortalBadgeStateService', () => {
     service.setCustomerBookings(bookings);
 
     expect(service.customerBookingCount()).toBe(3);
+  });
+
+  it('clears the previous customer count synchronously when the account changes', () => {
+    const scope = TestBed.inject(CustomerAccountScopeService);
+    scope.setPrincipal('customer-a');
+    service.setCustomerBookings([{ status: 'pending' }] as Booking[]);
+    expect(service.customerBookingCount()).toBe(1);
+    scope.setPrincipal('customer-b');
+    expect(service.customerBookingCount()).toBe(0);
   });
 
   it('normalizes missing or negative counts and can reset session state', () => {

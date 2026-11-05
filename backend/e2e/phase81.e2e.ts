@@ -1,3 +1,4 @@
+import { verifyFixtureEmail } from './verify-fixture-email.js';
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -8,7 +9,8 @@ import sql from 'mssql';
 
 const uploadRoot = await mkdtemp(join(tmpdir(), 'la-chef-phase81-e2e-'));
 process.env['PAYMENT_PROOF_UPLOAD_ROOT'] = uploadRoot;
-process.env['EMAIL_WORKER_ENABLED'] = 'false';
+// These fixtures import app.ts, never server.ts; no mail worker is started.
+process.env['EMAIL_WORKER_ENABLED'] = 'true';
 
 const [{ default: app }, { closeDatabase, getDbPool }, { environment }, { hashPassword }] = await Promise.all([
   import('../src/app.js'),
@@ -37,10 +39,13 @@ function cookie(response: Response): string {
 async function request(base: string, path: string, init: RequestInit = {}, expected = 200) {
   const response = await fetch(`${base}${path}`, {
     ...init,
-    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) }
+    headers: { 'content-type': 'application/json', 'x-la-chef-request': '1', ...(init.headers ?? {}) }
   });
   const body = response.status === 204 ? undefined : await response.json();
   assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path}: ${JSON.stringify(body)}`);
+  if (path === '/auth/register' && response.status === 201) {
+    await verifyFixtureEmail(base, JSON.parse(String(init.body)).email);
+  }
   return { response, body };
 }
 
@@ -62,6 +67,7 @@ async function cleanup(): Promise<void> {
       DELETE pt FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id WHERE p.reservation_id=@id;
       DELETE FROM dbo.PAYMENT WHERE reservation_id=@id;
       DELETE FROM dbo.RESERVATION_ADD_ON WHERE reservation_id=@id;
+      DELETE FROM dbo.BOOKING_SUBMISSION WHERE reservation_id=@id;
       DELETE FROM dbo.RESERVATION WHERE reservation_id=@id;
     `);
   }
@@ -76,6 +82,7 @@ async function cleanup(): Promise<void> {
   }
   for (const email of [customerAEmail, customerBEmail]) {
     await pool.request().input('email', sql.NVarChar(255), email).query(`
+      DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient=@email;
       DELETE s FROM dbo.AUTH_SESSION s JOIN dbo.CUSTOMER c ON c.customer_id=s.customer_id WHERE c.email=@email;
       DELETE FROM dbo.CUSTOMER WHERE email=@email;
     `);
@@ -114,8 +121,12 @@ try {
   const customerA = await register(customerAEmail);
   const customerB = await register(customerBEmail);
   assert.equal(customerA.body.data.phone, '09171234567', 'Registration must return the customer phone for the profile.');
-  const customerACookie = cookie(customerA.response);
-  const customerBCookie = cookie(customerB.response);
+  assert.equal(customerA.response.headers.get('set-cookie'), null);
+  assert.equal(customerB.response.headers.get('set-cookie'), null);
+  const loginA = await request(base, '/auth/login', { method: 'POST', body: JSON.stringify({ email: customerAEmail, password }) });
+  const loginB = await request(base, '/auth/login', { method: 'POST', body: JSON.stringify({ email: customerBEmail, password }) });
+  const customerACookie = cookie(loginA.response);
+  const customerBCookie = cookie(loginB.response);
   const currentCustomer = await request(base, '/auth/me', { headers: { cookie: customerACookie } });
   assert.equal(currentCustomer.body.data.phone, '09171234567', 'Session restoration must return the customer phone for the profile.');
   const customerLogin = await request(base, '/auth/login', {
@@ -219,12 +230,12 @@ try {
   const concurrentAttempts = await Promise.allSettled([
     fetch(`${base}/bookings`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: customerACookie },
+      headers: { 'content-type': 'application/json', 'x-la-chef-request': '1', cookie: customerACookie },
       body: capacityBody(concurrentDate, 100),
     }),
     fetch(`${base}/bookings`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', cookie: customerBCookie },
+      headers: { 'content-type': 'application/json', 'x-la-chef-request': '1', cookie: customerBCookie },
       body: capacityBody(concurrentDate, 100),
     }),
   ]);
@@ -264,8 +275,8 @@ try {
   await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'AWAITING_PAYMENT' }) });
   await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerACookie } });
   await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerBCookie } }, 404);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: -1, method: 'CASH', paymentDate: tomorrow }) }, 400);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 999999, method: 'CASH', paymentDate: tomorrow }) }, 409);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: -1, method: 'CASH', reference: `${marker}-NEGATIVE`, paymentDate: tomorrow }) }, 400);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 999999, method: 'CASH', reference: `${marker}-OVERPAYMENT`, paymentDate: tomorrow }) }, 409);
   await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 100, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 201);
   await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 1, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 409);
   const invoice = await request(base, `/admin/invoices/${invoiceId}`, { headers: { cookie: adminCookie } });

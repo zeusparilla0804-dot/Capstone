@@ -26,6 +26,12 @@ class FakeRequest {
     return this;
   }
 
+  replaceInput(name: string, type: unknown, value: unknown): this {
+    const previous = this.inputs.findIndex(input => input.name === name);
+    if (previous >= 0) this.inputs.splice(previous, 1);
+    return this.input(name, type, value);
+  }
+
   async query(command: string) {
     this.command = command;
     return {
@@ -60,7 +66,15 @@ test('capacity snapshot binds the date and aggregates only active booking status
   for (const status of ['REJECTED', 'CANCELLED', 'COMPLETED']) {
     assert.doesNotMatch(request.command, new RegExp(`'${status}'`, 'i'));
   }
-  assert.doesNotMatch(request.command, /UPDLOCK|HOLDLOCK/i);
+  assert.doesNotMatch(request.command, /BOOKING_POLICY|UPDLOCK|HOLDLOCK/i);
+});
+
+test('capacity snapshot can repeat a locked availability check on the same transaction request', async () => {
+  const request = new FakeRequest();
+  await readCapacitySnapshot('2026-12-10', { request: request as unknown as sql.Request, lock: true, excludeReservationId: 42 });
+  await readCapacitySnapshot('2026-12-10', { request: request as unknown as sql.Request, lock: true, excludeReservationId: 42 });
+  assert.equal(request.inputs.length, 2);
+  assert.equal(request.inputs.find(input => input.name === 'excludeReservationId')?.value, 42);
 });
 
 test('capacity snapshot adds serializable lock hints only to a supplied write request', async () => {

@@ -15,6 +15,70 @@ const [bookingRepository, { closeDatabase }] = await Promise.all([
 ]);
 const { createBooking } = bookingRepository;
 
+test('customer booking reload returns the saved payment method without changing balances', async t => {
+  const pool = { connected: true, close: async () => {}, request: () => new sql.Request() };
+  t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
+  t.mock.method(sql.Request.prototype, 'query', async (command: string) => {
+    if (/FROM dbo\.BOOKING_POLICY|policyCustomerId/.test(command)) return { recordset: [], rowsAffected: [0] };
+    if (/FROM dbo\.RESERVATION r JOIN/.test(command)) {
+      assert.match(command, /pay\.payment_method/);
+      return { recordset: ['CASH', 'BANK_TRANSFER', 'E-WALLET'].map((method, index) => ({
+        reservation_id: index + 1, booking_reference: `BK-${index}`, event_type: 'Wedding',
+        event_date: new Date('2027-12-20'), event_time: new Date('1970-01-01T12:00:00Z'),
+        created_at: new Date('2026-10-31'), package_id: 1, package_name: 'Package',
+        package_pricing_type: 'PER_HEAD', package_unit_price: 480, package_total: 48000,
+        package_base_price: null, package_included_guests: null, package_excess_guest_price: null,
+        guest_count: 100, discount_amount: 0, total_amount: 48000, amount_paid: index * 12000,
+        status: 'AWAITING_PAYMENT', payment_method: method,
+      })), rowsAffected: [3] };
+    }
+    if (/FROM dbo\.RESERVATION_ADD_ON/.test(command)) return { recordset: [], rowsAffected: [0] };
+    throw new Error(`Unexpected query: ${command}`);
+  });
+  try {
+    const bookings = await bookingRepository.findCustomerBookings(7);
+    assert.deepEqual(bookings.map(item => item.paymentMethod), ['cash', 'bank-transfer', 'gcash']);
+    assert.deepEqual(bookings.map(item => item.amountPaid), [0, 12000, 24000]);
+    assert.ok(bookings.every(item => item.total === 48000 && item.status === 'awaiting_payment'));
+  } finally { await closeDatabase(); }
+});
+
+test('booking creation stores unit prices and quantities and charges catalog subtotals', async t => {
+  const pool = { connected: true, close: async () => {} };
+  const saved: Record<string, unknown>[] = [];
+  let due: unknown;
+  t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
+  t.mock.method(sql.Transaction.prototype, 'begin', async function () { return this; });
+  t.mock.method(sql.Transaction.prototype, 'commit', async () => {});
+  t.mock.method(sql.Transaction.prototype, 'rollback', async () => {});
+  t.mock.method(sql.Request.prototype, 'query', async function (command: string) {
+    const values = Object.fromEntries(Object.entries(this.parameters).map(([key, parameter]) => [key, parameter.value]));
+    const result = (recordset: unknown[] = []) => ({ recordset, rowsAffected: [1] });
+    if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result();
+    if (/FROM dbo\.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Standard', description: '', pricing_type: 'PER_HEAD', price_per_head: 480, event_type: 'Standard', min_guest: null, max_guest: null }]);
+    if (/COUNT_BIG/i.test(command)) return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
+    if (/FROM dbo\.ADD_ON/.test(command)) return result([
+      { add_on_id: 1, add_on_name: 'Tiffany Chair', description: '', price: 100 },
+      { add_on_id: 2, add_on_name: 'Lechon (35-40 kg Live Weight)', description: '', price: 14000 },
+    ]);
+    if (/SELECT event_id/.test(command)) return result([{ event_id: 1 }]);
+    if (/INSERT dbo\.RESERVATION_ADD_ON/.test(command)) { saved.push(values); assert.match(command, /quantity/); return result(); }
+    if (/INSERT dbo\.RESERVATION\(/.test(command)) return result([{ reservation_id: 31, created_at: new Date() }]);
+    if (/INSERT dbo\.PAYMENT/.test(command)) { due = values['due']; return result(); }
+    if (/email outbox context/i.test(command)) return result([{ customerEmail: 'test@example.test', customerName: 'Test', bookingReference: 'BK-31', eventDate: '2027-12-20' }]);
+    if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) return result([{ id: 1 }]);
+    throw new Error(`Unexpected query: ${command}`);
+  });
+  try {
+    const booking = await createBooking(7, { eventType: 'corporate', eventDate: '2027-12-20', eventTime: '12:00', venue: 'Venue', guestCount: 10, packageId: 1, addOnIds: [1, 2], addOnQuantities: { '1': 12, '2': 2 }, paymentMethod: 'cash' });
+    assert.equal((booking as any).paymentMethod, 'cash');
+    assert.deepEqual(saved.map(item => [item['price'], item['quantity']]), [[100, 12], [14000, 2]]);
+    assert.equal(booking.total, 34000);
+    assert.equal(due, 34000);
+    assert.deepEqual(booking.addOns.map(item => item.price), [1200, 28000]);
+  } finally { await closeDatabase(); }
+});
+
 test('booking creation persists an immutable base-plus-excess pricing snapshot', async (t) => {
   let active = false;
   let reservationCommand = '';
@@ -31,6 +95,7 @@ test('booking creation persists an immutable base-plus-excess pricing snapshot',
       Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]),
     );
     const result = (recordset: unknown[] = []) => ({ recordset, rowsAffected: [1] });
+    if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result();
 
     if (/FROM dbo\.PACKAGE p/.test(command)) {
       return result([{
@@ -116,6 +181,75 @@ test('booking creation persists an immutable base-plus-excess pricing snapshot',
   }
 });
 
+test('standard catering package can be reserved for a customer-selected occasion', async (t) => {
+  let active = false;
+  const pool = { connected: true, close: async () => {} };
+
+  t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
+  t.mock.method(sql.Transaction.prototype, 'begin', async function () { active = true; return this; });
+  t.mock.method(sql.Transaction.prototype, 'commit', async () => { active = false; });
+  t.mock.method(sql.Transaction.prototype, 'rollback', async () => { active = false; });
+  t.mock.method(sql.Request.prototype, 'query', async function (command: string) {
+    assert.ok(active, 'booking creation must remain inside its transaction');
+    const result = (recordset: unknown[] = []) => ({ recordset, rowsAffected: [1] });
+    if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result();
+
+    if (/FROM dbo\.PACKAGE p/.test(command)) {
+      return result([{
+        package_id: 18,
+        package_name: 'PHP 580 Per Head',
+        description: 'Standard catering package for every occasion',
+        pricing_type: 'PER_HEAD',
+        price_per_head: 580,
+        base_price: null,
+        included_guests: null,
+        excess_guest_price: null,
+        min_guest: null,
+        max_guest: null,
+        event_type: 'Standard Catering',
+      }]);
+    }
+    if (/COUNT_BIG\s*\(\s*\*\s*\).*FROM dbo\.RESERVATION/is.test(command)) {
+      return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
+    }
+    if (/SELECT event_id/.test(command)) return result([{ event_id: 1 }]);
+    if (/INSERT dbo\.RESERVATION/.test(command)) {
+      return result([{ reservation_id: 44, created_at: new Date('2026-10-18T06:00:00.000Z') }]);
+    }
+    if (/INSERT dbo\.PAYMENT/.test(command)) return result();
+    if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) {
+      return result([{
+        customerEmail: 'customer@example.test',
+        customerName: 'Customer',
+        bookingReference: 'BK-44',
+        eventDate: '2026-12-20',
+        invoiceNumber: null,
+      }]);
+    }
+    if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) return result([{ id: '51' }]);
+    throw new Error(`Unexpected query: ${command}`);
+  });
+
+  try {
+    const booking = await createBooking(7, {
+      eventType: 'Wedding',
+      eventDate: '2026-12-20',
+      eventTime: '18:00',
+      venue: 'Panorama Ville',
+      guestCount: 100,
+      packageId: 18,
+      addOnIds: [],
+      paymentMethod: 'cash',
+    });
+
+    assert.equal(booking.eventType, 'Wedding');
+    assert.equal(booking.package.packageName, 'PHP 580 Per Head');
+    assert.equal(booking.total, 58_000);
+  } finally {
+    await closeDatabase();
+  }
+});
+
 test('pending booking edit is owner-scoped, recalculates pricing, and replaces add-ons atomically', async (t) => {
   let active = false;
   let updateCommand = '';
@@ -134,6 +268,7 @@ test('pending booking edit is owner-scoped, recalculates pricing, and replaces a
       Object.entries(this.parameters).map(([name, parameter]) => [name, parameter.value]),
     );
     const result = (recordset: unknown[] = [], rowsAffected = [1]) => ({ recordset, rowsAffected });
+    if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result([]);
 
     if (/FROM dbo\.RESERVATION r WITH\s*\(UPDLOCK,HOLDLOCK\)/i.test(command)) {
       assert.match(command, /r\.customer_id\s*=\s*@customerId/i);

@@ -68,31 +68,31 @@ export class HomePageComponent {
       title: 'Weddings',
       subtitle: 'Elegant menus for your perfect day',
       category: 'wedding',
-      imageUrl: 'assets/images/packages/premium-package.webp',
+      imageUrl: 'assets/images/packages/wedding/client-wedding-18.jpg',
     },
     {
       title: 'Birthdays',
       subtitle: 'Joyful feasts worth celebrating',
       category: 'birthday',
-      imageUrl: 'assets/images/packages/basic-package.webp',
+      imageUrl: 'assets/images/packages/birthday/client-kids-birthday-01.jpg',
     },
     {
       title: 'Corporate Events',
       subtitle: 'Polished service for every occasion',
       category: 'corporate',
-      imageUrl: 'assets/images/packages/deluxe-package.webp',
+      imageUrl: 'assets/images/packages/corporate/client-business-forum-01.jpg',
     },
     {
       title: 'Debut',
       subtitle: 'A grand table for a milestone night',
       category: 'debut',
-      imageUrl: 'assets/images/packages/deluxe-package.webp',
+      imageUrl: 'assets/images/packages/debut/client-debut-11.jpg',
     },
     {
       title: 'Anniversaries',
       subtitle: 'Intimate dining for lasting memories',
       category: 'anniversary',
-      imageUrl: 'assets/images/packages/premium-package.webp',
+      imageUrl: 'assets/images/packages/wedding/client-wedding-10.jpg',
     },
   ];
   constructor() {

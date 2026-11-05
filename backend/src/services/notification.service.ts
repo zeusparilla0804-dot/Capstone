@@ -8,6 +8,8 @@ import {
 import { renderEmail, validateEmailPayload } from '../templates/email-templates.js';
 import type { EmailTemplateKey, QueueNotificationInput, RenderedEmail } from '../types/notification.types.js';
 import { AppError } from '../utils/app-error.js';
+import { cashDepositDeadline } from './cash-payment-policy.js';
+import { requiredReservationDeposit } from './reservation-billing-policy.js';
 
 const maxBigInt = 9_223_372_036_854_775_807n;
 
@@ -17,7 +19,6 @@ function bigintId(value: unknown): string {
   if (parsed > maxBigInt) throw new AppError(400, 'Invalid notification identifier.');
   return value;
 }
-
 function queueInput(raw: QueueNotificationInput): QueueNotificationInput {
   if (!raw || typeof raw !== 'object') throw new AppError(400, 'Invalid notification.');
   if (typeof raw.recipient !== 'string') throw new AppError(400, 'Invalid notification recipient.');
@@ -25,7 +26,7 @@ function queueInput(raw: QueueNotificationInput): QueueNotificationInput {
   if (!validEmailAddress(recipient)) throw new AppError(400, 'Invalid notification recipient.');
   const paired = raw.relatedEntityType !== undefined && raw.relatedEntityId !== undefined;
   if ((raw.relatedEntityType === undefined) !== (raw.relatedEntityId === undefined) ||
-      (raw.relatedEntityType !== undefined && !['BOOKING', 'INVOICE', 'PAYMENT_PROOF', 'CUSTOM_EVENT_REQUEST'].includes(raw.relatedEntityType))) {
+      (raw.relatedEntityType !== undefined && !['CUSTOMER', 'BOOKING', 'INVOICE', 'PAYMENT_PROOF', 'CUSTOM_EVENT_REQUEST'].includes(raw.relatedEntityType))) {
     throw new AppError(400, 'Invalid notification relation.');
   }
   return {
@@ -46,7 +47,7 @@ export function createNotificationService(deps: { repository: EmailOutboxReposit
       if (deps.nodeEnv === 'production') throw new AppError(404, 'Notification preview is unavailable.');
       const record = await deps.repository.findById(bigintId(outboxId));
       if (!record) throw new AppError(404, 'Notification not found.');
-      if (record.templateKey === 'PASSWORD_RESET_REQUESTED') {
+      if (record.templateKey === 'PASSWORD_RESET_REQUESTED' || record.templateKey === 'EMAIL_VERIFICATION_CODE') {
         throw new AppError(404, 'Notification preview is unavailable.');
       }
       return renderEmail(record.templateKey, record.payload);
@@ -61,6 +62,39 @@ const nodeEnv = process.env.NODE_ENV ?? 'development';
 export const notificationService = createNotificationService({ repository: emailOutboxRepository, nodeEnv });
 export const queueNotification = notificationService.queueNotification;
 export const renderEmailPreview = notificationService.renderEmailPreview;
+
+function invoiceNotificationPayload(context: BookingNotificationContext): Record<string, string> {
+  if (!context.invoiceId || context.totalAmount == null || context.amountPaid == null) return {};
+  if (!Number.isSafeInteger(context.invoiceId) || context.invoiceId < 1 ||
+      !Number.isFinite(context.amountPaid) || context.amountPaid < 0) {
+    throw new AppError(500, 'Invoice notification values are invalid.');
+  }
+  const requiredDeposit = requiredReservationDeposit(context.totalAmount);
+  const totalCents = Math.round(context.totalAmount * 100);
+  const paidCents = Math.round(context.amountPaid * 100);
+  const money = (cents: number) => (cents / 100).toFixed(2);
+  const payload: Record<string, string> = {
+    invoiceUrl: new URL(`/invoice/${context.invoiceId}`, environment.frontendOrigin).toString(),
+    totalAmount: money(totalCents), amountPaid: money(paidCents), requiredDeposit: requiredDeposit.toFixed(2),
+    remainingDeposit: money(Math.max(Math.round(requiredDeposit * 100) - paidCents, 0)),
+    remainingBalance: money(Math.max(totalCents - paidCents, 0)),
+  };
+  for (const field of ['invoiceDueDate', 'eventTime'] as const) {
+    if (context[field]) payload[field] = context[field];
+  }
+  for (const field of ['eventType', 'venue'] as const) {
+    if (context[field]) payload[field] = context[field].replace(/\s+/gu, ' ').trim();
+  }
+  if (context.status) payload.bookingStatus = context.status.toUpperCase();
+  if (context.paymentMethod) payload.paymentMethod = context.paymentMethod.toUpperCase().replaceAll('-', '_');
+  if (context.guestCount) payload.guestCount = String(context.guestCount);
+  if (payload.paymentMethod === 'CASH' && context.guestCount) {
+    const deadline = cashDepositDeadline(context.eventDate, context.guestCount);
+    payload.cashDepositDueDate = deadline.date;
+    payload.cashPreparationDays = String(deadline.preparationDays);
+  }
+  return payload;
+}
 
 export async function queueBookingNotification(
   reservationId: number,
@@ -79,62 +113,14 @@ export async function queueBookingNotification(
       customerName: context.customerName,
       bookingReference: context.bookingReference,
       eventDate: context.eventDate,
+      ...(templateKey === 'BOOKING_APPROVED' && context.paymentMethod?.toUpperCase() === 'CASH' && context.guestCount
+        ? { cashPaymentInstructions: `Cash down payment (50%) is due by ${cashDepositDeadline(context.eventDate, context.guestCount).date}, 6:00 PM Philippine Time. Pay at the LA Chef office, open daily 8:00 AM-6:00 PM. Booking remains subject to final confirmation.` }
+        : {}),
       ...(templateKey === 'INVOICE_ISSUED' && context.invoiceNumber ? { invoiceNumber: context.invoiceNumber } : {}),
+      ...(templateKey === 'INVOICE_ISSUED' ? invoiceNotificationPayload(context) : {}),
       ...additions
     },
     relatedEntityType,
     relatedEntityId
   }, request);
-}
-
-type CustomEventTemplateKey = Extract<EmailTemplateKey,
-  | 'CUSTOM_REQUEST_RECEIVED'
-  | 'CUSTOM_REQUEST_RECEIVED_ADMIN'
-  | 'CUSTOM_CLARIFICATION_REQUESTED'
-  | 'CUSTOM_QUOTE_SENT'
-  | 'CUSTOM_QUOTE_ACCEPTED'
-  | 'CUSTOM_QUOTE_DECLINED'
-  | 'CUSTOM_QUOTE_EXPIRED'>;
-
-export function customEventActionUrl(requestId: number, admin: boolean): string {
-  if (!Number.isSafeInteger(requestId) || requestId < 1) throw new AppError(400, 'Invalid custom event request identifier.');
-  return new URL(admin ? `/admin/custom-events/${requestId}` : `/custom-events/${requestId}`, environment.frontendOrigin).toString();
-}
-
-export async function queueCustomEventNotification(
-  reservationId: number,
-  requestId: number,
-  templateKey: Exclude<CustomEventTemplateKey, 'CUSTOM_REQUEST_RECEIVED_ADMIN'>,
-  request: sql.Request,
-  additions: Record<string, string> = {},
-): Promise<string> {
-  const context = await notificationService.bookingContext(reservationId, request);
-  if (!context) throw new AppError(404, 'Booking notification context not found.');
-  return queueNotification({
-    recipient: context.customerEmail,
-    templateKey,
-    payload: { customerName: context.customerName, bookingReference: context.bookingReference,
-      eventDate: context.eventDate, ...additions, actionUrl: customEventActionUrl(requestId, false) },
-    relatedEntityType: 'CUSTOM_EVENT_REQUEST',
-    relatedEntityId: String(requestId),
-  }, request);
-}
-
-export async function queueCustomEventReceipt(
-  reservationId: number,
-  requestId: number,
-  request: sql.Request,
-): Promise<void> {
-  const context = await notificationService.bookingContext(reservationId, request);
-  if (!context) throw new AppError(404, 'Booking notification context not found.');
-  await queueNotification({ recipient: context.customerEmail, templateKey: 'CUSTOM_REQUEST_RECEIVED',
-    payload: { customerName: context.customerName, bookingReference: context.bookingReference,
-      eventDate: context.eventDate, actionUrl: customEventActionUrl(requestId, false) },
-    relatedEntityType: 'CUSTOM_EVENT_REQUEST', relatedEntityId: String(requestId) }, request);
-  for (const recipient of await emailOutboxRepository.activeAdminEmails(request)) {
-    await queueNotification({ recipient, templateKey: 'CUSTOM_REQUEST_RECEIVED_ADMIN',
-      payload: { customerName: 'LA Chef team', bookingReference: context.bookingReference,
-        eventDate: context.eventDate, actionUrl: customEventActionUrl(requestId, true) },
-      relatedEntityType: 'CUSTOM_EVENT_REQUEST', relatedEntityId: String(requestId) }, request);
-  }
 }

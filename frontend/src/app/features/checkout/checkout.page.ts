@@ -25,7 +25,10 @@ export class CheckoutPageComponent {
     { value: 'gcash', label: 'GCash' },
   ];
 
-  protected selectPayment(paymentMethod: PaymentMethod): void { this.draftService.update({ paymentMethod }); }
+  protected selectPayment(paymentMethod: PaymentMethod): void {
+    this.draftService.update({ paymentMethod });
+  }
+
   protected eventTypeLabel(): string {
     const eventType = this.draftService.draft().eventType;
     if (!eventType) return 'Not provided';
@@ -33,13 +36,24 @@ export class CheckoutPageComponent {
   }
 
   protected async confirmBooking(): Promise<void> {
+    const catalogError = this.draftService.catalogSelectionError();
+    if (catalogError) {
+      this.errorMessage.set(catalogError);
+      return;
+    }
     const selectedPackage = this.draftService.selectedPackage();
     const draft = this.draftService.draft();
     if (!selectedPackage || !draft.paymentMethod || this.isSubmitting()) return;
     this.isSubmitting.set(true);
     this.errorMessage.set('');
     try {
-      this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns()));
+      const editingId = this.draftService.editingBookingId();
+      if (editingId) {
+        const updated = await this.bookingService.updatePendingBooking(editingId, draft, selectedPackage, this.draftService.selectedAddOns());
+        this.bookingReference.set(updated.reference);
+      } else {
+        this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns(), this.draftService.submissionKey()));
+      }
       this.draftService.reset();
     } catch (error) {
       this.errorMessage.set(bookingSubmissionMessage(error));

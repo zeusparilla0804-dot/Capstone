@@ -1,5 +1,7 @@
-import { Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { AdminDashboard, Booking } from '../models';
+import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 export interface AdminPortalBadges {
   readonly bookings: number;
@@ -23,6 +25,10 @@ export class PortalBadgeStateService {
   private readonly customerBookingState = signal(0);
   readonly adminBadges = this.adminBadgeState.asReadonly();
   readonly customerBookingCount = this.customerBookingState.asReadonly();
+
+  constructor() {
+    inject(CustomerAccountScopeService).changes.pipe(takeUntilDestroyed()).subscribe(() => this.customerBookingState.set(0));
+  }
 
   setAdminDashboard(summary: AdminDashboard): void {
     this.adminBadgeState.set({

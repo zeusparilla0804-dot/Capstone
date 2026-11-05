@@ -124,6 +124,30 @@ test('maps multiple proof files to 400 and cleans every temporary file', async (
   });
 });
 
+test('rejects extra multipart text fields before accepting an upload', async () => {
+  await withServer((_request, response) => response.sendStatus(204), async (url) => {
+    const form = new FormData();
+    for (const [name, value] of Object.entries({ method: 'BANK_TRANSFER', claimedAmount: '100', paymentDate: '2026-11-05', transactionReference: 'R1', extra: 'unneeded' })) {
+      form.append(name, value);
+    }
+    form.append('proof', new Blob([png], { type: 'image/png' }), 'proof.png');
+    const response = await fetch(url, { method: 'POST', body: form });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await tempFiles(), []);
+  });
+});
+
+test('rejects oversized multipart text values', async () => {
+  await withServer((_request, response) => response.sendStatus(204), async (url) => {
+    const form = new FormData();
+    form.append('transactionReference', 'A'.repeat(257));
+    form.append('proof', new Blob([png], { type: 'image/png' }), 'proof.png');
+    const response = await fetch(url, { method: 'POST', body: form });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await tempFiles(), []);
+  });
+});
+
 test('removes an unconsumed validated upload after a downstream error response', async () => {
   await withServer((_request, _response, next) => next(new Error('downstream failure')), async (url) => {
     const response = await postFile(url, [{ bytes: png, name: 'proof.png', type: 'image/png' }]);

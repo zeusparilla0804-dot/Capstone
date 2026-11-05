@@ -1,0 +1,32 @@
+.approval-confirmation {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1), transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.approval-spinner {
+  box-sizing: border-box;
+  display: inline-block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: approval-spin 800ms linear infinite;
+}
+
+@starting-style {
+  .approval-confirmation { opacity: 0; transform: translateY(4px); }
+}
+
+@keyframes approval-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .approval-confirmation {
+    transform: none;
+    transition: opacity 160ms cubic-bezier(0.23, 1, 0.32, 1);
+    @starting-style { transform: none; }
+  }
+  .approval-spinner { animation: none; }
+}

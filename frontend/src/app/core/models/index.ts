@@ -8,4 +8,3 @@ export * from './user.model';
 export * from './api.model';
 export * from './admin.model';
 export * from './availability.model';
-export * from './custom-event.model';

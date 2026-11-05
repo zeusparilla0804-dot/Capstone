@@ -14,7 +14,7 @@
       <button class="gallery-zone gallery-zone--previous" type="button" aria-label="Previous design image" (click)="showPreviousImage()"></button>
       <button class="gallery-zone gallery-zone--next" type="button" aria-label="Next design image" (click)="showNextImage()"></button>
       <div class="gallery-dots" aria-hidden="true">
-        @for (image of galleryImages(); track image; let index = $index) {
+        @for (index of visibleDots(); track $index) {
           <span [class.is-active]="index === currentImageIndex()"></span>
         }
       </div>
@@ -46,15 +46,16 @@
             }
           }
         </ul>
-        <button class="text-action" data-testid="view-inclusions" type="button" [attr.aria-expanded]="inclusionsExpanded()" (click)="toggleInclusions()">
-          {{ inclusionsExpanded() ? 'Show fewer inclusions' : 'View full inclusions' }}
-        </button>
+        @if (cateringPackage().features.length > 3) {
+          <button class="text-action" data-testid="view-inclusions" type="button" [attr.aria-expanded]="inclusionsExpanded()" (click)="toggleInclusions()">
+            {{ inclusionsExpanded() ? 'Show fewer inclusions' : 'View full inclusions' }}
+          </button>
+        }
       </div>
     }
 
     <div class="package-experience__actions">
       <button class="btn btn-primary" data-testid="plan-package" type="button" (click)="requestPlanning()">Plan with this package</button>
-      <button class="text-action" data-testid="customize-package" type="button" (click)="requestCustomization()">Customize this package <span aria-hidden="true">&rarr;</span></button>
     </div>
   </div>
 </article>

@@ -54,17 +54,43 @@ describe('PackagesPageComponent editorial discovery', () => {
     expect(element.textContent).toContain('Standard Catering');
   });
 
+  it('offers only the official poster package groups', () => {
+    const fixture = TestBed.createComponent(PackagesPageComponent);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const labels = Array.from(
+      element.querySelectorAll<HTMLButtonElement>('.category-filters button'),
+      (button) => button.textContent?.trim(),
+    );
+    expect(labels).toEqual(['All Packages', 'Standard Catering', 'Debut Packages']);
+  });
+
   it('routes every package selection into the standard reservation flow', () => {
     const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
     const fixture = TestBed.createComponent(PackagesPageComponent);
     fixture.detectChanges();
     const element = fixture.nativeElement as HTMLElement;
 
-    element.querySelector<HTMLButtonElement>('[data-testid="plan-package"]')?.click();
-    expect(navigate).toHaveBeenCalledWith(['/book-event'], { queryParams: { package: '1' } });
+    const actions = element.querySelectorAll<HTMLButtonElement>('.package-experience__actions button');
+    expect(actions).toHaveLength(2);
+    actions[0]!.click();
+    expect(navigate).toHaveBeenCalledWith(['/book-event'], { queryParams: { package: '1', new: 1 } });
 
-    element.querySelector<HTMLButtonElement>('[data-testid="customize-package"]')?.click();
-    expect(navigate).toHaveBeenCalledWith(['/book-event'], { queryParams: { package: '1' } });
+    actions[1]!.click();
+    expect(navigate).toHaveBeenLastCalledWith(['/book-event'], { queryParams: { package: '2', new: 1 } });
+    expect(navigate).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers one closing reservation action after the package catalogue', () => {
+    const fixture = TestBed.createComponent(PackagesPageComponent);
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const closingActions = element.querySelectorAll<HTMLAnchorElement>('.custom-event a, .planning-cta a');
+    expect(closingActions).toHaveLength(1);
+    expect(closingActions[0]!.closest('.planning-cta')).not.toBeNull();
+    expect(closingActions[0]!.getAttribute('href')).toBe('/book-event');
   });
 
   it('contains no custom quotation creation entry point', () => {

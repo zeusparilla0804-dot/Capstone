@@ -19,6 +19,12 @@ On 2026-10-11, Playwright verified customer and administrator forgot/reset route
 
 The recovery journey also verifies keyboard submission, exact customer/admin API selection, generic sent copy that does not reveal account existence, missing and rejected token states, role-correct return links, successful password-change copy, and removal of the token-bearing query string through history replacement.
 
+## Automated Public Information Evidence
+
+On 2026-10-17, Playwright verified the About and Contact routes at `390` and `1440` pixels. The checks cover confirmed business details, package and reservation navigation, tap-to-call links, the configured Messenger destination, and page-level horizontal overflow. Captures are generated as `frontend/test-results/about-<width>.png` and `frontend/test-results/contact-<width>.png`.
+
+The mobile Contact capture was inspected after suppressing the global floating Messenger action on that dedicated route. This prevents duplicate controls and avoids overlap with the full-width Contact-page Messenger button; the floating action remains available on other public and customer routes.
+
 ## Manual Release Matrix
 
 Automated checks do not replace device and assistive-technology review. Before production, test widths `320`, `375`, `390`, `768`, `1024`, and `1440` with representative short and long data values.

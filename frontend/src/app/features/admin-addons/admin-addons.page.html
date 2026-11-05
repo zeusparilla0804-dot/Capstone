@@ -1,7 +1,9 @@
 <app-admin-shell title="Packages & Menu" description="Manage optional menu and event services available during reservation.">
-  <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Add-on</button>
+  @if (!showForm()) {
+    <button admin-actions class="btn btn-primary" type="button" (click)="create()">Create Add-on</button>
+  }
 
-  <nav class="admin-toolbar" aria-label="Packages and menu sections">
+  <nav class="admin-toolbar admin-section-tabs" aria-label="Packages and menu sections">
     <a class="btn btn-secondary btn-sm" routerLink="/admin/packages">Packages</a>
     <a class="btn btn-primary btn-sm" routerLink="/admin/add-ons" aria-current="page">Add-ons</a>
   </nav>
@@ -14,8 +16,8 @@
         <label>Name<input formControlName="name" /></label>
         <label>Price<input type="number" min="0" formControlName="price" /></label>
         <label class="wide">Description<textarea rows="3" formControlName="description"></textarea></label>
-        <label><span>Available publicly</span><input type="checkbox" formControlName="isActive" /></label>
-        <div class="wide"><button class="btn btn-primary" [disabled]="form.invalid">Save Changes</button> <button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button></div>
+        <label class="admin-visibility-field wide"><input type="checkbox" formControlName="isActive" /><span><strong>Available publicly</strong><small>Customers can select this add-on during reservation.</small></span></label>
+        <div class="admin-form-actions wide"><button class="btn btn-secondary" type="button" (click)="showForm.set(false)">Cancel</button><button class="btn btn-primary" type="submit" [disabled]="form.invalid">Save Changes</button></div>
       </form>
     </section>
   }
@@ -34,7 +36,7 @@
               @for (item of items(); track item.id) {
                 <tr>
                   <td data-label="Add-on" data-card-wide="true"><strong>{{ item.name }}</strong><br /><small>{{ item.description }}</small></td>
-                  <td data-label="Price" class="is-number">{{ item.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
+                  <td data-label="Price">{{ item.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
                   <td data-label="Status">{{ item.isActive ? 'Active' : 'Inactive' }}</td>
                   <td data-label="Actions" data-card-wide="true"><div class="admin-row-actions"><button class="btn btn-tertiary" type="button" (click)="edit(item)">Edit</button><button class="btn btn-tertiary" type="button" (click)="toggle(item)">{{ item.isActive ? 'Deactivate' : 'Activate' }}</button></div></td>
                 </tr>

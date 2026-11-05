@@ -1,0 +1,15 @@
+:host ::ng-deep app-admin-shell .admin-page-header .page-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+:host ::ng-deep app-admin-shell .admin-page-header h1 { font-size: 30px; font-weight: 600; }
+:host ::ng-deep app-admin-shell .admin-page-header p:last-child { font-size: 14px; font-weight: 400; }
+button[admin-actions] { font-family: var(--font-admin); font-size: 13px; font-weight: 500; }
+.admin-section-tabs .btn { font-family: var(--font-admin); font-size: 14px; font-weight: 400; }
+.admin-section-tabs .btn[aria-current='page'] { font-weight: 600; }
+.admin-table--addons th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+.admin-table--addons td { font-size: 13px; font-weight: 400; }
+.admin-table--addons td[data-label='Add-on'] { line-height: 1.4; overflow-wrap: anywhere; }
+.admin-table--addons td[data-label='Add-on'] strong { font-size: 13px; font-weight: 600; }
+.admin-table--addons td[data-label='Add-on'] small { font-size: 12px; font-weight: 400; }
+.admin-table--addons td[data-label='Price'] { font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-table--addons th:nth-child(2), .admin-table--addons td[data-label='Price'] { text-align: left; }
+.admin-table--addons td[data-label='Status'] { font-size: 12px; font-weight: 500; }
+.admin-table--addons .admin-row-actions .btn { font-size: 12px; font-weight: 500; }

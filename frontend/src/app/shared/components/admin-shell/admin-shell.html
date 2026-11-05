@@ -1,11 +1,20 @@
 <main class="admin-layout portal-surface">
   <app-dashboard-sidebar
+    brandAppearance="editorial"
     [title]="auth.user()?.fullName ?? 'Administrator'"
     subtitle="Administrator"
     [navItems]="nav()"
     (navAction)="action($event)"
   />
   <section class="admin-main">
+    @if (auth.idleWarning()) {
+      <div class="admin-session-warning" role="status">
+        <span>Your session will expire in less than a minute due to inactivity.</span>
+        <button class="btn btn-ghost" type="button" [disabled]="renewingSession()" (click)="staySignedIn()">
+          {{ renewingSession() ? 'Renewing session…' : 'Stay signed in' }}
+        </button>
+      </div>
+    }
     @if (sessionError()) {
       <p class="admin-session-error" role="alert">{{ sessionError() }}</p>
     }

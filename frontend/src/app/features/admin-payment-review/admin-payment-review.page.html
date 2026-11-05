@@ -1,5 +1,5 @@
 <app-admin-shell title="Payment proof review" description="Compare the submitted receipt with the booking balance before recording a verified payment.">
-  <a admin-actions class="admin-back-link" routerLink="/admin/payments">&larr; Payment queue</a>
+  <a admin-actions class="admin-back-link" [routerLink]="returnBookingId() ? ['/admin/bookings', returnBookingId()] : ['/admin/payments']">&larr; {{ returnBookingId() ? 'Back to reservation' : 'Payment queue' }}</a>
 
   @if (loading()) {
     <p class="data-state" role="status">Loading payment proof...</p>
@@ -15,13 +15,13 @@
 
     <div class="review-grid">
       <section class="proof-viewer" aria-labelledby="proof-image-title">
-        <div class="section-heading"><span>01</span><div><h2 id="proof-image-title">Submitted receipt</h2><p>Private customer upload. Inspect the image and transaction details together.</p></div></div>
+        <div class="section-heading"><div><h2 id="proof-image-title">Submitted receipt</h2><p>Private customer upload. Inspect the image and transaction details together.</p></div></div>
         <div class="image-stage">@if (!imageUnavailable()) { <img [src]="previewUrl(record.proof.fileUrl)" alt="Customer payment receipt" [style.transform]="'scale(' + imageZoom() + ')'" (error)="imageUnavailable.set(true)" /><div class="image-stage__controls" aria-label="Receipt zoom controls"><button type="button" aria-label="Zoom out" (click)="zoomOut()" [disabled]="imageZoom() <= 0.5">-</button><button type="button" aria-label="Reset zoom" (click)="resetZoom()">1:1</button><button type="button" aria-label="Zoom in" (click)="zoomIn()" [disabled]="imageZoom() >= 3">+</button></div> } @else { <div class="image-fallback" role="status"><strong>Preview unavailable</strong><p>Open the original file to inspect it.</p></div> }</div>
         <a class="original-link" [href]="record.proof.fileUrl" target="_blank" rel="noopener">Open original image <span aria-hidden="true">↗</span></a>
       </section>
       <section class="proof-facts" aria-labelledby="proof-details-title">
-        <div class="section-heading"><span>02</span><div><h2 id="proof-details-title">Submission details</h2><p>Values declared by the customer.</p></div></div>
-        <dl><div><dt>Claimed amount</dt><dd>{{ record.proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Method</dt><dd>{{ methodLabel(record.proof.method) }}</dd></div><div><dt>Payment date</dt><dd>{{ record.proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Reference</dt><dd>{{ record.proof.transactionReference || 'Not provided' }}</dd></div><div><dt>File</dt><dd>{{ record.proof.originalFilename }}</dd></div><div><dt>File size</dt><dd>{{ fileSize(record.proof.byteSize) }}</dd></div></dl>
+        <div class="section-heading"><div><h2 id="proof-details-title">Submission details</h2><p>Values declared by the customer.</p></div></div>
+        <dl><div><dt>Claimed amount</dt><dd>{{ record.proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Payment method</dt><dd>{{ methodLabel(record.proof.method) }}</dd></div><div><dt>Payment date</dt><dd>{{ record.proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Transaction reference</dt><dd>{{ record.proof.transactionReference || 'Not provided' }}</dd></div><div><dt>Uploaded file</dt><dd>{{ record.proof.originalFilename }}</dd></div><div><dt>File size</dt><dd>{{ fileSize(record.proof.byteSize) }}</dd></div></dl>
       </section>
     </div>
 
@@ -29,10 +29,10 @@
 
     @if (canReview()) {
       <section class="review-actions" aria-labelledby="review-actions-title">
-        <div class="review-copy"><p class="section-label">Decision</p><h2 id="review-actions-title">Complete the review</h2><p>Verification credits the booking balance. Rejection returns the booking to awaiting payment.</p></div>
+        <div class="review-copy"><h2 id="review-actions-title">Review payment</h2><p>Verify the receipt details before recording the payment, or reject the submission with a reason.</p></div>
         <div class="decision-tools">
-          <div class="decision-column verify-column"><h3>Verify payment</h3><label for="verified-amount">Verified amount<input id="verified-amount" type="number" min="0.01" step="0.01" inputmode="decimal" [ngModel]="verifiedAmount()" (ngModelChange)="verifiedAmount.set(+$event)" /></label>@if (amountCorrected()) { <label for="correction-reason">Correction reason<textarea id="correction-reason" [(ngModel)]="correctionReason" maxlength="1000" rows="3" placeholder="Why does the verified amount differ?"></textarea></label> }<button data-testid="verify-proof" class="btn btn-primary" type="button" (click)="verify()" [disabled]="mutationPending()">{{ mutationPending() ? 'Processing...' : 'Verify and record payment' }}</button></div>
-          <div class="decision-column reject-column"><h3>Reject proof</h3><label for="rejection-reason">Reason<textarea id="rejection-reason" [(ngModel)]="rejectionReason" maxlength="1000" rows="3" placeholder="Tell the customer what needs correction"></textarea></label><button class="btn btn-secondary danger-action" type="button" (click)="reject()" [disabled]="mutationPending()">Reject proof</button></div>
+          <div class="decision-column verify-column"><h3>Verify payment</h3><label for="verified-amount">Verified amount<div class="currency-input"><span aria-hidden="true">₱</span><input id="verified-amount" type="number" min="0.01" step="0.01" inputmode="decimal" [ngModel]="verifiedAmount()" (ngModelChange)="verifiedAmount.set(+$event)" /></div></label>@if (amountCorrected()) { <label for="correction-reason">Correction reason<textarea id="correction-reason" [(ngModel)]="correctionReason" maxlength="1000" rows="3" placeholder="Why does the verified amount differ?"></textarea></label> }<button data-testid="verify-proof" class="btn btn-primary" type="button" (click)="verify()" [disabled]="mutationPending()">{{ mutationPending() ? 'Processing...' : 'Verify and record payment' }}</button></div>
+          <div class="decision-column reject-column"><h3>Reject proof</h3><label for="rejection-reason">Reason for rejection<textarea id="rejection-reason" [(ngModel)]="rejectionReason" maxlength="1000" rows="3" placeholder="Explain why the payment proof cannot be accepted."></textarea></label><button class="btn btn-secondary danger-action" type="button" (click)="reject()" [disabled]="mutationPending()">Reject proof</button></div>
         </div>
       </section>
     } @else {

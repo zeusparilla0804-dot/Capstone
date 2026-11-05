@@ -1,5 +1,6 @@
 import {Router} from 'express';import {adminController as c} from '../controllers/admin.controller.js';import {adminInvoice,issueInvoice} from '../controllers/invoice.controller.js';import {customerAdminController} from '../controllers/customer-admin.controller.js';import {requireAdmin} from '../middleware/auth.middleware.js';
 import {adminReportController} from '../controllers/admin-report.controller.js';
+import {retiredCustomQuotation} from './custom-event.routes.js';
 export default Router().use(requireAdmin)
  .get('/reports/reservations/export',adminReportController.reservationExport)
  .get('/reports/payments/export',adminReportController.paymentExport)
@@ -10,10 +11,10 @@ export default Router().use(requireAdmin)
  .get('/invoices/:id',adminInvoice).post('/bookings/:bookingId/invoice',issueInvoice)
  .get('/dashboard',c.dashboard).get('/email-outbox',c.emailOutbox).get('/email-outbox/:id/preview',c.emailPreview)
  .post('/email-outbox/:id/retry',c.retryEmail).get('/audit-log',c.auditLog)
- .get('/custom-events',c.customEvents).get('/custom-events/:id',c.customEvent)
- .post('/custom-events/:id/quotes',c.sendCustomQuote)
- .post('/custom-events/:id/request-clarification',c.requestCustomClarification)
- .post('/custom-events/:id/reject',c.rejectCustomEvent)
+ .get('/custom-events',retiredCustomQuotation).get('/custom-events/:id',retiredCustomQuotation)
+ .post('/custom-events/:id/quotes',retiredCustomQuotation)
+ .post('/custom-events/:id/request-clarification',retiredCustomQuotation)
+ .post('/custom-events/:id/reject',retiredCustomQuotation)
  .get('/bookings',c.bookings).get('/bookings/:id',c.booking).patch('/bookings/:id/status',c.status)
  .get('/customers',c.customers).get('/customers/:id/bookings',c.customerBookings)
  .get('/customers/:id/payments',c.customerPayments)

@@ -6,9 +6,11 @@ import {
   type EmailOutboxRepository
 } from '../repositories/email-outbox.repository.js';
 import { renderEmail } from '../templates/email-templates.js';
-import type { BatchResult, EmailWorkerSettings } from '../types/notification.types.js';
+import type { BatchResult, EmailTemplateKey, EmailWorkerSettings } from '../types/notification.types.js';
 import { logger } from '../utils/logger.js';
 import { renderPasswordResetEmail } from './password-reset-email.service.js';
+import { renderUpcomingEventReminder } from './event-reminder.service.js';
+import { emailVerificationService } from './email-verification.service.js';
 
 interface MailTransport {
   sendMail(message: Record<string, unknown>): Promise<{ rejected?: unknown[] } | unknown>;
@@ -21,7 +23,19 @@ interface WorkerDependencies {
   settings: EmailWorkerSettings;
   from: { name: string; address: string };
   renderPasswordResetEmail: (item: ClaimedEmail, now: Date) => Promise<ReturnType<typeof renderEmail> | undefined>;
+  renderUpcomingEventReminder: (item: ClaimedEmail, now: Date) => Promise<ReturnType<typeof renderEmail> | undefined>;
+  renderEmailVerificationCode?: (item: ClaimedEmail, now: Date) => Promise<ReturnType<typeof renderEmail> | undefined>;
 }
+
+const retiredCustomQuotationTemplates = new Set<EmailTemplateKey>([
+  'CUSTOM_REQUEST_RECEIVED',
+  'CUSTOM_REQUEST_RECEIVED_ADMIN',
+  'CUSTOM_CLARIFICATION_REQUESTED',
+  'CUSTOM_QUOTE_SENT',
+  'CUSTOM_QUOTE_ACCEPTED',
+  'CUSTOM_QUOTE_DECLINED',
+  'CUSTOM_QUOTE_EXPIRED',
+]);
 
 function failureDetails(error: unknown): { transient: boolean; summary: string } {
   const value = error as { code?: unknown; responseCode?: unknown };
@@ -48,6 +62,10 @@ export function createEmailWorker(deps: WorkerDependencies) {
     const claimed = await deps.repository.claim(now, deps.settings);
     result.claimed = claimed.length;
     for (const item of claimed) {
+      if (retiredCustomQuotationTemplates.has(item.templateKey)) {
+        if (await deps.repository.finish(item, { status: 'FAILED', error: 'CUSTOM_QUOTATION_RETIRED' }, now)) result.failed++;
+        continue;
+      }
       if (item.attemptCount > deps.settings.maxAttempts) {
         if (await deps.repository.finish(item, { status: 'FAILED', error: 'MAX_ATTEMPTS_EXCEEDED' }, now)) result.failed++;
         continue;
@@ -55,9 +73,16 @@ export function createEmailWorker(deps: WorkerDependencies) {
       try {
         const rendered = item.templateKey === 'PASSWORD_RESET_REQUESTED'
           ? await deps.renderPasswordResetEmail(item, now)
-          : renderEmail(item.templateKey, item.payload);
+          : item.templateKey === 'EMAIL_VERIFICATION_CODE'
+            ? await deps.renderEmailVerificationCode?.(item, now)
+          : item.templateKey === 'UPCOMING_EVENT_REMINDER'
+            ? await deps.renderUpcomingEventReminder(item, now)
+            : renderEmail(item.templateKey, item.payload);
         if (!rendered) {
-          if (await deps.repository.finish(item, { status: 'FAILED', error: 'RESET_TOKEN_UNAVAILABLE' }, now)) result.failed++;
+          const error = item.templateKey === 'UPCOMING_EVENT_REMINDER'
+            ? 'REMINDER_NO_LONGER_APPLICABLE'
+            : item.templateKey === 'EMAIL_VERIFICATION_CODE' ? 'VERIFICATION_CODE_UNAVAILABLE' : 'RESET_TOKEN_UNAVAILABLE';
+          if (await deps.repository.finish(item, { status: 'FAILED', error }, now)) result.failed++;
           continue;
         }
         const response = await transport.sendMail({
@@ -130,9 +155,11 @@ const transport = smtp ? nodemailer.createTransport({
 }) as MailTransport : undefined;
 
 export const emailWorker = createEmailWorker({
+  renderEmailVerificationCode: emailVerificationService.renderCode,
   repository: emailOutboxRepository,
   transport,
   settings: environment.email.worker,
   from: smtp?.from ?? { name: 'LA Chef Event Catering Services', address: 'disabled@invalid.local' },
   renderPasswordResetEmail,
+  renderUpcomingEventReminder,
 });

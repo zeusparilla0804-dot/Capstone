@@ -1,59 +1,137 @@
-<main class="admin-login">
-  <section class="admin-auth-shell">
-    <aside class="admin-brand">
-      <a href="/" aria-label="Return to LA Chef home"
-        ><img src="assets/brand/la-chef-logo.jpg" alt="LA Chef Event Catering Services"
-      /></a>
-      <div>
-        <p>LA Chef operations</p>
-        <h1>Every celebration, coordinated with care.</h1>
-        <span
-          >Review reservations, manage packages, confirm payments, and keep the service team
-          aligned.</span
-        >
-      </div>
-      <small>Authorized personnel only</small>
+<main class="admin-login admin-auth-layout">
+  <section class="admin-auth-shell admin-auth-shell--login admin-auth-layout__shell">
+    <aside
+      class="admin-brand admin-auth-layout__brand"
+      aria-label="La Chef Event Catering Services"
+    >
+      <img
+        class="admin-brand__logo admin-auth-layout__logo"
+        src="assets/brand/la-chef-admin-branding.jpeg"
+        width="509"
+        height="494"
+        alt="La Chef Event Catering Services — Thoughtful Food. Warm Celebrations."
+      />
     </aside>
-    <section class="admin-form-panel" aria-labelledby="admin-login-title">
-      <div class="admin-mobile-logo"><img src="assets/brand/la-chef-logo.jpg" alt="" /></div>
-      <p class="page-kicker">Administration</p>
-      <h2 id="admin-login-title">Welcome back</h2>
-      <p>Sign in to manage LA Chef operations.</p>
-      <form [formGroup]="form" (ngSubmit)="submit()" autocomplete="off">
+
+    <section class="admin-form-panel admin-auth-layout__panel" aria-labelledby="admin-login-title">
+      <p class="admin-login__eyebrow">Administration</p>
+      <h1 id="admin-login-title">Welcome</h1>
+      <p>Sign in to manage La Chef operations.</p>
+
+      @if (recoveryCodes().length) {
+        <section class="mfa-panel" aria-labelledby="recovery-title">
+          <h2 id="recovery-title">Save your backup codes</h2>
+          <p>Each code works once. Store them somewhere safe and separate from your phone. They will not be shown again.</p>
+          <ul class="recovery-list">@for (code of recoveryCodes(); track code) { <li><code>{{ code }}</code></li> }</ul>
+          <button class="admin-submit" type="button" (click)="finishSetup()">I saved these codes</button>
+        </section>
+      } @else if (challenge(); as pending) {
+        <form class="mfa-panel" (ngSubmit)="verifyCode()" autocomplete="off">
+          @if (pending.setupSecret) {
+            <h2>Set up your authenticator</h2>
+            <p>Add an account in your authenticator app using this setup key. Then enter the current 6-digit code.</p>
+            <code class="setup-secret">{{ pending.setupSecret }}</code>
+          } @else {
+            <h2>Enter your verification code</h2>
+            <p>Use the 6-digit code from your authenticator app, or one of your saved backup codes.</p>
+          }
+          <div class="form-field">
+            <label for="adminMfaCode">Authenticator or backup code</label>
+            <input id="adminMfaCode" name="admin-mfa-code" [formControl]="code" autocomplete="one-time-code" inputmode="numeric" maxlength="20" [attr.aria-invalid]="code.touched && code.invalid ? 'true' : null" />
+            @if (code.touched && code.invalid) { <p class="field-error">Enter a 6-digit code or 20-character backup code.</p> }
+          </div>
+          @if (error()) { <p class="admin-error" role="alert">{{ error() }}</p> }
+          <button class="admin-submit" type="submit" [disabled]="busy()">{{ busy() ? 'Verifying...' : 'Verify and sign in' }}</button>
+          <button class="mfa-back" type="button" (click)="restart()">Start over</button>
+        </form>
+      } @else {
+      <form [formGroup]="form" (ngSubmit)="submit()" autocomplete="on">
         <div class="form-field">
-          <label for="identity">Email or username</label
-          ><input
-            id="identity"
-            formControlName="identity"
-            autocomplete="off"
-            placeholder="Enter email or username"
-          />
+          <label for="identity">Email or username</label>
+          <div class="admin-input">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3.75 6.5h16.5v11H3.75zM4.25 7 12 13l7.75-6" />
+            </svg>
+            <input
+              id="identity"
+              name="admin-identity"
+              formControlName="identity"
+              placeholder="you@example.com"
+              autocomplete="username"
+              [attr.aria-invalid]="
+                form.controls.identity.touched && form.controls.identity.invalid ? 'true' : null
+              "
+              [attr.aria-describedby]="
+                form.controls.identity.touched && form.controls.identity.invalid
+                  ? 'identity-error'
+                  : null
+              "
+            />
+          </div>
+          @if (form.controls.identity.touched && form.controls.identity.invalid) {
+            <p class="field-error" id="identity-error">Enter your email or username.</p>
+          }
         </div>
+
         <div class="form-field">
           <label for="adminPassword">Password</label>
           <div class="password-field">
+            <svg class="password-field__lock" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10V7.5a5 5 0 0 1 10 0V10M5 10h14v10H5z" />
+            </svg>
             <input
               id="adminPassword"
+              appAsteriskPassword
+              name="admin-password"
               [type]="showPassword() ? 'text' : 'password'"
               formControlName="password"
-              autocomplete="off"
-            /><button type="button" (click)="showPassword.set(!showPassword())">
-              {{ showPassword() ? 'Hide' : 'Show' }}
+              placeholder="Enter your password"
+              autocomplete="current-password"
+              [attr.aria-invalid]="
+                form.controls.password.touched && form.controls.password.invalid ? 'true' : null
+              "
+              [attr.aria-describedby]="
+                form.controls.password.touched && form.controls.password.invalid
+                  ? 'password-error'
+                  : null
+              "
+            />
+            <button
+              class="password-field__toggle"
+              type="button"
+              [attr.aria-label]="showPassword() ? 'Hide password' : 'Show password'"
+              (click)="showPassword.set(!showPassword())"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                @if (showPassword()) {
+                  <path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z" />
+                  <circle cx="12" cy="12" r="2.5" />
+                } @else {
+                  <path
+                    d="M3 3l18 18M10.6 7.1A10.7 10.7 0 0 1 12 7c6 0 9.5 5 9.5 5a15 15 0 0 1-2.2 2.5M15.5 16.4A9.6 9.6 0 0 1 12 17c-6 0-9.5-5-9.5-5a16 16 0 0 1 3.1-3.4M9.9 9.9a3 3 0 0 0 4.2 4.2"
+                  />
+                }
+              </svg>
             </button>
           </div>
+          @if (form.controls.password.touched && form.controls.password.invalid) {
+            <p class="field-error" id="password-error">Enter your password.</p>
+          }
           <a class="password-assist" routerLink="/admin/forgot-password">Forgot password?</a>
         </div>
+
         @if (error()) {
           <p class="admin-error" role="alert">{{ error() }}</p>
         }
-        <button class="btn btn-primary" type="submit" [disabled]="busy()">
-          {{ busy() ? 'Signing in...' : 'Sign in to dashboard' }}
+
+        <button class="admin-submit" type="submit" [disabled]="busy()">
+          {{ busy() ? 'Signing in...' : 'Sign in' }}
         </button>
       </form>
-      <div class="admin-help">
-        <span>Having trouble signing in?</span><a href="mailto:hello@lachef.ph">Contact support</a>
-      </div>
-      <a class="back-link" href="/">&larr; Back to customer site</a>
+      }
+
+      <div class="admin-divider" aria-hidden="true"><span>or</span></div>
+      <a class="admin-customer-link" routerLink="/">Back to customer site</a>
     </section>
   </section>
 </main>

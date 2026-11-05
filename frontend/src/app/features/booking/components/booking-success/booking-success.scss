@@ -1,0 +1,13 @@
+:host { display: contents; }
+
+:host ::ng-deep app-success-dialog {
+  .success-dialog__panel { font-family: 'Inter', var(--font-sans); }
+  h2 { font-size: clamp(28px, 4vw, 32px); font-weight: 500; line-height: 1.2; }
+  .success-dialog__message { font-size: 15px; font-weight: 400; line-height: 1.6; }
+  .success-dialog__status { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+  .success-dialog__detail { margin-top: 20px; }
+  .success-dialog__detail dt { font-size: 13px; font-weight: 400; }
+  .success-dialog__detail dd { font-size: 16px; font-weight: 500; line-height: 1.5; letter-spacing: 0.02em; }
+  .success-dialog__actions { margin-top: 22px; }
+  .success-dialog__actions .btn { font-family: inherit; font-size: 14px; font-weight: 500; }
+}

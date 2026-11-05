@@ -54,6 +54,25 @@ describe('AdminPackagesPage pricing editor', () => {
     expect(component.form.controls.excessGuestPrice.value).toBeNull();
   });
 
+  it('keeps the create opener out of an active editor and restores it after cancel', () => {
+    const fixture = TestBed.createComponent(AdminPackagesPage);
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('button[admin-actions]').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[admin-actions]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.package-editor button[type="submit"]')).not.toBeNull();
+
+    fixture.nativeElement.querySelector('.form-actions button[type="button"]').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.package-editor')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button[admin-actions]')).not.toBeNull();
+
+    fixture.nativeElement.querySelector('.row-actions button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('button[admin-actions]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('input[formControlName="name"]').value).toBe('PHP 480');
+  });
+
   it('accepts optional guest bounds and submits only the active pricing model', () => {
     const component = TestBed.createComponent(AdminPackagesPage).componentInstance as any;
     component.create();
@@ -77,6 +96,15 @@ describe('AdminPackagesPage pricing editor', () => {
     expect(text).toContain('PHP 85,888 includes 50 guests + PHP 650 each additional guest');
     expect(text).toContain('Not set');
     expect(text).not.toContain('null-null');
+  });
+
+  it('renders package and add-on navigation as one compact tab group', () => {
+    const fixture = TestBed.createComponent(AdminPackagesPage);
+    fixture.detectChanges();
+    const tabs = fixture.nativeElement.querySelector('nav[aria-label="Packages and menu sections"]');
+
+    expect(tabs?.classList.contains('admin-section-tabs')).toBe(true);
+    expect(tabs?.querySelectorAll('a')).toHaveLength(2);
   });
 
   it('locks duplicate saves while pending and shows the backend error reason', () => {

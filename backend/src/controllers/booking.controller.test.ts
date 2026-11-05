@@ -10,7 +10,7 @@ process.env.DB_DATABASE ??= 'test';
 process.env.DB_USER ??= 'test';
 process.env.DB_PASSWORD ??= 'test';
 
-const [{ availability, parseAvailabilityQuery, parseBooking, parsePendingBookingUpdate, updateDetails }, { bookingService }] = await Promise.all([
+const [{ availability, create, parseAvailabilityQuery, parseBooking, parsePendingBookingUpdate, updateDetails }, { bookingService }] = await Promise.all([
   import('./booking.controller.js'),
   import('../services/booking.service.js'),
 ]);
@@ -25,6 +25,58 @@ const validBookingBody = {
   addOnIds: [4, 7],
   paymentMethod: 'cash',
 };
+
+test('booking create accepts only an optional UUIDv4 Idempotency-Key header and forwards the normalized key', async t => {
+  const calls: unknown[][] = [];
+  t.mock.method(bookingService, 'create', async (...args: unknown[]) => { calls.push(args); return {} as never; });
+  const response = { status() { return this; }, json() { return this; } } as unknown as Response;
+  const key = 'D845E41F-9D9F-4A79-B77E-E840E66154CD';
+  let forwarded: unknown;
+  await create({ customer: { id: 7 }, headers: { 'idempotency-key': key }, body: { ...validBookingBody, submissionKey: 'ignored-body-key' } } as unknown as Request,
+    response, ((error?: unknown) => { forwarded = error; }) as NextFunction);
+  assert.equal(forwarded, undefined); assert.equal((calls[0]![1] as { submissionKey?: string }).submissionKey, key.toLowerCase());
+  for (const value of ['', 'invalid', ['d845e41f-9d9f-4a79-b77e-e840e66154cd'], 'd845e41f-9d9f-1a79-b77e-e840e66154cd']) {
+    forwarded = undefined;
+    await create({ customer: { id: 7 }, headers: { 'idempotency-key': value }, body: validBookingBody } as unknown as Request,
+      response, ((error?: unknown) => { forwarded = error; }) as NextFunction);
+    assert.ok(forwarded instanceof Error && 'statusCode' in forwarded && forwarded.statusCode === 400);
+  }
+  assert.equal(calls.length, 1);
+  await create({ customer: { id: 7 }, headers: {}, body: validBookingBody } as unknown as Request,
+    response, ((error?: unknown) => { forwarded = error; }) as NextFunction);
+  assert.equal((calls[1]![1] as { submissionKey?: string }).submissionKey, undefined);
+});
+
+test('keyed replay parsing defers time-dependent booking restrictions to the transaction', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2098-06-15T00:00:00Z') });
+  let captured: unknown;
+  t.mock.method(bookingService, 'create', async (_customerId: number, dto: unknown) => { captured = dto; return {} as never; });
+  let forwarded: unknown;
+  await create({ customer: { id: 7 }, headers: { 'idempotency-key': 'd845e41f-9d9f-4a79-b77e-e840e66154cd' }, body: validBookingBody } as unknown as Request,
+    { status() { return this; }, json() { return this; } } as unknown as Response,
+    ((error?: unknown) => { forwarded = error; }) as NextFunction);
+  assert.equal(forwarded, undefined); assert.equal((captured as { eventDate: string }).eventDate, validBookingBody.eventDate);
+});
+
+test('parses only positive integer quantities for selected add-ons', () => {
+  assert.deepEqual(parseBooking({ ...validBookingBody, addOnQuantities: { '4': 2 } }).addOnQuantities, { '4': 2 });
+  for (const addOnQuantities of [[], null, { '4': 0 }, { '4': 1.5 }, { '4': '2' }, { '9': 2 }]) {
+    assert.throws(() => parseBooking({ ...validBookingBody, addOnQuantities }), /quantit|selected/i);
+  }
+});
+
+test('customer booking and availability accept only whole guest counts from 1 to 1500', () => {
+  for (const guestCount of [1, 1500]) {
+    assert.equal(parseBooking({ ...validBookingBody, guestCount }).guestCount, guestCount);
+    assert.equal(parseAvailabilityQuery({ date: '2098-06-15', guestCount: String(guestCount) }).guestCount, guestCount);
+  }
+  for (const guestCount of [0, -1, 1.5, 1501, 10000, NaN, Infinity]) {
+    const invalid = (error: unknown) => error instanceof Error && 'statusCode' in error && error.statusCode === 400;
+    assert.throws(() => parseBooking({ ...validBookingBody, guestCount }), invalid);
+    assert.throws(() => parsePendingBookingUpdate({ ...validBookingBody, guestCount }), invalid);
+    assert.throws(() => parseAvailabilityQuery({ date: '2098-06-15', guestCount: String(guestCount) }), invalid);
+  }
+});
 
 test('booking input preserves a trimmed optional special request', () => {
   assert.deepEqual(parseBooking({ ...validBookingBody, specialRequest: '  Vegetarian table for six.  ' }), {
@@ -103,7 +155,7 @@ test('availability parses a future ISO date and integer guest count before dispa
   );
 
   assert.equal(forwarded, undefined);
-  assert.deepEqual(calls, [['2098-06-15', 150]]);
+  assert.deepEqual(calls, [['2098-06-15', 150, 7, undefined]]);
   assert.deepEqual(responseBody, { success: true, data: expected });
 });
 
@@ -138,3 +190,28 @@ test('booking routes expose owner-only pending details updates', () => {
   const source = readFileSync(new URL('../routes/booking.routes.ts', import.meta.url), 'utf8');
   assert.match(source, /\.patch\('\/:id\/details',\s*updateDetails\)/);
 });
+
+ test('booking and availability enforce three Manila calendar days, including month rollover', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T15:59:59Z') });
+  for (const eventDate of ['2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31']) {
+    assert.throws(() => parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate }), /at least 3 days/);
+    assert.throws(() => parseAvailabilityQuery({ date: eventDate, guestCount: '100' }), /at least 3 days/);
+  }
+  assert.equal(parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-11-01' }).eventDate, '2026-11-01');
+  assert.throws(() => parsePendingBookingUpdate({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-10-31' }), /at least 3 days/);
+ });
+ test('cash submissions need only three or five preparation days before office closing', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T04:00:00Z') });
+  for (const [guestCount, earliest, earlier] of [[499,'2026-11-01','2026-10-31'],[500,'2026-11-03','2026-11-02']]) {
+    assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
+    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /cash|at least 3 days/i);
+  }
+ });
+
+ test('cash submission cutoff advances one day at 6 PM Philippine time', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T10:00:00Z') });
+  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[500,'2026-11-04','2026-11-03']]) {
+    assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
+    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /cash/i);
+  }
+ });

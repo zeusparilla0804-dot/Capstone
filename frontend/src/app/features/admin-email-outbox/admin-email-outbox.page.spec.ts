@@ -17,7 +17,7 @@ describe('AdminEmailOutboxPage', () => {
       retryEmail: vi.fn(() => retryResult.asObservable()),
       emailPreview: vi.fn(() => of({ success: true, data: { subject: 'Booking approved | LA Chef', text: 'Preview body', html: '<p>Preview body</p>' } }))
     };
-    await TestBed.configureTestingModule({ imports: [AdminEmailOutboxPage], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [AdminEmailOutboxPage], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
     fixture = TestBed.createComponent(AdminEmailOutboxPage);
     fixture.detectChanges();
   });

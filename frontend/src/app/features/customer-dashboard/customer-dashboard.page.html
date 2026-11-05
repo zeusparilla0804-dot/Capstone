@@ -1,22 +1,20 @@
 <main class="dashboard-layout portal-surface">
-  <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
+  <app-dashboard-sidebar appearance="editorial" [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
 
   <section class="dashboard-content">
     <div class="dashboard-container">
       <header class="dashboard-header">
         <div>
-          <p class="page-kicker">Customer portal</p>
-          <h1>Welcome back, {{ firstName() }}</h1>
-          <p>Track your next reservation, review status, and payment in one place.</p>
+          <h1>Welcome, {{ firstName() }}</h1>
+          <p>Good food brings people together. Here is an overview of your events and account.</p>
         </div>
+        <svg class="dashboard-header__ornament" viewBox="0 0 320 180" aria-hidden="true">
+          <path d="M32 168C111 127 178 78 281 10M115 119c-25-42-12-75 27-101 18 48 7 81-27 101Zm60-43c-5-35 14-59 51-70 5 37-12 59-51 70Zm-97 72c-39-17-68-8-78 20 39 18 67 11 78-20Zm75-32c38-9 66 2 84 34-42 9-69-2-84-34Z" />
+        </svg>
         <div class="dashboard-header__actions">
-          @if (badgeState.customerBookingCount() > 0) {
-            <a class="booking-alert" routerLink="/my-bookings" [attr.aria-label]="badgeState.customerBookingCount() + ' current reservations'">
-              <span aria-hidden="true">{{ badgeState.customerBookingCount() }}</span>
-              Current reservations
-            </a>
-          }
-          <a class="btn btn-primary" routerLink="/book-event">Plan another event</a>
+          <a class="btn btn-primary dashboard-header__cta" routerLink="/book-event" [queryParams]="{ new: 1 }">
+            <span>Plan an Event</span>
+          </a>
         </div>
       </header>
 
@@ -29,40 +27,66 @@
         </p>
       } @else if (nextBooking(); as next) {
         <section class="next-event" aria-labelledby="next-event-title">
-          <div class="section-heading">
-            <div><p class="section-label">Your next event</p><h2 id="next-event-title">{{ next.eventName }}</h2></div>
-            <app-status-badge [status]="next.status" />
+          <div class="section-heading next-event__heading">
+            <h2 id="next-event-title">Your Next Event</h2>
           </div>
 
-          <div class="next-event__content">
+          <div class="next-event__feature">
             <img [src]="next.thumbnailUrl" [alt]="next.eventName + ' catering setup'" />
-            <dl>
-              <div><dt>Event date</dt><dd>{{ formatEventDate(next.eventDate) }}<span>{{ next.eventTime }}</span></dd></div>
-              <div><dt>Venue</dt><dd>{{ next.venue }}</dd></div>
-              <div><dt>Guest estimate</dt><dd>{{ next.guestCount }} guests</dd></div>
-              <div><dt>Package</dt><dd>{{ next.package.packageName }}</dd></div>
-            </dl>
-            <a class="btn btn-primary" routerLink="/my-bookings">View reservation</a>
+            <article class="next-event__card">
+              <div class="next-event__card-header">
+                <h3>{{ next.eventName }}</h3>
+              </div>
+              <dl>
+                <div>
+                  <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" /></svg>
+                  <div><dt>Date</dt><dd>{{ formatEventDate(next.eventDate) }}<span>{{ next.eventTime }}</span></dd></div>
+                </div>
+                <div>
+                  <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
+                  <div><dt>Venue</dt><dd>{{ next.venue }}</dd></div>
+                </div>
+                <div>
+                  <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 1a3 3 0 1 0 0-6M2 21a7 7 0 0 1 14 0m1-6a5 5 0 0 1 5 5" /></svg>
+                  <div><dt>Guests</dt><dd>{{ next.guestCount }} Guests<span>Full-Service Catering</span></dd></div>
+                </div>
+                <div>
+                  <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6V3Zm9 0v5h4M9 13h7m-7 4h7" /></svg>
+                  <div><dt>Package</dt><dd>{{ next.package.packageName }}</dd></div>
+                </div>
+              </dl>
+            </article>
           </div>
         </section>
 
         <section class="planning" aria-labelledby="planning-title">
           <div class="section-heading">
-            <div><p class="section-label">Event journey</p><h2 id="planning-title">Reservation progress</h2></div>
-            <span>Reservation {{ next.reference }}</span>
+            <h2 id="planning-title">Reservation Progress</h2>
           </div>
           <ol class="planning-steps">
             <li class="planning-step" data-step="details" [class.is-complete]="isStepComplete(1)" [class.is-current]="isCurrentStep(1)" [attr.aria-current]="isCurrentStep(1) ? 'step' : null">
-              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(1) ? 'OK' : '1' }}</span>
-              <div><strong>Event details</strong><span>{{ isStepComplete(1) ? 'Submitted' : 'Needs attention' }}</span></div>
+              <span class="planning-step__marker" aria-hidden="true">
+                @if (isStepComplete(1)) {
+                  <span class="planning-step__status">OK</span>
+                } @else { 1 }
+              </span>
+              <div class="planning-step__content"><strong>Event details</strong><span>{{ isStepComplete(1) ? 'Submitted' : 'Needs attention' }}</span></div>
             </li>
             <li class="planning-step" data-step="review" [class.is-complete]="isStepComplete(2)" [class.is-current]="isCurrentStep(2)" [attr.aria-current]="isCurrentStep(2) ? 'step' : null">
-              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(2) ? 'OK' : '2' }}</span>
-              <div><strong>Reservation review</strong><span>{{ isStepComplete(2) ? 'Approved' : isCurrentStep(2) ? 'Under review' : 'Waiting' }}</span></div>
+              <span class="planning-step__marker" aria-hidden="true">
+                @if (isStepComplete(2)) {
+                  <span class="planning-step__status">OK</span>
+                } @else { 2 }
+              </span>
+              <div class="planning-step__content"><strong>Reservation review</strong><span>{{ isStepComplete(2) ? 'Approved' : isCurrentStep(2) ? 'Under review' : 'Waiting' }}</span></div>
             </li>
             <li class="planning-step" data-step="payment" [class.is-complete]="isStepComplete(3)" [class.is-current]="isCurrentStep(3)" [attr.aria-current]="isCurrentStep(3) ? 'step' : null">
-              <span class="planning-step__marker" aria-hidden="true">{{ isStepComplete(3) ? 'OK' : '3' }}</span>
-              <div><strong>Payment</strong><span>{{ isStepComplete(3) ? 'Confirmed' : isCurrentStep(3) ? 'In progress' : 'Waiting' }}</span></div>
+              <span class="planning-step__marker" aria-hidden="true">
+                @if (isStepComplete(3)) {
+                  <span class="planning-step__status">OK</span>
+                } @else { 3 }
+              </span>
+              <div class="planning-step__content"><strong>Payment</strong><span>{{ isStepComplete(3) ? 'Verified' : isCurrentStep(3) ? 'In progress' : 'Waiting' }}</span></div>
             </li>
           </ol>
         </section>
@@ -70,20 +94,19 @@
         <div class="dashboard-lower-grid">
           <section class="upcoming" aria-labelledby="upcoming-title">
             <div class="section-heading">
-              <div><p class="section-label">Schedule</p><h2 id="upcoming-title">Upcoming reservations</h2></div>
-              <a routerLink="/my-bookings">View all <span aria-hidden="true">&rarr;</span></a>
+              <h2 id="upcoming-title">Upcoming Reservations</h2>
             </div>
             <div class="booking-table" role="table" aria-label="Upcoming reservations">
               <div class="booking-table__head" role="row">
-                <span role="columnheader">Date</span><span role="columnheader">Event</span><span role="columnheader">Guests</span><span role="columnheader">Status</span><span role="columnheader">Action</span>
+                <span role="columnheader">Date</span><span role="columnheader">Event</span><span role="columnheader">Venue</span><span role="columnheader">Guests</span><span role="columnheader">Status</span>
               </div>
               @for (booking of upcomingBookings(); track booking.id) {
                 <div class="booking-table__row" role="row">
                   <span role="cell" data-label="Date">{{ formatEventDate(booking.eventDate) }}</span>
-                  <span role="cell" data-label="Event"><strong>{{ booking.eventName }}</strong><small>{{ booking.venue }}</small></span>
+                  <span role="cell" data-label="Event"><strong>{{ booking.eventName }}</strong></span>
+                  <span role="cell" data-label="Venue">{{ booking.venue }}</span>
                   <span role="cell" data-label="Guests">{{ booking.guestCount }}</span>
-                  <span role="cell" data-label="Status"><app-status-badge [status]="booking.status" /></span>
-                  <span role="cell" data-label="Action"><a routerLink="/my-bookings">View <span aria-hidden="true">&rarr;</span></a></span>
+                  <span role="cell" data-label="Status"><app-status-badge [status]="paymentStatus(booking)" /></span>
                 </div>
               }
             </div>
@@ -91,15 +114,16 @@
 
           @if (paymentSummary(); as payment) {
             <aside class="billing-summary" aria-labelledby="billing-title">
-              <div class="section-heading"><div><p class="section-label">Account</p><h2 id="billing-title">Billing summary</h2></div></div>
+              <div class="section-heading"><h2 id="billing-title">Billing Summary</h2></div>
               <p>{{ payment.eventName }}</p>
               <dl>
                 <div><dt>Reservation total</dt><dd>{{ formatCurrency(payment.total) }}</dd></div>
                 <div><dt>Amount paid</dt><dd>{{ formatCurrency(payment.paid) }}</dd></div>
                 <div class="billing-summary__balance"><dt>Outstanding balance</dt><dd>{{ formatCurrency(payment.balance) }}</dd></div>
               </dl>
-              @if (payment.invoiceId) { <a class="btn btn-primary" [routerLink]="['/invoice', payment.invoiceId]">View billing details</a> }
-              @else { <a class="btn btn-secondary" routerLink="/billing">View billing</a> }
+              <a class="btn btn-primary billing-summary__action" routerLink="/billing">
+                <span>View Billing &amp; Payments</span>
+              </a>
             </aside>
           }
         </div>
@@ -108,7 +132,6 @@
           <p class="section-label">Your first celebration</p>
           <h2>No reservations yet</h2>
           <p>Plan an event to start tracking its reservation details, review, and payment here.</p>
-          <a class="btn btn-primary" routerLink="/book-event">Plan an event</a>
         </section>
       }
     </div>

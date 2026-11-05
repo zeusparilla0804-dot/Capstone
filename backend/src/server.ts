@@ -9,6 +9,7 @@ import {
   connectDatabase
 } from './config/database.js';
 import { emailWorker } from './services/email-worker.service.js';
+import { eventReminderWorker } from './services/event-reminder.service.js';
 import { sessionCleanupWorker } from './services/auth.service.js';
 
 let server: ReturnType<typeof app.listen> | undefined;
@@ -17,6 +18,7 @@ async function bootstrap(): Promise<void> {
   try {
     await connectDatabase();
     sessionCleanupWorker.start();
+    eventReminderWorker.start();
     emailWorker.start();
 
     server = app.listen(environment.port, () => {
@@ -39,6 +41,7 @@ async function shutdown(signal: string): Promise<void> {
     if (server) {
       await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
     }
+    await eventReminderWorker.stop();
     await emailWorker.stop();
     await sessionCleanupWorker.stop();
     await closeDatabase();

@@ -6,6 +6,24 @@ This reference was transcribed from two promotional materials supplied by LA Che
 
 The promotional artwork remains source material. This file records business data without embedding personal or unrelated document content.
 
+The client also supplied a [public Google Drive folder of original event photos](https://drive.google.com/drive/folders/1qX39SoDi-sZ6-G2Pd_hC7GOrbGpzlAgD). The current website import was captured on October 17, 2026. The folder is still being completed by the client, so this is a provisional media inventory rather than the final gallery set.
+
+## Client Photo Inventory
+
+The website stores local copies of the supplied photos so package galleries do not depend on Google Drive availability or sharing permissions at runtime.
+
+| Website category | Client source folder | Imported photos |
+| --- | --- | ---: |
+| Wedding | Wedding, including its nested folder | 19 |
+| Debut | Debut, including its nested folders | 29 |
+| Birthday | Kids Birthday, including `7th Birthday` | 13 |
+| Corporate | Business Forum and Team Building | 10 |
+
+- Total current import: 71 original JPEG files.
+- Anniversary, Standard Catering, and Custom Event galleries continue to use the existing placeholders until matching client photos are supplied.
+- The same category gallery is shared by packages in that category. Per-package photo assignment can be added later if LA Chef identifies which images belong to each specific offer.
+- New client photos should be appended to the matching local category folder and gallery mapping after their event category is confirmed.
+
 ## Standard Catering Packages
 
 ### PHP 480 Per Head
@@ -159,8 +177,9 @@ The calculation service must snapshot all applicable values on the reservation. 
 - **Pending:** Confirm whether add-ons are available for every event type.
 - **Pending:** Confirm whether "host or magician" is one combined option or two separately priced options.
 - **Pending:** Confirm whether debut package prices include taxes, delivery, venue fees, or geographic restrictions.
-- **Pending:** Confirm the official Facebook/Messenger URL and preferred public contact details.
-- **Pending:** Obtain web-ready original photos and logo files rather than using compressed flyer crops.
+- **Confirmed from the supplied client materials:** Facebook/Messenger uses `https://www.facebook.com/share/1F8DnqJnB9/`; public contact details are Panorama Ville, Dita, Santa Rosa, Laguna; Smart `0939-298-7324`; Globe `0926-089-4301`; and Viber `0947-966-2352`.
+- **Partially complete:** Original event photos have been imported for Wedding, Debut, Kids Birthday, Business Forum, and Team Building. Matching photos are still pending for Anniversary, Standard Catering, and Custom Event packages, along with final confirmation that the shared Drive collection is complete.
+- **Pending:** Obtain the final official web-ready logo files.
 
 ## Controlled Catalog Sync
 

@@ -1,5 +1,24 @@
+@use '../../shared/styles/booking-approval';
+
+:host ::ng-deep app-admin-shell .admin-page-header .page-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+:host ::ng-deep app-admin-shell .admin-page-header h1 { font-size: 30px; font-weight: 600; }
+:host ::ng-deep app-admin-shell .admin-page-header p:last-child { font-size: 14px; font-weight: 400; }
+.admin-toolbar input, .admin-toolbar select { font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
+.admin-toolbar .btn { font-size: 13px; font-weight: 500; }
 .bookings-records .table-scroll { scrollbar-gutter: stable; }
+.admin-table--bookings th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
+.admin-table--bookings td { font-size: 13px; font-weight: 400; }
+.admin-table--bookings td[data-label='Reference'] strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.admin-table--bookings td:is([data-label='Customer'], [data-label='Event'], [data-label='Guests']) { font-weight: 500; }
+.admin-table--bookings td[data-label='Total'] { font-weight: 600; font-variant-numeric: tabular-nums; }
+.bookings-records ::ng-deep .status-badge { font-size: 11px; font-weight: 500; }
+.booking-row-actions__links .btn { font-size: 12px; font-weight: 500; }
+.admin-status-select { font-family: var(--font-admin); font-size: 12px; font-weight: 400; }
+.admin-status-unavailable { font-size: 11px; font-weight: 400; }
+.admin-pagination > span { font-size: 12px; font-weight: 400; }
+.admin-pagination .btn { font-size: 12px; font-weight: 500; }
 .admin-table--bookings { min-width: 1080px; table-layout: fixed; }
+.approval-progress { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--color-primary); font: 500 13px/1.5 var(--font-sans); }
 .admin-table--bookings th:nth-child(1) { width: 100px; }
 .admin-table--bookings th:nth-child(2) { width: 110px; }
 .admin-table--bookings th:nth-child(3) { width: 110px; }
@@ -9,11 +28,22 @@
 .admin-table--bookings th:nth-child(7) { width: 90px; }
 .admin-table--bookings th:nth-child(8) { width: 150px; }
 .admin-table--bookings th:nth-child(9) { width: 195px; }
+@media (min-width: 768px) {
+  .admin-table--bookings :is(th, td):nth-child(7) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .admin-table--bookings :is(th, td):nth-child(8) { text-align: center; }
+  .admin-table--bookings td:nth-child(8) app-status-badge {
+    --status-badge-width: 120px;
+  }
+}
 .admin-status-select { width: 100%; min-width: 142px; max-width: 100%; min-height: 44px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; padding: 8px 10px; }
 .admin-status-unavailable { color: var(--color-text-muted); }
 .booking-row-actions { display: grid; justify-items: start; gap: 8px; }
 .booking-row-actions__links { display: flex; flex-wrap: wrap; gap: 8px 14px; }
-.capacity-meta { display: block; min-width: 0; margin-top: 4px; color: var(--color-text-muted); font-size: .75rem; line-height: 1.4; }
+.capacity-meta { display: block; min-width: 0; margin-top: 4px; color: var(--color-text-muted); font-size: 11px; font-weight: 400; line-height: 1.4; }
 .admin-status-reason-row { background: #faf9f6; }
 .admin-status-reason { display: grid; gap: 10px; width: min(100%, 440px); }
 .admin-status-reason label { font-size: .82rem; font-weight: 700; }

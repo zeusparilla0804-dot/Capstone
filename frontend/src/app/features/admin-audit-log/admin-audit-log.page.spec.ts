@@ -11,7 +11,7 @@ describe('AdminAuditLogPage', () => {
   let api: { auditLog: ReturnType<typeof vi.fn> };
   beforeEach(async () => {
     api = { auditLog: vi.fn(() => of({ success: true, data: { items: [{ id: '91', adminId: 2, adminUsername: 'admin', action: 'BOOKING_STATUS_CHANGED', entityType: 'BOOKING', entityId: 42, oldValues: { status: 'PENDING' }, newValues: { status: 'APPROVED' }, createdAt: '2026-10-02' }], page: 1, pageSize: 20, totalItems: 1, totalPages: 1 } })) };
-    await TestBed.configureTestingModule({ imports: [AdminAuditLogPage], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
+    await TestBed.configureTestingModule({ imports: [AdminAuditLogPage], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
     fixture = TestBed.createComponent(AdminAuditLogPage); fixture.detectChanges();
   });
 

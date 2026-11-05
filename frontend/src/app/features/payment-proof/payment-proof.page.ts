@@ -1,3 +1,5 @@
+import { hasCashPaymentAction, hasOnlinePaymentAction } from '../../core/utils/customer-payment-status';
+import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
@@ -6,15 +8,18 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MAX_PAYMENT_PROOF_BYTES, PaymentProof, PaymentProofMethod, PaymentProofSubmission } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { BookingCalculationService } from '../../core/services/booking-calculation.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PaymentProofService } from '../../core/services/payment-proof.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
+import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 import { customerNavItems } from '../../shared/navigation/customer-navigation';
+import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
 
 @Component({
   selector: 'app-payment-proof-page',
-  imports: [CurrencyPipe, DatePipe, DashboardSidebarComponent, ReactiveFormsModule, RouterLink],
+  imports: [PaymentMethodLabelPipe, CurrencyPipe, DatePipe, DashboardSidebarComponent, ReactiveFormsModule, RouterLink, SuccessDialogComponent],
   templateUrl: './payment-proof.page.html',
   styleUrl: './payment-proof.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,16 +30,31 @@ export class PaymentProofPageComponent {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
   protected readonly bookingService = inject(BookingService);
+  private readonly calculationService = inject(BookingCalculationService);
   private readonly proofService = inject(PaymentProofService);
   private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly bookingId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly booking = computed(() => this.bookingService.bookings().find(item => item.id === this.bookingId));
-  protected readonly eligible = computed(() => ['awaiting_payment', 'payment_submitted'].includes(this.booking()?.status ?? ''));
-  protected readonly estimatedTotal = computed(() => {
+  protected readonly cashPayment = computed(() => this.booking()?.paymentMethod === 'cash');
+  protected readonly cashDeadline = computed(() => {
     const item = this.booking();
-    return item ? item.package.packageTotal + item.addOns.reduce((sum, addOn) => sum + addOn.price, 0) - item.discount : 0;
+    return item?.paymentMethod === 'cash' ? cashDepositDeadline(item.eventDate, item.guestCount) : null;
   });
+  protected get cashDepositOverdue(): boolean {
+    const deadline = this.cashDeadline();
+    return !!deadline && this.remainingDeposit() > 0 && Date.now() > new Date(deadline.at).getTime();
+  }
+  protected readonly cashInstructionsAvailable = computed(() => !!this.booking() && hasCashPaymentAction(this.booking()!));
+  protected readonly eligible = computed(() => !!this.booking() && hasOnlinePaymentAction(this.booking()!));
+  private readonly totals = computed(() => {
+    const item = this.booking();
+    return item ? this.calculationService.calculateTotals(item) : null;
+  });
+  protected readonly estimatedTotal = computed(() => this.totals()?.total ?? 0);
+  protected readonly requiredDeposit = computed(() => this.totals()?.downPayment ?? 0);
+  protected readonly remainingDeposit = computed(() => Math.max(this.requiredDeposit() - (this.booking()?.amountPaid ?? 0), 0));
   protected readonly outstandingBalance = computed(() => Math.max(this.estimatedTotal() - (this.booking()?.amountPaid ?? 0), 0));
+  protected readonly paymentAmountChoice = signal<'deposit' | 'full' | 'custom'>('deposit');
   protected readonly proofs = signal<readonly PaymentProof[]>([]);
   protected readonly historyLoading = signal(true);
   protected readonly historyError = signal('');
@@ -51,13 +71,32 @@ export class PaymentProofPageComponent {
     paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
   });
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  private initializedBookingKey: string | null = null;
 
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
+    effect(() => {
+      const item = this.booking();
+      if (!item) return;
+      const key = `${item.id}:${item.paymentMethod ?? ''}`;
+      if (this.initializedBookingKey === key) return;
+      this.initializedBookingKey = key;
+      this.form.controls.method.setValue(item.paymentMethod === 'bank-transfer' ? 'BANK_TRANSFER' : item.paymentMethod === 'cash' ? 'CASH' : 'E_WALLET');
+      this.selectPaymentAmount(this.remainingDeposit() > 0 ? 'deposit' : 'full');
+    });
     if (!this.booking()) this.bookingService.loadMine();
     this.loadProofs();
-    if (this.booking()) this.form.controls.claimedAmount.setValue(this.outstandingBalance() || null);
     this.form.controls.method.valueChanges.subscribe(method => this.configureReference(method));
+  }
+
+  protected selectPaymentAmount(choice: 'deposit' | 'full'): void {
+    this.paymentAmountChoice.set(choice);
+    const amount = choice === 'deposit' ? this.remainingDeposit() : this.outstandingBalance();
+    this.form.controls.claimedAmount.setValue(amount || null);
+  }
+
+  protected useEnteredAmount(): void {
+    this.paymentAmountChoice.set('custom');
   }
 
   protected loadProofs(): void {
@@ -95,7 +134,7 @@ export class PaymentProofPageComponent {
   }
 
   protected submit(): void {
-    if (this.submitting() || !this.eligible()) return;
+    if (this.submitting() || !this.eligible() || this.form.controls.method.value === 'CASH') return;
     this.configureReference(this.form.controls.method.value);
     this.form.markAllAsTouched();
     const file = this.selectedFile();
@@ -135,6 +174,10 @@ export class PaymentProofPageComponent {
 
   protected fileSize(bytes: number): string {
     return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  protected dismissSuccess(): void {
+    this.successMessage.set('');
   }
 
   protected async handleNavAction(item: DashboardNavItem): Promise<void> {

@@ -5,6 +5,9 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import type { BookingAvailability, BookingDraft, BookingStatus, BookingTab, CateringPackage } from '../models';
 import { BookingService } from './booking.service';
+import { CustomerAccountScopeService } from './customer-account-scope.service';
+
+const submissionKey = '56df1d5f-10d0-463c-8035-143b1046643b';
 
 describe('BookingService cancellation', () => {
   let service: BookingService;
@@ -16,6 +19,90 @@ describe('BookingService cancellation', () => {
     http = TestBed.inject(HttpTestingController);
   });
   afterEach(() => http.verify());
+
+  it('retries an uncertain create with the same submission key and canonical request details', async () => {
+    const draft = { eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Venue',
+      guestCount: 50, selectedAddOnIds: [], paymentMethod: 'gcash' } as any;
+    const first = (service.submitDraft as any)(draft, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
+    const initial = http.expectOne(`${environment.apiBaseUrl}/bookings`);
+    expect(initial.request.headers.get('Idempotency-Key')).toBe(submissionKey);
+    initial.error(new ProgressEvent('error'));
+    await first;
+    const retry = (service.submitDraft as any)({ ...draft, venue: ' Venue ' }, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
+    const repeated = http.expectOne(`${environment.apiBaseUrl}/bookings`);
+    expect(repeated.request.headers.get('Idempotency-Key')).toBe(submissionKey);
+    repeated.flush({}, { status: 503, statusText: 'Unavailable' });
+    await retry;
+  });
+
+  it('blocks changed request details after an uncertain create instead of silently creating another booking', async () => {
+    const draft = { selectedAddOnIds: [], eventTime: '12:00', venue: 'Original venue' } as any;
+    const first = (service.submitDraft as any)(draft, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
+    http.expectOne(`${environment.apiBaseUrl}/bookings`).error(new ProgressEvent('error'));
+    await first;
+    await expect((service.submitDraft as any)({ ...draft, venue: 'Changed venue' }, { id: '1' }, [], submissionKey)).rejects.toThrow(/review your reservations/i);
+    http.expectNone(`${environment.apiBaseUrl}/bookings`);
+  });
+
+  it('allows corrected details after a definitive rejection without changing the submission key', async () => {
+    const draft = { selectedAddOnIds: [], eventTime: '12:00', venue: 'Original venue' } as any;
+    const first = (service.submitDraft as any)(draft, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
+    http.expectOne(`${environment.apiBaseUrl}/bookings`).flush({ code: 'BOOKING_DATE_FULL' }, { status: 409, statusText: 'Conflict' });
+    await first;
+    const corrected = (service.submitDraft as any)({ ...draft, venue: 'Changed venue' }, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings`);
+    expect(request.request.headers.get('Idempotency-Key')).toBe(submissionKey);
+    request.flush({}, { status: 400, statusText: 'Bad Request' });
+    await corrected;
+  });
+
+  it('clears cached bookings synchronously on account switch and cancels the prior account request', () => {
+    const scope = TestBed.inject(CustomerAccountScopeService);
+    scope.setPrincipal('A');
+    service.loadMine();
+    const oldRequest = http.expectOne(`${environment.apiBaseUrl}/bookings/my`);
+    scope.setPrincipal('B');
+    expect(oldRequest.cancelled).toBe(true);
+    expect(service.bookings()).toEqual([]);
+    expect(service.loading()).toBe(false);
+    service.loadMine();
+    http.expectOne(`${environment.apiBaseUrl}/bookings/my`).flush({}, { status: 503, statusText: 'Unavailable' });
+    expect(service.bookings()).toEqual([]);
+  });
+
+  it('does not return a prior-account booking detail response to its subscriber', async () => {
+    const scope = TestBed.inject(CustomerAccountScopeService);
+    scope.setPrincipal('A');
+    const pending = firstValueFrom(service.loadBookingById('27')).catch(error => error);
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings/27`);
+    scope.setPrincipal('B');
+    expect(request.cancelled).toBe(true);
+    expect(await pending).toBeInstanceOf(Error);
+    expect(service.bookings()).toEqual([]);
+  });
+
+  it('sends the pending reservation identifier for owner-scoped edit availability', () => {
+    (service.checkAvailability as any)('2098-06-15', 1000, '27').subscribe();
+    const request = http.expectOne(req => req.url.endsWith('/bookings/availability'));
+    expect(request.request.params.get('reservationId')).toBe('27');
+    request.flush({ success: true, data: {} });
+  });
+
+  it('rejects a payload that silently drops a selected add-on before making an HTTP request', async () => {
+    await expect(service.submitDraft({ selectedAddOnIds: ['5'], eventTime: '12:00' } as any, { id: '1' } as any, [], submissionKey)).rejects.toThrow(/add-ons/i);
+    http.expectNone(`${environment.apiBaseUrl}/bookings`);
+  });
+
+  it('discards a committed booking response when the account changes before its promise resumes', async () => {
+    const scope = TestBed.inject(CustomerAccountScopeService);
+    scope.setPrincipal('A');
+    const pending = service.submitDraft({ selectedAddOnIds: [], eventTime: '12:00' } as any, { id: '1' } as any, [], submissionKey);
+    const result = pending.catch(error => error);
+    http.expectOne(`${environment.apiBaseUrl}/bookings`).flush({ success: true, data: { reference: 'PRIVATE-A' } });
+    scope.setPrincipal('B');
+    expect(await result).toBeInstanceOf(Error);
+    expect(service.bookings()).toEqual([]);
+  });
 
   it('sends the trimmed reason with the customer cancellation request', async () => {
     const pending = Reflect.apply(service.cancelBooking, service, ['5', '  Plans changed  ']) as Promise<boolean>;
@@ -30,7 +117,7 @@ describe('BookingService cancellation', () => {
     const expected = {
       pending: 'upcoming', approved: 'upcoming', awaiting_payment: 'upcoming',
       payment_submitted: 'upcoming', payment_verified: 'upcoming', confirmed: 'upcoming',
-      completed: 'past', rejected: 'rejected', cancelled: 'cancelled'
+      completed: 'past', rejected: 'rejected', cancelled: 'cancelled', expired: 'cancelled'
     } as const satisfies Record<BookingStatus, BookingTab>;
     const statuses = Object.keys(expected) as (keyof typeof expected)[];
     service.loadMine();
@@ -75,7 +162,7 @@ describe('BookingService cancellation', () => {
       imageUrl: 'assets/images/packages/premium-package.webp', features: [],
     };
 
-    const pending = service.submitDraft(draft, pkg, []);
+    const pending = service.submitDraft(draft, pkg, [], submissionKey);
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings`);
     expect(request.request.body.paymentMethod).toBe('e-wallet');
     expect(request.request.body.specialRequest).toBe('No shellfish.');
@@ -108,7 +195,7 @@ describe('BookingService cancellation', () => {
     expect(request.request.withCredentials).toBe(true);
     expect(request.request.body).toEqual({
       eventType: 'wedding', eventDate: '2026-12-11', eventTime: '15:00', venue: 'New venue',
-      guestCount: 60, packageId: 1, addOnIds: [5], paymentMethod: 'bank-transfer', specialRequest: 'White linens.',
+      guestCount: 60, packageId: 1, addOnIds: [5], addOnQuantities: { '5': 1 }, paymentMethod: 'bank-transfer', specialRequest: 'White linens.',
     });
     request.flush({ success: true, data: {
       id: 27, reference: 'BK-2026-TEST', total: 45000, eventName: 'Wedding Event', eventType: 'wedding',

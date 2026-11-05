@@ -19,6 +19,7 @@ describe('MessengerContactComponent', () => {
       providers: [provideRouter([
         { path: '', component: EmptyPage },
         { path: 'packages', component: EmptyPage },
+        { path: 'contact', component: EmptyPage },
         { path: 'dashboard', component: EmptyPage },
         { path: 'admin/dashboard', component: EmptyPage },
       ])],
@@ -48,11 +49,18 @@ describe('MessengerContactComponent', () => {
     expect(link?.rel).toContain('noreferrer');
     expect(link?.getAttribute('aria-label')).toBe('Message LA Chef on Messenger');
     expect(link?.textContent).toContain('Chat with LA Chef');
+    expect(link?.querySelector('.messenger-contact__glyph')).not.toBeNull();
+    expect(getComputedStyle(link!).backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(getComputedStyle(link!.querySelector('.messenger-contact__mark')!).backgroundColor).toBe('rgb(10, 124, 255)');
   });
 
-  it('hides on admin routes and responds to route changes without reloading', async () => {
+  it('hides on admin and dedicated contact routes while responding to route changes', async () => {
     const root = await renderAt('/dashboard');
     expect(root.querySelector('a')).not.toBeNull();
+
+    await router.navigateByUrl('/contact');
+    fixture.detectChanges();
+    expect(root.querySelector('a')).toBeNull();
 
     await router.navigateByUrl('/admin/dashboard');
     fixture.detectChanges();

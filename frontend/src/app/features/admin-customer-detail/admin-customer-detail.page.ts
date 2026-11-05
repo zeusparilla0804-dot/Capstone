@@ -1,3 +1,4 @@
+import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -10,7 +11,7 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
 
 @Component({
   selector: 'app-admin-customer-detail',
-  imports: [AdminShellComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, ReactiveFormsModule, RouterLink],
+  imports: [PaymentMethodLabelPipe, AdminShellComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, ReactiveFormsModule, RouterLink],
   templateUrl: './admin-customer-detail.page.html',
   styleUrl: './admin-customer-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

@@ -1,0 +1,9 @@
+<dialog #dialog role="dialog" aria-modal="true" aria-labelledby="registration-success-title"
+  aria-describedby="registration-success-description" (cancel)="$event.preventDefault()" (keydown)="keepFocus($event)">
+  <div class="registration-success__mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6" /></svg>
+  </div>
+  <h2 id="registration-success-title">Account Created Successfully</h2>
+  <p id="registration-success-description">Your email has been verified and your account is ready. Please sign in to continue to your dashboard.</p>
+  <button #action type="button" (click)="continued.emit()">Continue to Sign In</button>
+</dialog>

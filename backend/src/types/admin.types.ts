@@ -7,7 +7,8 @@ export interface ProofReviewQuery {
   page: number;
   pageSize: number;
   search: string;
-  status: PaymentProofStatus;
+  status: PaymentProofStatus | 'ALL';
+  reservationId?: number;
   method: PaymentProofMethod | '';
   date: string;
   dateFrom: string;
@@ -49,7 +50,7 @@ export interface AddOnInput{name:string;description:string;price:number;isActive
 export interface PaymentInput{reservationId:number;amount:number;method:'CASH'|'BANK_TRANSFER'|'E-WALLET';reference?:string;paymentDate:string;}
 export type AdminBookingCapacitySummary = BookingAvailability;
 
-export type BookingStatus = 'PENDING' | 'APPROVED' | 'AWAITING_PAYMENT' | 'PAYMENT_SUBMITTED' | 'PAYMENT_VERIFIED' | 'CONFIRMED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+export type BookingStatus = 'PENDING' | 'APPROVED' | 'AWAITING_PAYMENT' | 'PAYMENT_SUBMITTED' | 'PAYMENT_VERIFIED' | 'CONFIRMED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
 export type BookingActor = { type: 'ADMIN'; id: number } | { type: 'CUSTOMER'; id: number } | { type: 'SYSTEM'; id?: never };
 export interface BookingStatusHistory {
   id: number;

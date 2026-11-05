@@ -1,38 +1,91 @@
 <main class="payment-layout portal-surface">
   <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
   <section class="payment-content"><div class="payment-container">
-    <a class="back-link" routerLink="/my-bookings">&larr; My bookings</a>
-    <header class="payment-header"><p class="page-kicker">Billing & payments</p><h1>Submit payment proof</h1><p>Your payment will be reviewed by LA Chef before it is applied to your booking.</p></header>
+    <a class="back-link" routerLink="/my-bookings">&larr; Back to My Bookings</a>
+    <header class="payment-header"><p class="page-kicker">Billing & payments</p><h1>{{ cashInstructionsAvailable() ? 'Cash payment instructions' : eligible() ? 'Submit payment proof' : 'Payment record' }}</h1><p>{{ cashInstructionsAvailable() ? 'Cash payments are accepted only at the LA Chef office. Your balance updates when staff record the cash received.' : eligible() ? 'Your payment will be reviewed by LA Chef before it is applied to your booking.' : 'Review your recorded payments and proof history. Contact La Chef before making a new payment.' }}</p></header>
     @if (bookingService.loading() && !booking()) { <p class="data-state" role="status">Loading booking...</p> }
     @else if (!booking()) { <section class="data-state data-state--error"><h2>Booking not found</h2><p>Return to your bookings and choose an available payment action.</p></section> }
     @else if (booking(); as item) {
       <section class="booking-summary" aria-labelledby="booking-summary-title">
         <div><p class="summary-label">Booking</p><h2 id="booking-summary-title">{{ item.reference }}</h2><p>{{ item.eventName }} &middot; {{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</p></div>
-        <dl><div><dt>Estimated total</dt><dd>{{ estimatedTotal() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Recorded payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div class="summary-balance"><dt>Outstanding balance</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div></dl>
+        <dl><div><dt>Estimated total</dt><dd>{{ estimatedTotal() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Required deposit (50%)</dt><dd>{{ requiredDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Recorded payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div class="summary-balance"><dt>Outstanding balance</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div></dl>
       </section>
-      @if (eligible()) {
+      @if (cashInstructionsAvailable()) {
+        <section class="proof-tool cash-instructions" aria-labelledby="cash-instructions-title">
+          <div class="section-heading"><div><h2 id="cash-instructions-title">Pay at the LA Chef office</h2><p>No online payment proof is required for cash payments.</p></div></div>
+          <dl class="cash-payment-details">
+            <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM <span>Philippine Time</span></dd></div>
+            @if (remainingDeposit() > 0) {
+              @if (cashDeadline(); as deadline) {
+                <div><dt>50% deposit due</dt><dd>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM <span>Philippine Time · {{ deadline.preparationDays }} calendar days before your event</span></dd></div>
+              }
+            }
+          </dl>
+          @if (cashDepositOverdue) {
+            <p class="field-error cash-deposit-notice" role="alert">The deposit deadline has passed. Please contact the LA Chef office to check whether your event can still be accommodated.</p>
+          }
+          @if (outstandingBalance() > 0) {
+            <ol>
+              <li>Present your booking reference <strong>{{ item.reference }}</strong> to the office staff.</li>
+              @if (remainingDeposit() > 0) {
+                <li>Pay the remaining required deposit of <strong>{{ remainingDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong> toward the 50% down payment, or settle the full outstanding balance.</li>
+              } @else { <li>Deposit requirement completed. Your remaining balance is <strong>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>.</li> }
+              <li>Collect your receipt. An administrator will record the cash actually received and update your payment status.</li>
+            </ol>
+            <p>The remaining balance is due on the event date. Booking confirmation remains subject to LA Chef approval.</p>
+          } @else { <p>Your booking is fully paid. No further cash payment is required.</p> }
+          <a class="btn btn-secondary btn-sm" routerLink="/contact">View office location and contact details</a>
+        </section>
+      } @else if (eligible()) {
         <div class="payment-grid">
           <section class="proof-tool" aria-labelledby="proof-form-title">
-            <div class="section-heading"><p class="section-index">01</p><div><h2 id="proof-form-title">Payment details</h2><p>Enter the details shown on your receipt.</p></div></div>
+            <div class="section-heading"><div><h2 id="proof-form-title">Payment details</h2><p>Enter the details shown on your receipt.</p></div></div>
             <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-              <div class="form-row"><label for="payment-method">Payment method</label><select id="payment-method" formControlName="method"><option value="E_WALLET">GCash / e-wallet</option><option value="BANK_TRANSFER">Bank transfer</option><option value="CASH">Cash</option></select></div>
+              <fieldset class="payment-amount-picker">
+                <legend>Choose payment amount</legend>
+                <p class="field-help">At least 50% verified payment and explicit admin confirmation are required to confirm your reservation.</p>
+                <div class="form-pair payment-amount-options">
+                  <label data-payment-choice="deposit" [class.is-selected]="paymentAmountChoice() === 'deposit'" [class.is-disabled]="remainingDeposit() <= 0">
+                    <input type="radio" name="payment-amount-choice" value="deposit" [checked]="paymentAmountChoice() === 'deposit'" [disabled]="remainingDeposit() <= 0" (change)="selectPaymentAmount('deposit')" />
+                    <div><strong>50% down payment</strong><p class="field-help">{{ remainingDeposit() > 0 ? 'Amount needed to meet the deposit' : 'Deposit requirement completed' }}</p><b>{{ remainingDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</b></div>
+                  </label>
+                  <label data-payment-choice="full" [class.is-selected]="paymentAmountChoice() === 'full'">
+                    <input type="radio" name="payment-amount-choice" value="full" [checked]="paymentAmountChoice() === 'full'" (change)="selectPaymentAmount('full')" />
+                    <div><strong>Pay full balance</strong><p class="field-help">Optional full settlement</p><b>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</b></div>
+                  </label>
+                </div>
+                <p class="field-help">The remaining balance is due on the event date.</p>
+              </fieldset>
+              <div class="form-row"><label for="payment-method">Payment method</label><select id="payment-method" formControlName="method"><option value="E_WALLET">GCash</option><option value="BANK_TRANSFER">Bank transfer</option></select></div>
               <div class="form-pair">
-                <div class="form-row"><label for="claimed-amount">Amount sent</label><div class="money-input"><span aria-hidden="true">PHP</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" /></div>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
+                <div class="form-row"><label for="claimed-amount">Amount shown on receipt</label><div class="money-input"><span aria-hidden="true">₱</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" (input)="useEnteredAmount()" /></div><p class="field-help">Edit only when your receipt shows a different amount.</p>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
                 <div class="form-row"><label for="payment-date">Payment date</label><input id="payment-date" type="date" formControlName="paymentDate" />@if(form.controls.paymentDate.touched && form.controls.paymentDate.invalid){<p class="field-error">Choose the payment date.</p>}</div>
               </div>
               @if (form.controls.method.value !== 'CASH') { <div class="form-row"><label for="transaction-reference">Transaction reference</label><input id="transaction-reference" type="text" maxlength="150" autocomplete="off" formControlName="transactionReference" />@if(form.controls.transactionReference.touched && form.controls.transactionReference.invalid){<p class="field-error">Enter the reference shown on your receipt.</p>}</div> }
-              <div class="form-row proof-file"><label for="proof-file">Receipt image</label><input #proofInput id="proof-file" type="file" accept="image/jpeg,image/png,image/webp" (change)="onFileSelected($event)" [attr.aria-describedby]="fileError() ? 'proof-file-error' : 'proof-file-help'" /><p id="proof-file-help" class="field-help">JPEG, PNG, or WebP &middot; 5 MB maximum</p>@if (fileError()) { <p id="proof-file-error" class="field-error" role="alert">{{ fileError() }}</p> }@if (selectedFile(); as file) { <div class="file-summary"><div><strong>{{ file.name }}</strong><span>{{ fileSize(file.size) }}</span></div><button type="button" class="btn btn-tertiary" (click)="removeFile()" [disabled]="submitting()">Remove</button></div> }</div>
+              <div class="form-row proof-file">
+                <label for="proof-file">Receipt image</label>
+                <div class="receipt-upload">
+                  <div class="receipt-upload__action">
+                    <input #proofInput id="proof-file" type="file" accept="image/jpeg,image/png,image/webp" (change)="onFileSelected($event)" [attr.aria-describedby]="fileError() ? 'proof-file-help proof-file-error' : 'proof-file-help'" />
+                    <span aria-hidden="true">Choose receipt image</span>
+                  </div>
+                  <p id="proof-file-help" class="field-help">JPEG, PNG, or WebP &middot; 5 MB maximum</p>
+                  @if (selectedFile(); as file) {
+                    <div class="file-summary"><div><strong>{{ file.name }}</strong><span>{{ fileSize(file.size) }}</span></div><button type="button" class="btn btn-tertiary" (click)="removeFile()" [disabled]="submitting()">Remove</button></div>
+                  }
+                </div>
+                @if (fileError()) { <p id="proof-file-error" class="field-error" role="alert">{{ fileError() }}</p> }
+              </div>
               @if (submitError()) { <p class="form-message form-message--error" role="alert">{{ submitError() }}</p> }
-              @if (successMessage()) { <p class="form-message form-message--success" role="status">{{ successMessage() }}</p> }
               @if (submitting()) { <div class="upload-state" role="status"><div><span>Uploading proof</span><strong>{{ uploadProgress() }}%</strong></div><progress max="100" [value]="uploadProgress()">{{ uploadProgress() }}%</progress></div> }
               <button class="btn btn-primary submit-button" type="submit" [disabled]="submitting()">{{ submitting() ? 'Submitting...' : 'Submit for verification' }}</button>
             </form>
           </section>
           <section class="proof-history" aria-labelledby="proof-history-title">
-            <div class="section-heading"><p class="section-index">02</p><div><h2 id="proof-history-title">Proof history</h2><p>Review the status of your submissions.</p></div></div>
+            <div class="section-heading"><div><h2 id="proof-history-title">Proof history</h2><p>Review the status of your submissions.</p></div></div>
             @if (historyLoading()) { <p class="history-state" role="status">Loading history...</p> }
             @else if (historyError()) { <p class="history-state history-state--error" role="alert">{{ historyError() }} <button class="btn btn-tertiary" type="button" (click)="loadProofs()">Try again</button></p> }
-            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div><p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method === 'E_WALLET' ? 'GCash / e-wallet' : proof.method === 'BANK_TRANSFER' ? 'Bank transfer' : 'Cash' }}</p>@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
+            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div><p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method | paymentMethodLabel }}</p>@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
             @else { <p class="history-state">No payment proofs submitted yet.</p> }
           </section>
         </div>
@@ -40,3 +93,15 @@
     }
   </div></section>
 </main>
+
+@if (successMessage()) {
+  <app-success-dialog
+    class="payment-proof-confirmation"
+    title="Payment proof submitted"
+    message="Your payment proof has been received and is awaiting verification by La Chef."
+    statusText="For verification"
+    primaryLabel="View My Reservations"
+    primaryLink="/my-bookings"
+    (dismissed)="dismissSuccess()"
+  />
+}

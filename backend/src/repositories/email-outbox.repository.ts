@@ -12,6 +12,16 @@ export interface BookingNotificationContext {
   bookingReference: string;
   eventDate: string;
   invoiceNumber?: string;
+  invoiceId?: number;
+  invoiceDueDate?: string;
+  eventTime?: string;
+  eventType?: string;
+  venue?: string;
+  status?: string;
+  totalAmount?: number;
+  amountPaid?: number;
+  guestCount?: number;
+  paymentMethod?: string;
 }
 
 export interface ClaimedEmail extends EmailOutboxRecord {
@@ -24,7 +34,6 @@ export interface EmailOutboxRepository {
   finish(claimed: ClaimedEmail, outcome: EmailFinishOutcome, now: Date): Promise<boolean>;
   findById(id: string): Promise<EmailOutboxRecord | undefined>;
   bookingContext(reservationId: number, request: sql.Request): Promise<BookingNotificationContext | undefined>;
-  activeAdminEmails(request: sql.Request): Promise<string[]>;
 }
 
 export type EmailFinishOutcome =
@@ -137,18 +146,17 @@ export function createEmailOutboxRepository(deps: Dependencies): EmailOutboxRepo
         .query<BookingNotificationContext>(`/* email outbox context */
           SELECT c.email customerEmail,CONCAT(c.first_name,' ',c.last_name) customerName,
             r.booking_reference bookingReference,CONVERT(varchar(10),r.event_date,23) eventDate,
-            i.invoice_number invoiceNumber
+            i.invoice_number invoiceNumber,i.invoice_id invoiceId,CONVERT(varchar(10),i.due_at,23) invoiceDueDate,
+            CONVERT(varchar(5),r.event_time,108) eventTime,e.event_type eventType,r.venue_address venue,r.status,
+            i.total_amount totalAmount,COALESCE(p.amount_paid,0) amountPaid,
+            r.guest_count guestCount,p.payment_method paymentMethod
           FROM dbo.RESERVATION r
           JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+          JOIN dbo.EVENT e ON e.event_id=r.event_id
           LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
+          LEFT JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id
           WHERE r.reservation_id=@notificationReservationId`);
       return result.recordset[0];
-    },
-
-    async activeAdminEmails(request) {
-      const result = await request.query<{ email: string }>(`SELECT email FROM dbo.ADMIN
-        WHERE status='ACTIVE' AND email IS NOT NULL AND LTRIM(RTRIM(email))<>'' ORDER BY admin_id`);
-      return result.recordset.map(row => String(row.email));
     }
   };
 }

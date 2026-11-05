@@ -3,6 +3,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ApiResponse, CateringPackage, PackageCategory } from '../models';
 import { environment } from '../../../environments/environment';
+import { CLIENT_EVENT_GALLERIES } from '../data/client-event-galleries';
 
 const PACKAGE_IMAGE_ROOT = 'assets/images/packages';
 type EventCategory = Exclude<PackageCategory, 'all'>;
@@ -12,15 +13,15 @@ type PackageApiItem = Omit<CateringPackage, 'imageUrl' | 'galleryImageUrls' | 'c
 
 const PACKAGE_GALLERIES: Record<EventCategory, readonly string[]> = {
   standard: ['custom-wide', 'custom-buffet', 'custom-table'],
-  wedding: ['wedding-wide', 'wedding-buffet', 'wedding-table'],
-  birthday: ['birthday-wide', 'birthday-buffet', 'birthday-table'],
-  corporate: ['corporate-wide', 'corporate-buffet', 'corporate-table'],
-  debut: ['debut-wide', 'debut-buffet', 'debut-table'],
+  ...CLIENT_EVENT_GALLERIES,
   anniversary: ['anniversary-wide', 'anniversary-buffet', 'anniversary-table'],
   custom: ['custom-wide', 'custom-buffet', 'custom-table'],
 };
 
 function galleryFor(category: EventCategory): readonly string[] {
+  if (PACKAGE_GALLERIES[category][0]?.startsWith(PACKAGE_IMAGE_ROOT)) {
+    return PACKAGE_GALLERIES[category];
+  }
   const directory = category === 'standard' ? 'custom' : category;
   return PACKAGE_GALLERIES[category].map(
     (fileName) => `${PACKAGE_IMAGE_ROOT}/${directory}/${fileName}.png`,

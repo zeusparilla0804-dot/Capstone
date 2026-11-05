@@ -41,9 +41,9 @@ test('derives the customer reset URL only in memory and escapes the account name
 
   const rendered = await service.renderPasswordResetEmail(queued, now);
   assert.ok(rendered);
-  assert.deepEqual(calls, [['a'.repeat(22), 'CUSTOMER', now]]);
-  assert.match(rendered.text, /https:\/\/lachef\.example\/reset-password\?token=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/);
-  assert.match(rendered.html, /href="https:\/\/lachef\.example\/reset-password\?token=/);
+  assert.deepEqual(calls, [['a'.repeat(22), 'CUSTOMER', now, 'customer@example.test']]);
+  assert.match(rendered.text, /https:\/\/lachef\.example\/reset-password#token=[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43}/);
+  assert.match(rendered.html, /href="https:\/\/lachef\.example\/reset-password#token=/);
   assert.equal(rendered.html.includes('Juan & <Customer>'), false);
   assert.ok(rendered.html.includes('Juan &amp; &lt;Customer&gt;'));
   assert.equal(rendered.text.includes(secret), false);
@@ -58,7 +58,7 @@ test('uses the administrator reset route and keeps customer and administrator pr
   });
   const customer = await service.renderPasswordResetEmail(item('CUSTOMER'), now);
   const admin = await service.renderPasswordResetEmail(item('ADMIN'), now);
-  assert.match(admin!.text, /\/admin\/reset-password\?token=/);
+  assert.match(admin!.text, /\/admin\/reset-password#token=/);
   assert.doesNotMatch(customer!.text, /\/admin\/reset-password/);
   assert.notEqual(customer!.text.match(/token=([^\s]+)/)![1], admin!.text.match(/token=([^\s]+)/)![1]);
 });

@@ -7,6 +7,16 @@ import { BookingService } from '../../core/services/booking.service';
 import { MyBookingsPageComponent } from './my-bookings.page';
 
 describe('MyBookingsPage cancellation', () => {
+  it('offers one reservation action when the upcoming list is empty', async () => {
+    TestBed.overrideProvider(BookingService, { useValue: {
+      bookings: signal([]), loading: signal(false), error: signal(''), loadMine: () => {}, getBookingsByTab: () => [],
+    } });
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.booking-empty')).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('a[href="/book-event?new=1"]')).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.bookings-header a')?.textContent).toContain('Start a Reservation');
+  });
   const booking: Booking = {
     id: '5', reference: 'LC-5', customerId: '7', eventName: 'Wedding Event', eventType: 'wedding',
     eventDate: '2026-10-10', eventTime: '12:00', venue: 'Venue', guestCount: 50,
@@ -31,6 +41,51 @@ describe('MyBookingsPage cancellation', () => {
         } }
       ]
     });
+  });
+
+  it('loads fresh bookings and distinguishes a verified deposit from full payment in the actual card', async () => {
+    const reservation = { ...booking, status: 'payment_verified' as const, total: 74300, amountPaid: 37150 };
+    const bookings = signal<readonly Booking[]>([reservation]);
+    const loadMine = vi.fn();
+    TestBed.overrideProvider(BookingService, { useValue: {
+      bookings, loading: signal(false), error: signal(''), loadMine,
+      getBookingsByTab: () => bookings(),
+    } });
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const badge = () => fixture.nativeElement.querySelector('.booking-card__side .status-badge') as HTMLElement;
+    expect(loadMine).toHaveBeenCalledOnce();
+    expect(badge().textContent!.trim()).toBe('50% Down Payment Verified');
+    expect(badge().classList.contains('status-badge--down_payment_verified')).toBe(true);
+    expect(badge().classList.contains('status-badge--payment_verified')).toBe(false);
+    bookings.set([{ ...reservation, amountPaid: 74300 }]);
+    fixture.detectChanges();
+    expect(badge().textContent!.trim()).toBe('Fully Paid');
+    expect(badge().classList.contains('status-badge--fully_paid')).toBe(true);
+    bookings.set([{ ...reservation, status: 'payment_submitted', amountPaid: 0 }]);
+    fixture.detectChanges();
+    expect(badge().textContent!.trim()).toBe('Pending Payment Verification');
+    expect(reservation.status).toBe('payment_verified');
+    expect(reservation.amountPaid).toBe(37150);
+    fixture.destroy();
+    const revisited = TestBed.createComponent(MyBookingsPageComponent);
+    revisited.detectChanges();
+    expect(loadMine).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the warm LA Chef canvas behind white reservation surfaces', async () => {
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const layout = fixture.nativeElement.querySelector('.bookings-layout') as HTMLElement;
+    const sidebar = fixture.nativeElement.querySelector('.dashboard-sidebar') as HTMLElement;
+
+    expect(getComputedStyle(layout).backgroundColor).toBe('rgb(250, 249, 246)');
+    expect(sidebar.classList).toContain('dashboard-sidebar--editorial');
+    expect(sidebar.querySelector('.dashboard-sidebar__editorial-brand')?.textContent).toContain('Event Catering Services');
+    expect(sidebar.querySelector('a.dashboard-sidebar__profile')).not.toBeNull();
   });
 
   it('collects an accessible cancellation reason and sends it with the action', async () => {
