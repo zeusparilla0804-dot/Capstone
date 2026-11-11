@@ -65,7 +65,7 @@
 @keyframes availability-spin { to { transform: rotate(360deg); } }
 .step-actions { display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid var(--color-border); margin-top: 30px; padding-top: 22px; }
 .booking-surface form .step-actions { justify-content: flex-end; }
-@media (max-width: 767px) { .booking-surface form .step-actions .btn { flex: 0 1 calc(50% - 6px); } }
+@media (max-width: 767px) { .booking-surface form .step-actions .btn { flex: 1; white-space: normal; } }
 .selection-list { display: grid; gap: 10px; margin: 0; border: 0; padding: 0; }
 .selection-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer; padding: 14px 16px; }
 .selection-row.is-selected { border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border)); background: #fcfaf5; }
@@ -100,7 +100,7 @@
 .step-total > strong { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .booking-surface--addons .step-actions .btn { font-size: 13px; font-weight: 500; }
 .booking-surface--addons .step-actions { justify-content: flex-end; }
-@media (max-width: 767px) { .booking-surface--addons .step-actions .btn { flex: 0 1 calc(50% - 6px); } }
+@media (max-width: 767px) { .booking-surface--addons .step-actions .btn { flex: 1; white-space: normal; } }
 .review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .review-grid section { border-top: 1px solid var(--color-border); padding-top: 18px; }
 .review-grid h3, .payment-summary h3 { font-family: var(--font-sans); font-size: 1rem; }
@@ -139,7 +139,7 @@
   .pricing-review dl { transform: translateX(calc(-50% - 15px)); }
 }
 @media (max-width: 767px) {
-  .booking-review .step-actions .btn { flex: 0 1 calc(50% - 6px); }
+  .booking-review .step-actions .btn { flex: 1; white-space: normal; }
   .pricing-review { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .pricing-review dl { grid-column: 1; grid-row: auto; }
 }

@@ -1,7 +1,9 @@
 .bookings-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 100dvh; }
 .bookings-content { --reservation-font: var(--font-sans); min-width: 0; font-family: var(--reservation-font); }
 .bookings-container { margin-inline: auto; }
-.bookings-header { display: flex; justify-content: space-between; border-bottom: 1px solid var(--portal-divider); }
+.bookings-header { display: flex; flex-wrap: wrap; justify-content: space-between; border-bottom: 1px solid var(--portal-divider); }
+.bookings-header > div { min-width: 0; }
+@media (min-width: 768px) { .bookings-header > div { flex: 1 1 240px; } }
 .booking-tabs { border-bottom: 1px solid var(--portal-divider); }
 .booking-tabs ul { display: flex; margin: 0; padding: 0; list-style: none; }
 .booking-tabs button { position: relative; border: 0; background: transparent; color: var(--portal-text-secondary); cursor: pointer; }
