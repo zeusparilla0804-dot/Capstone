@@ -1,5 +1,5 @@
 <main class="admin-login admin-auth-layout">
-  <section class="admin-auth-shell admin-auth-shell--login admin-auth-layout__shell">
+  <section class="admin-auth-shell admin-auth-shell--login admin-auth-layout__shell" [class.admin-auth-shell--setup]="!!challenge()?.setupSecret">
     <aside
       class="admin-brand admin-auth-layout__brand"
       aria-label="La Chef Event Catering Services"
@@ -29,8 +29,17 @@
         <form class="mfa-panel" [formGroup]="mfaForm" (ngSubmit)="verifyCode()" autocomplete="off">
           @if (pending.setupSecret) {
             <h2>Set up your authenticator</h2>
-            <p>Add an account in your authenticator app using this setup key. Then enter the current 6-digit code.</p>
-            <code class="setup-secret">{{ pending.setupSecret }}</code>
+            @if (setupQrCode(); as qrCode) {
+              <p>In Google Authenticator, tap + and choose Scan a QR code. Scan this code, then enter the current 6-digit code below.</p>
+              <img class="mfa-qr" [src]="qrCode" width="216" height="216" alt="Scan this QR code with your authenticator app to set up LA Chef Admin" />
+              <details class="mfa-manual-setup">
+                <summary>Can't scan? Enter the setup key manually</summary>
+                <code class="setup-secret">{{ pending.setupSecret }}</code>
+              </details>
+            } @else {
+              <p>Add an account in your authenticator app using this setup key. Then enter the current 6-digit code.</p>
+              <code class="setup-secret">{{ pending.setupSecret }}</code>
+            }
           } @else {
             <h2>Enter your verification code</h2>
             <p>Use the 6-digit code from your authenticator app, or one of your saved backup codes.</p>

@@ -3,11 +3,16 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminLoginPage } from './admin-login.page';
+const { renderQr } = vi.hoisted(() => ({ renderQr: vi.fn<(text: string, options: unknown) => Promise<string>>() }));
+
+vi.mock('qrcode', () => ({ default: { toString: renderQr } }));
 
 describe('AdminLoginPage', () => {
   let fixture: ComponentFixture<AdminLoginPage>;
 
   beforeEach(async () => {
+    vi.mocked(renderQr).mockReset();
+    vi.mocked(renderQr).mockResolvedValue('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>');
     await TestBed.configureTestingModule({
       imports: [AdminLoginPage],
       providers: [
@@ -150,6 +155,56 @@ describe('AdminLoginPage', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(auth.completeMfa).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('Enter a 6-digit code or 20-character backup code.');
+  });
+
+  it('renders a local QR code for the exact current authenticator setup URI', async () => {
+    const setupUri = 'otpauth://totp/La%20Chef:admin%40example.test?secret=JBSWY3DPEHPK3PXP&issuer=La%20Chef&algorithm=SHA1&digits=6&period=30';
+    vi.mocked(TestBed.inject(AdminAuthService).login).mockResolvedValueOnce({
+      requiresMfa: true, challenge: 'pending', setupSecret: 'JBSWY3DPEHPK3PXP', setupUri,
+    });
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+
+    expect(renderQr).toHaveBeenCalledExactlyOnceWith(setupUri, expect.objectContaining({ type: 'svg', margin: 4 }));
+    const qr = fixture.nativeElement.querySelector('img.mfa-qr') as HTMLImageElement;
+    expect(qr).not.toBeNull();
+    expect(qr.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+    expect(fixture.nativeElement.textContent).toContain('Scan a QR code');
+    expect(fixture.nativeElement.querySelector('.setup-secret').textContent).toContain('JBSWY3DPEHPK3PXP');
+    component.restart();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('img.mfa-qr')).toBeNull();
+    expect(component.setupQrCode()).toBe('');
+  });
+
+  it('retains manual setup if local QR generation fails', async () => {
+    vi.mocked(renderQr).mockRejectedValueOnce(new Error('QR unavailable'));
+    vi.mocked(TestBed.inject(AdminAuthService).login).mockResolvedValueOnce({
+      requiresMfa: true, challenge: 'pending', setupSecret: 'JBSWY3DPEHPK3PXP', setupUri: 'otpauth://totp/test?secret=JBSWY3DPEHPK3PXP',
+    });
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('img.mfa-qr')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.setup-secret').textContent).toContain('JBSWY3DPEHPK3PXP');
+    expect(component.challenge()).not.toBeNull();
+    expect(component.error()).toBe('');
+  });
+
+  it('does not generate a setup QR code for an already enrolled administrator', async () => {
+    vi.mocked(TestBed.inject(AdminAuthService).login).mockResolvedValueOnce({ requiresMfa: true, challenge: 'pending' });
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+
+    expect(renderQr).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('img.mfa-qr')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Enter your verification code');
   });
 
   it('uses asterisks without changing the native password value or visibility toggle', () => {

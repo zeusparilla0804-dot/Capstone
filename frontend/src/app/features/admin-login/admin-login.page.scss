@@ -58,6 +58,11 @@ form {
 }
 
 .mfa-panel { display: grid; gap: 18px; margin-top: 28px; }
+.admin-login .admin-auth-shell--login.admin-auth-shell--setup { height: auto; min-height: 660px; }
+.mfa-qr { display: block; width: min(216px, 100%); height: auto; justify-self: center; background: #fff; }
+.mfa-manual-setup summary { color: var(--admin-dark-gold); font-size: .85rem; cursor: pointer; }
+.mfa-manual-setup summary:focus-visible { outline: 2px solid var(--admin-primary-gold); outline-offset: 4px; }
+.mfa-manual-setup .setup-secret { margin-top: 12px; }
 .mfa-panel h2 { font-family: var(--font-serif); font-size: 1.6rem; font-weight: 500; }
 .mfa-panel p { line-height: 1.5; color: var(--admin-secondary-text); }
 .setup-secret { display: block; overflow-wrap: anywhere; padding: 14px; border: 1px solid var(--admin-divider); border-radius: 8px; font-size: 1.05rem; letter-spacing: .08em; }

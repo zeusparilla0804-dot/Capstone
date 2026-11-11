@@ -18,6 +18,7 @@ export class AdminLoginPage {
   protected readonly error = signal('');
   protected readonly showPassword = signal(false);
   protected readonly challenge = signal<AdminMfaChallenge | null>(null);
+  protected readonly setupQrCode = signal('');
   protected readonly recoveryCodes = signal<string[]>([]);
   protected readonly code = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(/^(?:\d{6}|[0-9A-Fa-f]{20})$/)] });
   protected readonly mfaForm = new FormGroup({ code: this.code });
@@ -32,11 +33,23 @@ export class AdminLoginPage {
     }
     this.busy.set(true);
     this.error.set('');
+    this.setupQrCode.set('');
     try {
       const result = await this.auth.login(this.form.value.identity!, this.form.value.password!);
       if (result?.requiresMfa) {
         this.challenge.set(result);
         this.form.controls.password.setValue('');
+        if (result.setupSecret && result.setupUri) {
+          try {
+            const { default: qrCode } = await import('qrcode');
+            const svg = await qrCode.toString(result.setupUri, { type: 'svg', width: 216, margin: 4, errorCorrectionLevel: 'M' });
+            if (this.challenge() === result) {
+              this.setupQrCode.set(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+            }
+          } catch {
+            // Manual setup remains available if local QR rendering is unavailable.
+          }
+        }
         return;
       }
       await this.router.navigateByUrl('/admin/dashboard');
@@ -56,6 +69,7 @@ export class AdminLoginPage {
     try {
       const codes = await this.auth.completeMfa(pending.challenge, this.code.value.trim());
       this.challenge.set(null);
+      this.setupQrCode.set('');
       if (codes?.length) this.recoveryCodes.set(codes);
       else await this.router.navigateByUrl('/admin/dashboard');
     } catch {
@@ -68,6 +82,7 @@ export class AdminLoginPage {
   }
   protected restart(): void {
     this.challenge.set(null);
+    this.setupQrCode.set('');
     this.code.setValue('');
     this.error.set('');
   }
