@@ -119,9 +119,29 @@ describe('BookingPageComponent submission validation', () => {
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: (key: string) => routeParams[key] ?? null } } } },
       ],
     });
+    vi.spyOn(Router.prototype, 'navigate').mockResolvedValue(true);
   });
 
-  afterEach(() => { TestBed.resetTestingModule(); restoreDialogs(); vi.useRealTimers(); });
+  afterEach(() => { TestBed.resetTestingModule(); restoreDialogs(); vi.restoreAllMocks(); vi.useRealTimers(); });
+
+  it('returns to the dashboard with the submitted reference after a successful request', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    vi.advanceTimersByTime(300);
+    await component.confirmBooking();
+    expect(resetDraft).toHaveBeenCalledOnce();
+    expect(navigate).toHaveBeenCalledWith(['/dashboard'], { state: { bookingReference: 'BK-TEST', bookingUpdated: false } });
+  });
+
+  it('keeps failed requests on the booking page with their draft intact', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    bookingService.submitDraft.mockRejectedValue(new Error('Offline'));
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    vi.advanceTimersByTime(300);
+    await component.confirmBooking();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(resetDraft).not.toHaveBeenCalled();
+  });
 
   it('keeps the selected package fixed and explains preparation and venue requirements upfront', () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
@@ -140,12 +160,14 @@ describe('BookingPageComponent submission validation', () => {
       { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
       { id: 'mirror', name: 'Mirror Photobooth (2 Hours Unlimited)', price: 10000 },
       { id: 'coffee', name: 'Coffee Bar for 50 Guests', price: 15000 },
+      { id: 'coffee100', name: 'Coffee Bar for 100 Guests', price: 22000 },
     ]);
     fixture.detectChanges();
     const page = fixture.nativeElement as HTMLElement;
     expect(page.querySelector('#addon-basic')).toBeNull();
     expect(page.querySelector('#addon-mirror')).toBeNull();
-    expect(page.querySelector('.coffee-inclusions')?.textContent).toContain('cookies, and light snacks');
+    const inclusions = [...page.querySelectorAll('.coffee-inclusions')].map(item => item.textContent);
+    expect(inclusions).toEqual(['Includes coffee service and cookies for 50 guests.', 'Includes coffee service, cookies, and light snacks for 100 guests.']);
     expect(page.querySelector('#photobooth-choice')).toBeNull();
     const checkbox = page.querySelector('#addon-photobooth') as HTMLInputElement;
     checkbox.click(); fixture.detectChanges();
@@ -876,6 +898,9 @@ describe('BookingPageComponent submission validation', () => {
     await Promise.all([first, second]);
     expect(component.bookingReference()).toBe(editableBooking.reference);
     expect(resetDraft).toHaveBeenCalledOnce();
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/dashboard'], {
+      state: { bookingReference: editableBooking.reference, bookingUpdated: true },
+    });
   });
 
   it('preserves pending edit data and shows the server reason when saving fails', async () => {

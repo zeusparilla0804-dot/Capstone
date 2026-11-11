@@ -338,6 +338,12 @@ export class BookingPageComponent {
 
   protected isCoffeeBar(name: string): boolean { return /^Coffee Bar for (50|100) Guests$/i.test(name); }
 
+  protected coffeeInclusions(name: string): string {
+    return /for 100 Guests$/i.test(name)
+      ? 'Includes coffee service, cookies, and light snacks for 100 guests.'
+      : 'Includes coffee service and cookies for 50 guests.';
+  }
+
   protected toggleAddOn(addOnId: string): void {
     this.draftService.toggleAddOn(addOnId);
     this.furthestStep.update(step => Math.min(step, 3) as BookingStep);
@@ -511,6 +517,9 @@ export class BookingPageComponent {
         this.bookingReference.set(await this.bookingService.submitDraft({ ...draft, paymentMethod: null }, selectedPackage, this.draftService.selectedAddOns(), this.draftService.submissionKey()));
       }
       this.draftService.reset();
+      await this.router.navigate(['/dashboard'], {
+        state: { bookingReference: this.bookingReference(), bookingUpdated: !!editingId },
+      });
     } catch (error) {
       const message = bookingSubmissionMessage(error);
       this.submissionError.set(message);

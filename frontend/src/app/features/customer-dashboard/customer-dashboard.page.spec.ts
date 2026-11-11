@@ -1,11 +1,12 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import type { Booking } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { CustomerDashboardPageComponent } from './customer-dashboard.page';
+import { stubNativeDialogs } from '../../shared/testing/native-dialog';
 
 function booking(overrides: Partial<Booking> = {}): Booking {
   return {
@@ -45,8 +46,10 @@ describe('CustomerDashboardPageComponent', () => {
   let loading: ReturnType<typeof signal<boolean>>;
   let error: ReturnType<typeof signal<string>>;
   let loadMine: ReturnType<typeof vi.fn>;
+  let restoreDialogs: () => void;
 
   beforeEach(async () => {
+    restoreDialogs = stubNativeDialogs();
     bookings = signal<readonly Booking[]>([
       booking({ id: '20', eventName: 'Later Birthday', eventDate: '2027-02-14' }),
       booking(),
@@ -80,10 +83,28 @@ describe('CustomerDashboardPageComponent', () => {
     fixture.detectChanges();
   });
 
+  afterEach(() => { restoreDialogs(); });
+
   it('uses the approved warm ivory customer portal background', () => {
     const page = fixture.nativeElement.querySelector('.dashboard-layout') as HTMLElement;
 
     expect(getComputedStyle(page).backgroundColor).toBe('rgb(247, 245, 239)');
+  });
+
+  it('shows a dismissible native confirmation and reference after arriving from booking review', async () => {
+    vi.spyOn(TestBed.inject(Router), 'currentNavigation').mockReturnValue({
+      extras: { state: { bookingReference: 'BK-NEW', bookingUpdated: false } },
+    } as any);
+    const arriving = TestBed.createComponent(CustomerDashboardPageComponent);
+    arriving.detectChanges();
+    expect(arriving.nativeElement.querySelector('app-success-dialog')?.textContent).toContain('Booking request submitted');
+    expect(arriving.nativeElement.querySelector('app-success-dialog')?.textContent).toContain('BK-NEW');
+    expect(arriving.nativeElement.querySelector('dialog')).not.toBeNull();
+    (arriving.nativeElement.querySelector('.success-dialog__actions button') as HTMLButtonElement).click();
+    await new Promise(resolve => setTimeout(resolve, 200));
+    arriving.detectChanges();
+    expect(arriving.nativeElement.querySelector('app-success-dialog')).toBeNull();
+    arriving.destroy();
   });
 
   it('refreshes payment requests without repeating a banner above the dashboard', () => {
@@ -146,7 +167,7 @@ describe('CustomerDashboardPageComponent', () => {
     const detailList = detailCard.querySelector('dl') as HTMLElement;
     const detailRows = [...detailCard.querySelectorAll('dl > div')] as HTMLElement[];
 
-    expect(heading?.textContent?.trim()).toBe('Your Next Event');
+    expect(heading?.textContent?.trim()).toBe('Your Reservation Request');
     expect(featureImage).not.toBeNull();
     expect(getComputedStyle(featureImage).objectFit).toBe('cover');
     expect(detailCard?.textContent).toContain('Parilla Family Wedding');
@@ -197,15 +218,23 @@ describe('CustomerDashboardPageComponent', () => {
     expect(columns).toEqual(['Date', 'Event', 'Venue', 'Guests', 'Status']);
   });
 
-  it('uses a refined text-only primary event action', () => {
-    const action = fixture.nativeElement.querySelector('.dashboard-header__cta[href="/book-event?new=1"]') as HTMLAnchorElement;
+  it('keeps booking creation in reservations once a customer has booking history', () => {
+    expect(fixture.nativeElement.querySelector('a[href="/book-event?new=1"]')).toBeNull();
+    bookings.set([booking({ status: 'completed' })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No upcoming reservations');
+    expect(fixture.nativeElement.textContent).not.toContain('Your first celebration');
+    expect(fixture.nativeElement.querySelector('.dashboard-empty a')?.getAttribute('href')).toBe('/my-bookings');
+  });
 
-    expect(action).not.toBeNull();
-    expect(action.textContent?.trim()).toBe('Plan an Event');
-    expect(action.querySelectorAll('span')).toHaveLength(1);
-    expect(action.querySelector('svg')).toBeNull();
-    expect(getComputedStyle(action).borderRadius).toBe('6px');
-    expect(getComputedStyle(action).minHeight).toBe('44px');
+  it('distinguishes pending review, payment preparation, and a confirmed event', () => {
+    expect(fixture.nativeElement.querySelector('#next-event-title')?.textContent).toBe('Your Reservation Request');
+    bookings.set([booking({ status: 'awaiting_payment' })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#next-event-title')?.textContent).toBe('Your Reservation in Progress');
+    bookings.set([booking({ status: 'confirmed' })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#next-event-title')?.textContent).toBe('Your Upcoming Event');
   });
 
   it('matches the billing action to the premium text-only event action', () => {

@@ -6,9 +6,9 @@
   [statusText]="isEditing() ? 'Changes saved' : 'Pending review'"
   detailLabel="Booking reference"
   [detailValue]="bookingReference()"
-  primaryLabel="View My Reservations"
-  primaryLink="/my-bookings"
-  secondaryLabel="Return to Dashboard"
-  secondaryLink="/dashboard"
+  primaryLabel="Continue to Dashboard"
+  primaryLink="/dashboard"
+  secondaryLabel="View My Reservations"
+  secondaryLink="/my-bookings"
   (dismissed)="close()"
 />

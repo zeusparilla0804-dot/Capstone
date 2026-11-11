@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { Booking, BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -8,6 +8,7 @@ import { PortalBadgeStateService } from '../../core/services/portal-badge-state.
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 import { customerNavItems } from '../../shared/navigation/customer-navigation';
+import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 
 interface PlanningProgress {
   readonly currentStep: 1 | 2 | 3 | null;
@@ -16,7 +17,7 @@ interface PlanningProgress {
 
 @Component({
   selector: 'app-customer-dashboard-page',
-  imports: [DashboardSidebarComponent, RouterLink, StatusBadgeComponent],
+  imports: [DashboardSidebarComponent, RouterLink, StatusBadgeComponent, SuccessDialogComponent],
   templateUrl: './customer-dashboard.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './customer-dashboard.page.scss',
@@ -31,6 +32,12 @@ export class CustomerDashboardPageComponent implements OnDestroy {
   protected readonly bookings = this.bookingService.bookings;
   protected readonly upcomingBookings = computed(() => this.bookingService.getBookingsByTab('upcoming').slice(0, 4));
   protected readonly nextBooking = computed(() => this.upcomingBookings()[0]);
+  protected readonly eventHeading = computed(() => {
+    const status = this.nextBooking()?.status;
+    if (status === 'confirmed') return 'Your Upcoming Event';
+    return status === 'pending' ? 'Your Reservation Request' : 'Your Reservation in Progress';
+  });
+  protected readonly submission = signal<{ reference: string; updated: boolean } | null>(null);
   private readonly refreshTimer: ReturnType<typeof setInterval>;
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
   protected readonly planningProgress = computed<PlanningProgress>(() => this.progressFor(this.nextBooking()?.status));
@@ -49,6 +56,10 @@ export class CustomerDashboardPageComponent implements OnDestroy {
   });
 
   constructor() {
+    const state = this.router.currentNavigation()?.extras.state;
+    if (typeof state?.['bookingReference'] === 'string' && state['bookingReference']) {
+      this.submission.set({ reference: state['bookingReference'], updated: state['bookingUpdated'] === true });
+    }
     effect(() => this.badgeState.setCustomerBookings(this.bookings()));
     this.bookingService.loadMine();
     this.refreshTimer = setInterval(() => this.bookingService.loadMine(), 30_000);

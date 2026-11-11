@@ -1,4 +1,16 @@
 <main class="dashboard-layout portal-surface">
+  @if (submission(); as submitted) {
+    <app-success-dialog
+      [nativeModal]="true"
+      [title]="submitted.updated ? 'Booking updated' : 'Booking request submitted'"
+      message="Your reservation request is pending review by the LA Chef team. You can track its progress here."
+      statusText="Pending review"
+      detailLabel="Booking reference"
+      [detailValue]="submitted.reference"
+      primaryLabel="Continue to Dashboard"
+      (dismissed)="submission.set(null)"
+    />
+  }
   <app-dashboard-sidebar appearance="editorial" [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
 
   <section class="dashboard-content">
@@ -11,11 +23,6 @@
         <svg class="dashboard-header__ornament" viewBox="0 0 320 180" aria-hidden="true">
           <path d="M32 168C111 127 178 78 281 10M115 119c-25-42-12-75 27-101 18 48 7 81-27 101Zm60-43c-5-35 14-59 51-70 5 37-12 59-51 70Zm-97 72c-39-17-68-8-78 20 39 18 67 11 78-20Zm75-32c38-9 66 2 84 34-42 9-69-2-84-34Z" />
         </svg>
-        <div class="dashboard-header__actions">
-          <a class="btn btn-primary dashboard-header__cta" routerLink="/book-event" [queryParams]="{ new: 1 }">
-            <span>Plan an Event</span>
-          </a>
-        </div>
       </header>
 
       @if (bookingService.loading()) {
@@ -28,7 +35,7 @@
       } @else if (nextBooking(); as next) {
         <section class="next-event" aria-labelledby="next-event-title">
           <div class="section-heading next-event__heading">
-            <h2 id="next-event-title">Your Next Event</h2>
+            <h2 id="next-event-title">{{ eventHeading() }}</h2>
           </div>
 
           <div class="next-event__feature">
@@ -129,9 +136,16 @@
         </div>
       } @else {
         <section class="dashboard-empty">
-          <p class="section-label">Your first celebration</p>
-          <h2>No reservations yet</h2>
-          <p>Plan an event to start tracking its reservation details, review, and payment here.</p>
+          @if (bookings().length === 0) {
+            <p class="section-label">Your first celebration</p>
+            <h2>No reservations yet</h2>
+            <p>Plan your first event to start tracking its reservation details, review, and payment here.</p>
+            <a class="btn btn-primary dashboard-header__cta" routerLink="/book-event" [queryParams]="{ new: 1 }">Plan Your First Event</a>
+          } @else {
+            <h2>No upcoming reservations</h2>
+            <p>View your reservation history or start another reservation from My Reservations.</p>
+            <a class="btn btn-primary dashboard-header__cta" routerLink="/my-bookings">View My Reservations</a>
+          }
         </section>
       }
     </div>

@@ -15,6 +15,6 @@ export class BookingSuccessComponent {
   readonly isEditing = input(false);
 
   protected close(): void {
-    void this.router.navigate(['/my-bookings']);
+    void this.router.navigate(['/dashboard']);
   }
 }

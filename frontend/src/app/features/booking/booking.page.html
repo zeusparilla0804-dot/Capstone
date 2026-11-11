@@ -212,7 +212,7 @@
               @for (addOn of otherAddOns(); track addOn.id) {
                 <div class="selection-row" [class.is-selected]="isAddOnSelected(addOn.id)">
                   <input [id]="'addon-' + addOn.id" type="checkbox" [checked]="isAddOnSelected(addOn.id)" (change)="toggleAddOn(addOn.id)" />
-                  <label class="selection-copy" [for]="'addon-' + addOn.id"><strong>{{ addOn.name }}</strong><small>{{ addOn.description }}</small>@if (isCoffeeBar(addOn.name)) { <small class="coffee-inclusions">Includes coffee service, cookies, and light snacks.</small> }</label>
+                  <label class="selection-copy" [for]="'addon-' + addOn.id"><strong>{{ addOn.name }}</strong><small>{{ addOn.description }}</small>@if (isCoffeeBar(addOn.name)) { <small class="coffee-inclusions">{{ coffeeInclusions(addOn.name) }}</small> }</label>
                   <b>{{ addOn.price * (isAddOnSelected(addOn.id) ? draftService.addOnQuantity(addOn.id) : 1) | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
                   @if (isAddOnSelected(addOn.id) && draftService.supportsQuantity(addOn)) {
                     <div class="addon-quantity" role="group" [attr.aria-label]="addOn.name + ' quantity'">
