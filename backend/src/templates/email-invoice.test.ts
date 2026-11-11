@@ -22,10 +22,19 @@ const invoice = {
   cashDepositDueDate: '2026-11-17', cashPreparationDays: '3',
 };
 
+test('payment request email waits for admin request and the assigned QR', () => {
+  const context = { customerName: legacy.customerName, bookingReference: legacy.bookingReference, eventDate: legacy.eventDate };
+  const approved = renderEmail('BOOKING_APPROVED', context);
+  const requested = renderEmail('PAYMENT_REQUESTED', context);
+  assert.match(approved.text, /notify you when payment is requested/i);
+  assert.match(requested.text, /choose GCash, bank transfer, or cash/i);
+  assert.match(requested.text, /wait for your assigned QR/i);
+});
+
 test('invoice email organizes event, billing, cash deadline and office payment instructions', () => {
   const message = renderEmail('INVOICE_ISSUED', invoice);
   for (const value of [
-    'Your reservation has been approved.', 'BK-42', 'Wedding & celebration', 'November 20, 2026',
+    'Your reservation has been approved', 'LA Chef will notify you when payment is requested', 'BK-42', 'Wedding & celebration', 'November 20, 2026',
     '1:05 PM Philippine Time', 'Hall <North>', '499', 'INV-2026-42',
     'Invoice total: PHP 100.01', 'Recorded payments: PHP 20.00', 'Required deposit (50%): PHP 50.01',
     'Remaining deposit to pay: PHP 30.01', 'Outstanding balance: PHP 80.01', 'Balance due: November 20, 2026',

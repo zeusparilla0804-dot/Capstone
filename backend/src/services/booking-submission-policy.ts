@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { CreateBookingDto } from '../types/domain.types.js';
 import { AppError } from '../utils/app-error.js';
+import { cashPreparationDays, minimumCashEventDate } from './cash-payment-policy.js';
 
 export function parseBookingSubmissionKey(value: unknown): string | undefined {
   if (value === undefined) return undefined;
@@ -21,13 +22,11 @@ export function bookingSubmissionHash(dto: CreateBookingDto): string {
   return createHash('sha256').update('booking-create:v1:').update(JSON.stringify(canonical)).digest('hex');
 }
 
-export function assertCustomerBookingDate(date: string): void {
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
-  const minimum = new Date(`${today}T00:00:00Z`);
-  minimum.setUTCDate(minimum.getUTCDate() + 3);
+export function assertCustomerBookingDate(date: string, guestCount = 1, now = new Date()): void {
+  const minimum = new Date(`${minimumCashEventDate(guestCount, now)}T00:00:00Z`);
+  const days = cashPreparationDays(guestCount) + 1;
+  minimum.setUTCDate(minimum.getUTCDate() + 1);
   if (date < minimum.toISOString().slice(0, 10)) {
-    throw new AppError(400, 'Unavailable Date. Please select a date at least 3 days in advance.');
+    throw new AppError(400, `Unavailable Date. Please select a date at least ${days} days in advance.`);
   }
 }

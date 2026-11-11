@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction } from '../../core/utils/customer-payment-status';
+import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -22,6 +22,8 @@ interface BillingRecord {
   readonly balance: number;
   readonly acceptsPayment: boolean;
   readonly cashPayment: boolean;
+  readonly needsPaymentChoice: boolean;
+  readonly waitingForPaymentQr: boolean;
 }
 
 @Component({
@@ -31,33 +33,39 @@ interface BillingRecord {
   styleUrl: './customer-billing.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CustomerBillingPageComponent {
+export class CustomerBillingPageComponent implements OnDestroy {
   protected readonly bookingService = inject(BookingService);
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly badgeState = inject(PortalBadgeStateService);
+  private readonly refreshTimer: ReturnType<typeof setInterval>;
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
 
-  protected readonly records = computed<readonly BillingRecord[]>(() => this.bookingService.bookings().map((booking) => {
-    const total = bookingTotal(booking);
-    const balance = booking.status === 'cancelled' || booking.status === 'rejected'
-      ? 0
-      : Math.max(total - booking.amountPaid, 0);
-    return {
-      id: booking.id,
-      invoiceId: booking.invoiceId,
-      reference: booking.reference,
-      eventName: booking.eventName,
-      eventDate: booking.eventDate,
-      status: booking.status,
-      paymentStatus: customerPaymentStatus(booking),
-      total,
-      paid: booking.amountPaid,
-      balance,
-      acceptsPayment: hasCashPaymentAction(booking) || hasOnlinePaymentAction(booking),
-      cashPayment: booking.paymentMethod === 'cash',
-    };
-  }));
+  protected readonly records = computed<readonly BillingRecord[]>(() => [...this.bookingService.bookings()]
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    .map((booking) => {
+      const total = bookingTotal(booking);
+      const balance = booking.status === 'cancelled' || booking.status === 'rejected'
+        ? 0
+        : Math.max(total - booking.amountPaid, 0);
+      return {
+        id: booking.id,
+        invoiceId: booking.invoiceId,
+        reference: booking.reference,
+        eventName: booking.eventName,
+        eventDate: booking.eventDate,
+        status: booking.status,
+        paymentStatus: customerPaymentStatus(booking),
+        total,
+        paid: booking.amountPaid,
+        balance,
+        acceptsPayment: hasCashPaymentAction(booking)
+          || (hasOnlinePaymentAction(booking) && (booking.amountPaid === 0 || booking.status === 'payment_submitted')),
+        cashPayment: booking.paymentMethod === 'cash',
+        needsPaymentChoice: booking.status === 'awaiting_payment' && !booking.paymentMethod,
+        waitingForPaymentQr: isWaitingForPaymentQr(booking),
+      };
+    }));
   protected readonly totalBilled = computed(() => this.records().reduce((sum, item) => sum + item.total, 0));
   protected readonly totalPaid = computed(() => this.records().reduce((sum, item) => sum + item.paid, 0));
   protected readonly outstandingBalance = computed(() => this.records().reduce((sum, item) => sum + item.balance, 0));
@@ -65,7 +73,13 @@ export class CustomerBillingPageComponent {
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     this.bookingService.loadMine();
+    this.refreshTimer = setInterval(() => this.bookingService.loadMine(), 30_000);
   }
+
+  ngOnDestroy(): void { clearInterval(this.refreshTimer); }
+
+  @HostListener('window:focus')
+  protected refreshOnFocus(): void { this.bookingService.loadMine(); }
 
   protected formatCurrency(value: number): string {
     return `₱${value.toLocaleString('en-PH')}`;

@@ -57,7 +57,9 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
         } else if (/FROM dbo\.RESERVATION/is.test(command)) {
           if (params['reservationId'] === 5 && params['customerId'] === 7) recordset = [{ id: 5 }];
         } else if (/FROM dbo\.PAYMENT\b/i.test(command)) {
-          recordset = [{ paymentId: 3, amountDue: 100, amountPaid: 10 }];
+          recordset = [{ paymentId: 3, amountDue: 100, amountPaid: 10, paymentMethod: 'BANK_TRANSFER' }];
+        } else if (/FROM dbo\.BOOKING_PAYMENT_DESTINATION/i.test(command)) {
+          recordset = [{ destination_id: 1 }];
         } else if (/INSERT dbo\.PAYMENT_PROOF/i.test(command)) {
           const row = { ...params, id: rows.length + 1, status: 'SUBMITTED', createdAt: new Date(), updatedAt: new Date() };
           rows.push(row); recordset = [row];

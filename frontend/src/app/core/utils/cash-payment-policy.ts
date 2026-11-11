@@ -18,11 +18,15 @@ export function cashDepositDeadline(eventDate: string, guestCount: number): Cash
   return { date, at: `${date}T10:00:00.000Z`, preparationDays };
 }
 
+export function minimumBookingEventDate(guestCount: number, now = new Date()): string {
+  return shiftDate(minimumCashEventDate(guestCount, now), 1);
+}
+
 export function minimumCashEventDate(guestCount: number, now = new Date()): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
   }).formatToParts(now);
   const part = (name: string) => parts.find(value => value.type === name)!.value;
   return shiftDate(`${part('year')}-${part('month')}-${part('day')}`,
-    (Number(part('hour')) >= 18 ? 1 : 0) + cashPreparationDays(guestCount));
+    (Number(part('hour')) >= 23 ? 1 : 0) + cashPreparationDays(guestCount));
 }

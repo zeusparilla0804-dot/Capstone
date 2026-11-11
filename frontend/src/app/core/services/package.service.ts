@@ -3,37 +3,10 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { finalize } from 'rxjs';
 import { ApiResponse, CateringPackage, PackageCategory } from '../models';
 import { environment } from '../../../environments/environment';
-import { CLIENT_EVENT_GALLERIES } from '../data/client-event-galleries';
+import { categoryFor, defaultPackageGallery } from '../data/package-galleries';
+import { catalogImageUrl } from '../utils/catalog-image-url';
 
-const PACKAGE_IMAGE_ROOT = 'assets/images/packages';
-type EventCategory = Exclude<PackageCategory, 'all'>;
-type PackageApiItem = Omit<CateringPackage, 'imageUrl' | 'galleryImageUrls' | 'category'> & {
-  readonly category: string;
-};
-
-const PACKAGE_GALLERIES: Record<EventCategory, readonly string[]> = {
-  standard: ['custom-wide', 'custom-buffet', 'custom-table'],
-  ...CLIENT_EVENT_GALLERIES,
-  anniversary: ['anniversary-wide', 'anniversary-buffet', 'anniversary-table'],
-  custom: ['custom-wide', 'custom-buffet', 'custom-table'],
-};
-
-function galleryFor(category: EventCategory): readonly string[] {
-  if (PACKAGE_GALLERIES[category][0]?.startsWith(PACKAGE_IMAGE_ROOT)) {
-    return PACKAGE_GALLERIES[category];
-  }
-  const directory = category === 'standard' ? 'custom' : category;
-  return PACKAGE_GALLERIES[category].map(
-    (fileName) => `${PACKAGE_IMAGE_ROOT}/${directory}/${fileName}.png`,
-  );
-}
-
-function categoryFor(value: string): EventCategory {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === 'standard catering') return 'standard';
-  if (normalized === 'other') return 'custom';
-  return (Object.hasOwn(PACKAGE_GALLERIES, normalized) ? normalized : 'custom') as EventCategory;
-}
+type PackageApiItem = Omit<CateringPackage, 'imageUrl' | 'category'> & { readonly category: string };
 
 @Injectable({ providedIn: 'root' })
 export class PackageService {
@@ -43,7 +16,12 @@ export class PackageService {
   readonly error = signal('');
 
   readonly packages = this.packagesState.asReadonly();
-  readonly popularPackages = computed(() => this.packagesState().slice(0, 3));
+  readonly popularPackages = computed(() => {
+    const packages = this.packagesState();
+    return (['standard', 'wedding', 'debut'] as const)
+      .map(category => packages.find(pkg => pkg.category === category))
+      .filter((pkg): pkg is CateringPackage => pkg !== undefined);
+  });
 
   load(): void {
     this.loading.set(true);
@@ -60,12 +38,14 @@ export class PackageService {
             response.data.map(
               (item) => {
                 const category = categoryFor(item.category);
-                const galleryImageUrls = galleryFor(category);
+                const hasCustomImages = !!item.galleryImageUrls?.length;
+                const galleryImageUrls = hasCustomImages ? item.galleryImageUrls!.map(catalogImageUrl) : defaultPackageGallery(item.name, category);
                 return {
                   ...item,
                   id: String(item.id),
                   category,
-                  imageUrl: galleryImageUrls[0],
+                  hasCustomImages,
+                  imageUrl: galleryImageUrls[0] ?? '',
                   galleryImageUrls,
                 } as CateringPackage;
               },

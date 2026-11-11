@@ -21,7 +21,7 @@
       rgba(26, 27, 22, 0.7) 44%,
       rgba(26, 27, 22, 0.08) 78%
     ),
-    url('/assets/images/hero/la-chef-hero.webp') center / cover no-repeat;
+    url('/assets/images/hero/la-chef-venue-hero.jpg') center / cover no-repeat;
   color: #fff;
 }
 .hero::after {
@@ -38,6 +38,17 @@
   position: relative;
   z-index: 1;
   padding-block: 88px;
+}
+@media (min-width: 921px) {
+  .hero {
+    min-height: min(760px, calc(100dvh - 80px));
+  }
+
+  .hero__content {
+    // Match the public header logo's desktop gutter.
+    width: min(100% - 40px, var(--content-width));
+    left: min(0px, calc((var(--content-width) - 100vw) / 2 + clamp(24px, 6vw, 112px)));
+  }
 }
 .hero__eyebrow {
   color: #d7d9bd;

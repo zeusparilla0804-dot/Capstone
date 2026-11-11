@@ -86,12 +86,27 @@ describe('CustomerDashboardPageComponent', () => {
     expect(getComputedStyle(page).backgroundColor).toBe('rgb(247, 245, 239)');
   });
 
+  it('refreshes payment requests without repeating a banner above the dashboard', () => {
+    bookings.set([booking({ status: 'approved', paymentMethod: undefined, amountPaid: 0 })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
+    bookings.set([booking({ status: 'awaiting_payment', paymentMethod: undefined, amountPaid: 0 })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Payment requested for booking');
+    window.dispatchEvent(new Event('focus'));
+    expect(loadMine).toHaveBeenCalledTimes(2);
+    bookings.set([booking({ status: 'awaiting_payment', paymentMethod: 'gcash' })]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
+  });
+
   it('uses verified amounts for payment badges without confirming the reservation', () => {
     bookings.set([booking({ status: 'payment_verified', amountPaid: 25000 })]);
     fixture.detectChanges();
     expect(loadMine).toHaveBeenCalledOnce();
     const status = () => fixture.nativeElement.querySelector('.booking-table__row .status-badge') as HTMLElement;
-    expect(status().textContent!.trim()).toBe('50% Down Payment Verified');
+    expect(status().textContent!.trim()).toBe('Down Payment Paid');
     expect(fixture.nativeElement.querySelector('[data-step="payment"]').textContent).toContain('Verified');
     bookings.set([booking({ status: 'payment_verified', amountPaid: 50000 })]);
     fixture.detectChanges();

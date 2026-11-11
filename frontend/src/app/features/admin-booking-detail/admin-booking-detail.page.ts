@@ -5,11 +5,14 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import type { AdminBookingDetail, AdminBookingHistory, AdminBookingStatus, AdminPaymentProof, PageResult } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
 import { paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
 import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
+import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
+import { EventCompletionComponent } from './event-completion';
 
 interface BookingAction {
   readonly status: AdminBookingStatus;
@@ -44,13 +47,18 @@ const actions: Record<AdminBookingStatus, readonly BookingAction[]> = {
 
 @Component({
   selector: 'app-admin-booking-detail',
-  imports: [AdminShellComponent, StatusBadgeComponent, SuccessDialogComponent, CurrencyPipe, DatePipe, FormsModule, RouterLink],
+  imports: [AdminShellComponent, StatusBadgeComponent, SuccessDialogComponent, EventCompletionComponent, CurrencyPipe, DatePipe, FormsModule, RouterLink],
   templateUrl: './admin-booking-detail.page.html',
   styleUrl: './admin-booking-detail.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminBookingDetailPage {
+  protected readonly paymentBadgeStatus = (item: AdminBookingDetail): string => adminPaymentDisplayStatus({
+    total: item.total, amountPaid: item.amountPaid, status: item.status,
+    latestProofStatus: item.latestProofStatus,
+  }) ?? item.status;
   private readonly api = inject(AdminService);
+  private readonly feedbackDialog = inject(ActionFeedbackService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected readonly bookingId = Number(this.route.snapshot.paramMap.get('id'));
@@ -78,9 +86,30 @@ export class AdminBookingDetailPage {
       .map(action => action.status === 'APPROVED' && booking.capacity.requiresAdminConfirmation
         ? { ...action, label: 'Approve and confirm capacity', capacityConfirmation: true } : action);
   });
+  protected readonly reviewActions = computed(() => this.availableActions()
+    .filter(action => action.status === 'APPROVED' || action.status === 'REJECTED'));
+  protected readonly secondaryActions = computed(() => this.availableActions()
+    .filter(action => action.status !== 'APPROVED' && action.status !== 'REJECTED' && action.status !== 'COMPLETED'));
   protected readonly outstandingBalance = computed(() =>
     Math.max(0, (this.booking()?.total ?? 0) - (this.booking()?.amountPaid ?? 0)),
   );
+  protected readonly packageAmount = computed(() => {
+    const item = this.booking();
+    if (!item) return 0;
+    return Math.max(0, Math.round((item.subtotal - item.addOns.reduce((sum, addOn) => sum + addOn.price, 0)) * 100) / 100);
+  });
+  protected readonly perHeadPackage = computed(() => {
+    const item = this.booking();
+    return !!item && Math.abs(this.packageAmount() - item.packageUnitPrice * item.guestCount) < 0.01;
+  });
+  protected readonly requiredDeposit = computed(() => Math.round((this.booking()?.total ?? 0) * 50) / 100);
+  protected readonly paymentWindowHours = computed(() => (this.booking()?.guestCount ?? 0) >= 500 ? 48 : 24);
+  protected readonly suggestedPaymentDeadline = computed(() => {
+    const approvedAt = this.booking()?.statusHistory.find(entry => entry.nextStatus === 'APPROVED')?.createdAt;
+    if (!approvedAt) return null;
+    const timestamp = Date.parse(approvedAt);
+    return Number.isFinite(timestamp) ? new Date(timestamp + this.paymentWindowHours() * 60 * 60 * 1000) : null;
+  });
   protected readonly cashDeadline = computed(() => {
     const item = this.booking();
     return item?.paymentMethod?.toUpperCase() === 'CASH' ? cashDepositDeadline(item.eventDate, item.guestCount) : null;
@@ -190,6 +219,13 @@ export class AdminBookingDetailPage {
     this.actionError.set('');
   }
 
+  protected requestInvoice(): void {
+    if (this.mutationPending()) return;
+    this.feedbackDialog.confirm({ title: 'Issue this invoice?', confirmLabel: 'Confirm and issue invoice',
+      message: `Create the invoice for ${this.booking()?.reference}? Review the booking details and total before continuing.`,
+    }, () => this.issueInvoice());
+  }
+
   protected issueInvoice(): void {
     if (this.mutationPending()) return;
     this.mutationPending.set(true);
@@ -214,5 +250,11 @@ export class AdminBookingDetailPage {
       FULL: 'Full',
     } as const;
     return labels[status];
+  }
+
+  protected eventTimeLabel(value?: string): string {
+    if (!value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return value || 'Time not provided';
+    const hour = Number(value.slice(0, 2));
+    return `${hour % 12 || 12}:${value.slice(3)} ${hour < 12 ? 'AM' : 'PM'}`;
   }
 }

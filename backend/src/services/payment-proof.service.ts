@@ -1,4 +1,5 @@
 import type sql from 'mssql';
+import mssql from 'mssql';
 import { proofStorage } from '../config/uploads.js';
 import { getDbPool } from '../config/database.js';
 import { lockedBookingStatus, runBookingStatusTransaction } from '../repositories/booking-status.repository.js';
@@ -7,6 +8,7 @@ import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
 import { transitionBooking } from './booking-status.service.js';
+import { assertProofMatchesPayment } from './booking-payment-policy.js';
 import type { ProofStorage, ValidatedProofFile } from './proof-storage.service.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
 import { queueBookingNotification } from './notification.service.js';
@@ -95,6 +97,13 @@ export function createPaymentProofService(deps: Dependencies) {
           const payment = await lockedPayment(reservationId, request);
           if (!payment) throw new AppError(409, 'Booking has no payment record.');
           if (payment.paymentMethod?.toUpperCase() === 'CASH') throw new AppError(409, 'This booking uses cash payment. Please pay at the LA Chef office.');
+          assertProofMatchesPayment(payment.paymentMethod, input.method);
+          const destination = await request.input('destinationReservationId', mssql.Int, reservationId)
+            .input('destinationMethod', mssql.NVarChar(30), payment.paymentMethod)
+            .query(`SELECT TOP(1) d.destination_id FROM dbo.BOOKING_PAYMENT_DESTINATION a
+              JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id
+              WHERE a.reservation_id=@destinationReservationId AND d.is_available=1 AND d.method=@destinationMethod`);
+          if (!destination.recordset.length) throw new AppError(409, 'An available payment QR has not been assigned to this booking.');
           const outstanding = Math.round(Number(payment.amountDue) * 100) - Math.round(Number(payment.amountPaid) * 100);
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance.');
           if (Math.round(input.claimedAmount * 100) > outstanding) throw new AppError(409, 'Claimed amount exceeds the outstanding balance.');

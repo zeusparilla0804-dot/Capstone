@@ -63,7 +63,7 @@ describe('PackagesPageComponent editorial discovery', () => {
       element.querySelectorAll<HTMLButtonElement>('.category-filters button'),
       (button) => button.textContent?.trim(),
     );
-    expect(labels).toEqual(['All Packages', 'Standard Catering', 'Debut Packages']);
+    expect(labels).toEqual(['All Packages', 'Standard Catering', 'Wedding Packages', 'Debut Packages']);
   });
 
   it('routes every package selection into the standard reservation flow', () => {

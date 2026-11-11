@@ -8,6 +8,45 @@ import { PackageService } from './package.service';
 import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 describe('BookingDraftService add-on quantities', () => {
+  it('replaces a photobooth choice without removing other services or double charging', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    const service = TestBed.inject(BookingDraftService);
+    service.addOns.set([
+      { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
+      { id: 'mirror', name: 'Mirror Photobooth (2 Hours Unlimited)', price: 10000 },
+      { id: 'host', name: 'Professional Host', price: 8000 },
+    ]);
+    service.toggleAddOn('host');
+    service.toggleAddOn('basic');
+    service.toggleAddOn('mirror');
+    expect(service.draft().selectedAddOnIds).toEqual(['host', 'mirror']);
+    expect(service.pricing().addOnTotal).toBe(18000);
+    service.toggleAddOn('mirror');
+    expect(service.pricing().addOnTotal).toBe(8000);
+  });
+  it('shows only add-ons allowed for the selected event and blocks incompatible selections', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    const service = TestBed.inject(BookingDraftService);
+    service.addOns.set([
+      { id: '1', name: 'Host or Magician', price: 7000, eventTypes: ['birthday', 'debut'] },
+      { id: '2', name: 'Coffee Bar for 100 Guests', price: 22000, eventTypes: ['wedding', 'birthday', 'corporate', 'debut', 'anniversary', 'other'] },
+    ]);
+    service.update({ eventType: 'wedding' });
+    expect(service.availableAddOns().map(item => item.id)).toEqual(['2']);
+    service.toggleAddOn('1');
+    expect(service.draft().selectedAddOnIds).toEqual([]);
+  });
+  it('defaults a 100-guest coffee bar to five units for 500 guests and updates its total', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    const service = TestBed.inject(BookingDraftService);
+    service.addOns.set([{ id: '5', name: 'Coffee Bar for 100 Guests', price: 22_000 }]);
+    service.update({ guestCount: 500 });
+    service.toggleAddOn('5');
+    expect(service.addOnQuantity('5')).toBe(5);
+    expect(service.pricing().addOnTotal).toBe(110_000);
+    service.setAddOnQuantity('5', 6);
+    expect(service.pricing().addOnTotal).toBe(132_000);
+  });
   it('preserves quantities when toggled and applies only selected quantities to pricing', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), {
       provide: PackageService, useValue: { getPackageById: () => undefined, packages: signal([]) },

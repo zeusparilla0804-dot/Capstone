@@ -21,12 +21,25 @@ export function emailAddress(value: unknown): string {
   return email;
 }
 
+export function registrationEmailAddress(value: unknown): string {
+  const email = emailAddress(value);
+  if (email.slice(0, email.indexOf('@')).length < 3) {
+    throw new AppError(400, 'Use an email address with at least 3 characters before @.');
+  }
+  return email;
+}
+
 export function philippineMobileNumber(value: unknown): string {
   const phone = text(value, 'Phone', { max: 30 });
   if (!/^(?:09|\+639)[0-9]{2} ?[0-9]{3} ?[0-9]{4}$/.test(phone)) {
     throw new AppError(400, 'Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).');
   }
-  return phone.replaceAll(' ', '');
+  const normalized = phone.replaceAll(' ', '');
+  const suffix = normalized.startsWith('+63') ? normalized.slice(4) : normalized.slice(2);
+  if (/^(\d)\1{8}$/.test(suffix) || /^(?:012345678|123456789|234567890|987654321|876543210)$/.test(suffix)) {
+    throw new AppError(400, 'Enter a valid Philippine mobile number, not a repeated or sequential test number.');
+  }
+  return normalized;
 }
 
 export function isoDate(value: unknown, name: string, futureOnly = false): string {

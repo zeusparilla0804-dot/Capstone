@@ -1,12 +1,14 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { AdminBooking, PageResult } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
+import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
 
 const genericActions: Record<string, readonly string[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -24,8 +26,12 @@ const genericActions: Record<string, readonly string[]> = {
   styleUrl: './admin-bookings.page.scss'
 })
 export class AdminBookingsPage {
+  protected readonly paymentBadgeStatus = (item: AdminBooking): string => adminPaymentDisplayStatus({
+    total: item.total, amountPaid: item.amountPaid ?? 0, status: item.status,
+    latestProofStatus: item.latestProofStatus,
+  }) ?? item.status;
   private readonly api = inject(AdminService);
-  private readonly router = inject(Router);
+  private readonly feedbackDialog = inject(ActionFeedbackService);
   protected readonly data = signal<PageResult<AdminBooking> | null>(null);
   protected readonly loading = signal(false);
   protected readonly error = signal('');
@@ -53,6 +59,7 @@ export class AdminBookingsPage {
   protected actionsFor(status: string): readonly string[] { return genericActions[status] ?? []; }
   protected actionLabel(item: AdminBooking, status: string): string {
     if (this.requiresCapacityConfirmation(item, status)) return 'Approve and confirm capacity';
+    if (status === 'AWAITING_PAYMENT') return 'Request payment';
     return status.replaceAll('_', ' ');
   }
 
@@ -86,7 +93,10 @@ export class AdminBookingsPage {
       return;
     }
     this.pendingAction.set(null);
-    this.sendAction(item, nextStatus);
+    this.feedbackDialog.confirm({ title: 'Confirm reservation update?',
+      message: `${item.reference}\nUpdate this reservation to ${this.actionLabel(item, nextStatus).toLowerCase()}?`,
+      confirmLabel: 'Confirm update',
+    }, () => this.sendAction(item, nextStatus));
   }
 
   protected confirmAction() {
@@ -131,13 +141,6 @@ export class AdminBookingsPage {
           this.actionError.set(error?.error?.message || 'Unable to update this reservation. Refresh the list and try again.');
         }
       }
-    });
-  }
-
-  protected issue(item: AdminBooking) {
-    this.api.issueInvoice(item.id).subscribe({
-      next: response => this.router.navigate(['/admin/invoices', response.data.invoiceId]),
-      error: () => this.error.set('Invoice can only be issued for an approved reservation.')
     });
   }
 

@@ -4,11 +4,12 @@ import { provideHttpClient, withInterceptors, withXhr } from '@angular/common/ht
 
 import { routes } from './app.routes';
 import { apiInterceptor } from './core/interceptors/api.interceptor';
+import { actionFeedbackInterceptor } from './core/interceptors/action-feedback.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
-    provideHttpClient(withXhr(), withInterceptors([apiInterceptor])),
+    provideHttpClient(withXhr(), withInterceptors([apiInterceptor, actionFeedbackInterceptor])),
     provideRouter(
       routes,
       withInMemoryScrolling({

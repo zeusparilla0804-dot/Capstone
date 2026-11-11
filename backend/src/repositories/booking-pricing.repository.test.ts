@@ -22,6 +22,10 @@ test('customer booking reload returns the saved payment method without changing 
     if (/FROM dbo\.BOOKING_POLICY|policyCustomerId/.test(command)) return { recordset: [], rowsAffected: [0] };
     if (/FROM dbo\.RESERVATION r JOIN/.test(command)) {
       assert.match(command, /pay\.payment_method/);
+      assert.match(command, /PAYMENT_PROOF pp/);
+      assert.match(command, /BOOKING_PAYMENT_DESTINATION/);
+      assert.match(command, /d\.is_available\s*=\s*1/);
+      assert.match(command, /d\.method\s*=\s*pay\.payment_method/);
       return { recordset: ['CASH', 'BANK_TRANSFER', 'E-WALLET'].map((method, index) => ({
         reservation_id: index + 1, booking_reference: `BK-${index}`, event_type: 'Wedding',
         event_date: new Date('2027-12-20'), event_time: new Date('1970-01-01T12:00:00Z'),
@@ -30,6 +34,8 @@ test('customer booking reload returns the saved payment method without changing 
         package_base_price: null, package_included_guests: null, package_excess_guest_price: null,
         guest_count: 100, discount_amount: 0, total_amount: 48000, amount_paid: index * 12000,
         status: 'AWAITING_PAYMENT', payment_method: method,
+        paymentQrReady: index === 1 ? 1 : 0,
+        latestProofStatus: ['REJECTED', 'SUBMITTED', 'VERIFIED'][index],
       })), rowsAffected: [3] };
     }
     if (/FROM dbo\.RESERVATION_ADD_ON/.test(command)) return { recordset: [], rowsAffected: [0] };
@@ -38,7 +44,9 @@ test('customer booking reload returns the saved payment method without changing 
   try {
     const bookings = await bookingRepository.findCustomerBookings(7);
     assert.deepEqual(bookings.map(item => item.paymentMethod), ['cash', 'bank-transfer', 'gcash']);
+    assert.deepEqual(bookings.map(item => item.paymentQrReady), [false, true, false]);
     assert.deepEqual(bookings.map(item => item.amountPaid), [0, 12000, 24000]);
+    assert.deepEqual(bookings.map(item => item.latestProofStatus), ['REJECTED', 'SUBMITTED', 'VERIFIED']);
     assert.ok(bookings.every(item => item.total === 48000 && item.status === 'awaiting_payment'));
   } finally { await closeDatabase(); }
 });

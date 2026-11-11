@@ -9,6 +9,7 @@ import { InvoicePageComponent } from './invoice.page';
 
 const invoice: Invoice = {
   invoiceId: 8,
+  issuer: { name: 'Maria Santos' },
   invoiceNumber: 'INV-2026-000008',
   issueDate: '2026-10-18T02:00:00.000Z',
   dueDate: '2026-10-25T02:00:00.000Z',
@@ -50,7 +51,7 @@ describe('InvoicePageComponent', () => {
 
   beforeEach(async () => {
     service = {
-      getInvoiceById: vi.fn(() => of({ success: true, data: invoice })),
+      getInvoiceById: vi.fn(() => of({ success: true, data: { ...invoice, amountPaid: 0, remainingBalance: invoice.totalAmount, payments: [], status: 'ISSUED' } })),
     };
     await TestBed.configureTestingModule({
       imports: [InvoicePageComponent],
@@ -83,6 +84,11 @@ describe('InvoicePageComponent', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it('hides payment history when no payment has been recorded', () => {
+    expect(fixture.nativeElement.querySelector('.payment-history')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('No payments recorded yet.');
+  });
+
   it('renders the approved reservation agreement and signature lines on the admin invoice', () => {
     expect(service.getInvoiceById).toHaveBeenCalledWith(8, true);
     const agreement = fixture.nativeElement.querySelector('[aria-labelledby="agreement-title"]') as HTMLElement;
@@ -93,8 +99,15 @@ describe('InvoicePageComponent', () => {
 
     const signatures = agreement.querySelectorAll('.invoice-signature');
     expect(signatures).toHaveLength(2);
-    expect(signatures[0]?.textContent).toContain('Customer signature');
+    expect(signatures[0]?.textContent).toContain('Name and signature');
     expect(signatures[1]?.textContent).toContain('Authorized LA Chef representative');
+    expect(signatures[0]?.querySelector('.invoice-signature__line')?.textContent?.trim()).toBe(invoice.customer.name);
+    expect(signatures[1]?.querySelector('.invoice-signature__line')?.textContent?.trim()).toBe('Maria Santos');
+    expect(fixture.nativeElement.querySelector('.invoice-totals')?.textContent).not.toContain('Discount');
+    expect(signatures[0]?.querySelector('small')).toBeNull();
+    expect(signatures[1]?.querySelector('small')).toBeNull();
+    expect(getComputedStyle(signatures[0]!.querySelector('strong')!).textAlign).toBe('center');
+    expect(getComputedStyle(signatures[1]!.querySelector('strong')!).textAlign).toBe('center');
   });
 
   it('prints the complete billing agreement from a clearly named action', () => {
@@ -114,11 +127,55 @@ describe('InvoicePageComponent', () => {
     expect(due?.querySelector('dd')?.textContent).toContain('Dec 10, 2026');
   });
 
-  it('keeps payment history on screen but excludes it from the one-page printed agreement', () => {
-    const paymentHistory = fixture.nativeElement.querySelector('.payment-history') as HTMLElement;
+  it('keeps invoice printing available without an empty payment-history section', () => {
+    expect((fixture.nativeElement as HTMLElement).querySelector('.invoice-heading')?.textContent).toContain('INVOICE & BILLING AGREEMENT');
+    expect((fixture.nativeElement as HTMLElement).querySelector('.payment-history')).toBeNull();
+    expect((fixture.nativeElement as HTMLElement).querySelector('[data-action="print-billing-agreement"]')).not.toBeNull();
+  });
 
-    expect(paymentHistory).not.toBeNull();
-    expect(paymentHistory.textContent).toContain('GCASH-0042');
-    expect(paymentHistory.classList.contains('no-print')).toBe(true);
+  it('turns a verified down payment into a printable receipt with the recorded transaction and balance', () => {
+    (fixture.componentInstance as any).invoice.set(invoice);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.invoice-heading')?.textContent).toContain('PAYMENT RECEIPT');
+    expect(page.querySelector('.invoice-heading h1')?.textContent).toContain('Receipt');
+    expect(page.querySelector('.invoice-heading h1')?.textContent).not.toContain('Invoice');
+    expect(page.querySelector('.invoice-heading')?.textContent).toContain('GCASH-0042');
+    expect(page.querySelector('[data-action="print-receipt"]')?.textContent).toContain('Print receipt');
+    expect(page.querySelector('.payment-history')?.classList.contains('no-print')).toBe(false);
+    expect(page.querySelector('.payment-history')?.textContent).toContain('GCASH-0042');
+    expect(page.querySelector('.payment-history tbody tr td:nth-child(3)')?.textContent?.trim()).toBe('GCash');
+    expect(page.querySelector('.invoice-totals')?.textContent).toContain('50,000.00');
+    expect(page.querySelector('.invoice-heading .status-badge')?.textContent?.trim()).toBe('Down Payment Paid');
+    expect(page.querySelector('.invoice-agreement ol')).toBeNull();
+    const signatures = page.querySelectorAll('.invoice-signature');
+    expect(signatures[0]?.querySelector('.invoice-signature__line')?.textContent?.trim()).toBe(invoice.customer.name);
+    expect(signatures[1]?.querySelector('.invoice-signature__line')?.textContent?.trim()).toBe('Maria Santos');
+    expect(signatures[0]?.querySelector('small')).toBeNull();
+    expect(signatures[1]?.querySelector('small')).toBeNull();
+  });
+
+  it('refreshes a completed receipt with both payments and zero balance on returning to the page', () => {
+    service.getInvoiceById.mockReturnValue(of({ success: true, data: {
+      ...invoice, booking: { ...invoice.booking, status: 'COMPLETED' }, status: 'PAID',
+      amountPaid: 100000, remainingBalance: 0,
+      payments: [...invoice.payments, { ...invoice.payments[0], id: 13, method: 'CASH', reference: 'CASH-FINAL-42', amount: 50000 }],
+    } }));
+    window.dispatchEvent(new Event('focus')); fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelectorAll('.payment-history tbody tr')).toHaveLength(2);
+    expect(page.querySelector('.payment-history')?.textContent).toContain('CASH-FINAL-42');
+    expect(page.textContent).toContain('Completed');
+    expect(page.querySelector('.invoice-totals')?.textContent).toContain('0.00');
+    expect((fixture.componentInstance as any).invoice().remainingBalance).toBe(0);
+  });
+
+  it('shows Fully Paid on the receipt when verified payments cover the total', () => {
+    (fixture.componentInstance as any).invoice.set({
+      ...invoice, amountPaid: invoice.totalAmount, remainingBalance: 0, status: 'PAID',
+      payments: [{ ...invoice.payments[0], amount: invoice.totalAmount }],
+    });
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.invoice-heading .status-badge')?.textContent?.trim()).toBe('Fully Paid');
   });
 });

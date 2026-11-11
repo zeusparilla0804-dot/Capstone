@@ -1,5 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -18,24 +19,46 @@ import { AdminShellComponent } from '../../shared/components/admin-shell/admin-s
 export class AdminDashboardPageComponent {
   private readonly api = inject(AdminService);
   private readonly badgeState = inject(PortalBadgeStateService);
+  private readonly destroyRef = inject(DestroyRef);
+  private requestPending = false;
+  private appliedPeriod = '';
   protected readonly data = signal<AdminDashboard | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
-  protected period = new Date().toISOString().slice(0, 7);
+  protected readonly refreshError = signal('');
+  protected period = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit' }).format(new Date()).replace('/', '-');
 
   constructor() {
     this.load();
+    const refreshTimer = setInterval(() => this.refresh(), 30_000);
+    this.destroyRef.onDestroy(() => clearInterval(refreshTimer));
   }
 
-  protected load(): void {
-    this.loading.set(true);
-    this.error.set('');
-    this.api.dashboard(this.period).pipe(finalize(() => this.loading.set(false))).subscribe({
+  @HostListener('window:focus')
+  protected refresh(): void { this.load(true); }
+
+  protected load(silent = false): void {
+    if (this.requestPending) return;
+    this.requestPending = true;
+    if (!silent) {
+      this.appliedPeriod = this.period;
+      this.loading.set(true);
+      this.error.set('');
+    }
+    this.refreshError.set('');
+    this.api.dashboard(this.appliedPeriod).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => { this.requestPending = false; this.loading.set(false); }),
+    ).subscribe({
       next: (response) => {
+        this.error.set('');
         this.data.set(response.data);
         this.badgeState.setAdminDashboard(response.data);
       },
-      error: () => this.error.set('Unable to load the admin dashboard.'),
+      error: () => {
+        if (silent && this.data()) this.refreshError.set('Updates could not be refreshed. The displayed records are from the last successful refresh.');
+        else this.error.set('Unable to load the admin dashboard.');
+      },
     });
   }
 

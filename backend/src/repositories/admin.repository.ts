@@ -27,8 +27,8 @@ const pageRequest=async(q:PageQuery)=>(await sqlRequest()).input('search',sql.NV
 async function sqlRequest(){return (await getDbPool()).request();}
 
 export async function dashboard(){const pool=await getDbPool();const metrics=await pool.request().query(`SELECT (SELECT COUNT(*) FROM dbo.RESERVATION) totalBookings,(SELECT COUNT(*) FROM dbo.RESERVATION WHERE status='PENDING') pendingBookings,(SELECT COUNT(*) FROM dbo.RESERVATION WHERE event_date>=CAST(GETDATE() AS date) AND status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) upcomingEvents,(SELECT COALESCE(SUM(amount_paid),0) FROM dbo.PAYMENT) totalRevenue,(SELECT COALESCE(SUM(amount_due-amount_paid),0) FROM dbo.PAYMENT WHERE amount_due>amount_paid) outstandingPayments`);const recent=await pool.request().query(`SELECT TOP 8 r.reservation_id id,r.booking_reference reference,CONCAT(c.first_name,' ',c.last_name) customerName,e.event_type eventType,CONVERT(varchar(10),r.event_date,23) eventDate,r.guest_count guestCount,r.status,r.total_amount total FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id JOIN dbo.EVENT e ON e.event_id=r.event_id ORDER BY r.created_at DESC`);return{...metrics.recordset[0],recentBookings:recent.recordset};}
-export async function bookings(q:PageQuery){const request=await pageRequest(q);const result=await request.query(`SELECT r.reservation_id id,i.invoice_id invoiceId,r.booking_reference reference,CONCAT(c.first_name,' ',c.last_name) customerName,c.email,e.event_type eventType,CONVERT(varchar(10),r.event_date,23) eventDate,CONVERT(varchar(5),r.event_time,108) eventTime,r.venue_address venue,r.guest_count guestCount,p.package_name packageName,r.total_amount total,r.status,capacity.activeBookingCount,capacity.largestGuestCount,capacity.hasMediumEvent,COUNT(*) OVER() total_count FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT COUNT_BIG(*) activeBookingCount,COALESCE(MAX(cr.guest_count),0) largestGuestCount,COALESCE(MAX(CASE WHEN cr.guest_count BETWEEN 150 AND 499 THEN 1 ELSE 0 END),0) hasMediumEvent FROM dbo.RESERVATION cr WHERE cr.event_date=r.event_date AND cr.status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) capacity WHERE (@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND (@status='' OR r.status=@status) AND (@eventType='' OR e.event_type=@eventType) AND (@date='' OR r.event_date=CONVERT(date,@date)) ORDER BY r.created_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset.map(mapAdminBookingCapacity),q);}
-export async function booking(id:number,request?:sql.Request){const pool=request?undefined:await getDbPool();const main=await (request??pool!.request()).replaceInput('id',sql.Int,id).query(`SELECT r.reservation_id id,i.invoice_id invoiceId,i.invoice_number invoiceNumber,i.status invoiceStatus,r.booking_reference reference,CONCAT(c.first_name,' ',c.last_name) customerName,c.email,c.contact_number phone,e.event_type eventType,CONVERT(varchar(10),r.event_date,23) eventDate,CONVERT(varchar(5),r.event_time,108) eventTime,r.venue_address venue,r.guest_count guestCount,p.package_name packageName,r.package_unit_price packageUnitPrice,r.subtotal,r.discount_amount discount,r.total_amount total,r.status,COALESCE(pay.amount_paid,0) amountPaid,pay.payment_method paymentMethod,capacity.activeBookingCount,capacity.largestGuestCount,capacity.hasMediumEvent FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT COUNT_BIG(*) activeBookingCount,COALESCE(MAX(cr.guest_count),0) largestGuestCount,COALESCE(MAX(CASE WHEN cr.guest_count BETWEEN 150 AND 499 THEN 1 ELSE 0 END),0) hasMediumEvent FROM dbo.RESERVATION cr WHERE cr.event_date=r.event_date AND cr.status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) capacity WHERE r.reservation_id=@id`);if(!main.recordset[0])return undefined;const extras=await (request??pool!.request()).replaceInput('id',sql.Int,id).query(`SELECT a.add_on_name name,ra.unit_price*ra.quantity price FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id WHERE ra.reservation_id=@id`);return{...mapAdminBookingCapacity(main.recordset[0]),addOns:extras.recordset,statusHistory:await bookingStatusHistory(id,request??pool!.request())};}
+export async function bookings(q:PageQuery){const request=await pageRequest(q);const result=await request.query(`SELECT r.reservation_id id,i.invoice_id invoiceId,r.booking_reference reference,CONCAT(c.first_name,' ',c.last_name) customerName,c.email,e.event_type eventType,CONVERT(varchar(10),r.event_date,23) eventDate,CONVERT(varchar(5),r.event_time,108) eventTime,r.venue_address venue,r.guest_count guestCount,p.package_name packageName,r.total_amount total,COALESCE(pay.amount_paid,0) amountPaid,proof.latestProofStatus,r.status,capacity.activeBookingCount,capacity.largestGuestCount,capacity.hasMediumEvent,COUNT(*) OVER() total_count FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof OUTER APPLY(SELECT COUNT_BIG(*) activeBookingCount,COALESCE(MAX(cr.guest_count),0) largestGuestCount,COALESCE(MAX(CASE WHEN cr.guest_count BETWEEN 150 AND 499 THEN 1 ELSE 0 END),0) hasMediumEvent FROM dbo.RESERVATION cr WHERE cr.event_date=r.event_date AND cr.status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) capacity WHERE (@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND (@status='' OR r.status=@status) AND (@eventType='' OR e.event_type=@eventType) AND (@date='' OR r.event_date=CONVERT(date,@date)) ORDER BY r.created_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset.map(mapAdminBookingCapacity),q);}
+export async function booking(id:number,request?:sql.Request){const pool=request?undefined:await getDbPool();const main=await (request??pool!.request()).replaceInput('id',sql.Int,id).query(`SELECT r.reservation_id id,i.invoice_id invoiceId,i.invoice_number invoiceNumber,i.status invoiceStatus,r.booking_reference reference,CONCAT(c.first_name,' ',c.last_name) customerName,c.email,c.contact_number phone,e.event_type eventType,CONVERT(varchar(10),r.event_date,23) eventDate,CONVERT(varchar(5),r.event_time,108) eventTime,r.venue_address venue,r.special_request specialRequest,r.guest_count guestCount,p.package_name packageName,r.package_unit_price packageUnitPrice,r.subtotal,r.discount_amount discount,r.total_amount total,r.status,COALESCE(pay.amount_paid,0) amountPaid,pay.payment_method paymentMethod,destination.label paymentDestinationLabel,proof.latestProofStatus,capacity.activeBookingCount,capacity.largestGuestCount,capacity.hasMediumEvent FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id LEFT JOIN dbo.BOOKING_PAYMENT_DESTINATION destinationAssignment ON destinationAssignment.reservation_id=r.reservation_id LEFT JOIN dbo.PAYMENT_DESTINATION destination ON destination.destination_id=destinationAssignment.destination_id AND destination.method=pay.payment_method LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof OUTER APPLY(SELECT COUNT_BIG(*) activeBookingCount,COALESCE(MAX(cr.guest_count),0) largestGuestCount,COALESCE(MAX(CASE WHEN cr.guest_count BETWEEN 150 AND 499 THEN 1 ELSE 0 END),0) hasMediumEvent FROM dbo.RESERVATION cr WHERE cr.event_date=r.event_date AND cr.status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) capacity WHERE r.reservation_id=@id`);if(!main.recordset[0])return undefined;const extras=await (request??pool!.request()).replaceInput('id',sql.Int,id).query(`SELECT a.add_on_name name,ra.quantity,ra.unit_price unitPrice,ra.unit_price*ra.quantity price FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id WHERE ra.reservation_id=@id`);return{...mapAdminBookingCapacity(main.recordset[0]),addOns:extras.recordset,statusHistory:await bookingStatusHistory(id,request??pool!.request())};}
 export async function customers(q:PageQuery){const request=await pageRequest(q);const result=await request.query(`SELECT c.customer_id id,CONCAT(c.first_name,' ',c.last_name) fullName,c.email,c.contact_number phone,c.status,COUNT(r.reservation_id) totalBookings,MIN(CASE WHEN r.event_date>=CAST(GETDATE() AS date) THEN r.event_date END) upcomingEvent,COALESCE(SUM(CASE WHEN pay.amount_due>pay.amount_paid THEN pay.amount_due-pay.amount_paid ELSE 0 END),0) outstandingBalance,COUNT(*) OVER() total_count FROM dbo.CUSTOMER c LEFT JOIN dbo.RESERVATION r ON r.customer_id=c.customer_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id WHERE(@search='' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%' OR c.email LIKE '%'+@search+'%' OR c.contact_number LIKE '%'+@search+'%') GROUP BY c.customer_id,c.first_name,c.last_name,c.email,c.contact_number,c.status,c.created_at ORDER BY c.created_at DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset,q);}
 export async function customer(id:number){const pool=await getDbPool();const result=await pool.request().input('id',sql.Int,id).query(`SELECT customer_id id,first_name firstName,last_name lastName,email,contact_number phone,address,status,created_at createdAt FROM dbo.CUSTOMER WHERE customer_id=@id`);return result.recordset[0];}
 export async function packages(){const pool=await getDbPool();return(await pool.request().query(`SELECT p.package_id id,p.event_id eventId,e.event_type eventType,p.package_name name,p.description,p.pricing_type pricingType,p.price_per_head pricePerGuest,p.base_price basePrice,p.included_guests includedGuests,p.excess_guest_price excessGuestPrice,p.min_guest minGuests,p.max_guest maxGuests,p.is_active isActive FROM dbo.PACKAGE p JOIN dbo.EVENT e ON e.event_id=p.event_id ORDER BY p.package_name`)).recordset;}
@@ -39,18 +39,33 @@ export async function updatePackage(id:number,v:PackageInput){const pool=await g
 export async function addOns(){const pool=await getDbPool();return(await pool.request().query('SELECT add_on_id id,add_on_name name,description,price,is_active isActive FROM dbo.ADD_ON ORDER BY add_on_name')).recordset;}
 export async function createAddOn(v:AddOnInput){const pool=await getDbPool();const result=await pool.request().input('name',sql.NVarChar(150),v.name).input('description',sql.NVarChar(1000),v.description).input('price',sql.Decimal(12,2),v.price).input('active',sql.Bit,v.isActive).query('INSERT dbo.ADD_ON(add_on_name,description,price,is_active) OUTPUT INSERTED.add_on_id VALUES(@name,@description,@price,@active)');return Number(result.recordset[0].add_on_id);}
 export async function updateAddOn(id:number,v:AddOnInput){const pool=await getDbPool();const r=await pool.request().input('id',sql.Int,id).input('name',sql.NVarChar(150),v.name).input('description',sql.NVarChar(1000),v.description).input('price',sql.Decimal(12,2),v.price).input('active',sql.Bit,v.isActive).query('UPDATE dbo.ADD_ON SET add_on_name=@name,description=@description,price=@price,is_active=@active WHERE add_on_id=@id');return(r.rowsAffected[0]??0)>0;}
-export async function payments(q:PageQuery){const request=await pageRequest(q);const result=await request.query(`SELECT pay.payment_id id,r.booking_reference bookingReference,CONCAT(c.first_name,' ',c.last_name) customerName,pay.amount_due amountDue,pay.amount_paid amountPaid,pay.payment_method paymentMethod,pay.payment_date paymentDate,pay.transaction_ref reference,pay.status,COUNT(*) OVER() total_count FROM dbo.PAYMENT pay JOIN dbo.RESERVATION r ON r.reservation_id=pay.reservation_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE(@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND(@status='' OR pay.status=@status) ORDER BY pay.payment_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset,q);}
-export async function recordPayment(adminId:number,v:PaymentInput){
+export async function payments(q:PageQuery){const request=(await pageRequest(q)).input('paymentMethod',sql.NVarChar(50),q.paymentMethod??'');const result=await request.query(`SELECT pay.payment_id id,r.reservation_id reservationId,r.status bookingStatus,r.booking_reference bookingReference,CONCAT(c.first_name,' ',c.last_name) customerName,pay.amount_due amountDue,pay.amount_paid amountPaid,proof.latestProofStatus,pay.payment_method paymentMethod,destination.label paymentDestinationLabel,pay.payment_date paymentDate,pay.transaction_ref reference,pay.status,COUNT(*) OVER() total_count FROM dbo.PAYMENT pay JOIN dbo.RESERVATION r ON r.reservation_id=pay.reservation_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id LEFT JOIN dbo.BOOKING_PAYMENT_DESTINATION destinationAssignment ON destinationAssignment.reservation_id=r.reservation_id LEFT JOIN dbo.PAYMENT_DESTINATION destination ON destination.destination_id=destinationAssignment.destination_id AND destination.method=pay.payment_method OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof WHERE(@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND(@status='' OR pay.status=@status) AND(@paymentMethod='' OR pay.payment_method=@paymentMethod) ORDER BY pay.payment_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset,q);}
+export async function recordPayment(adminId:number,v:PaymentInput,options:{completeEvent?:boolean}={}){
  const pool=await getDbPool();const tx=new sql.Transaction(pool);await tx.begin();
  try{
   // Shared lock order with proof submission and verification: reservation, payment, then receipt.
   const bookingResult=await new sql.Request(tx).input('reservationId',sql.Int,v.reservationId)
-   .query('SELECT status,customer_id customerId FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
+   .query('SELECT status,customer_id customerId,CONVERT(varchar(10),event_date,23) eventDate FROM dbo.RESERVATION WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
   const booking=bookingResult.recordset[0];if(!booking){await tx.rollback();return false;}
   const current=await new sql.Request(tx).input('reservationId',sql.Int,v.reservationId)
-   .query('SELECT payment_id,amount_due,amount_paid FROM dbo.PAYMENT WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
+   .query('SELECT payment_id,amount_due,amount_paid,payment_method FROM dbo.PAYMENT WITH(UPDLOCK,HOLDLOCK) WHERE reservation_id=@reservationId');
   const row=current.recordset[0];if(!row){await tx.rollback();return false;}
   const request=new sql.Request(tx);
+  if(options.completeEvent){
+   const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+   if(!booking.eventDate||booking.eventDate>today)throw new Error('EVENT_NOT_FINISHED');
+   if(!['PAYMENT_VERIFIED','CONFIRMED','COMPLETED'].includes(String(booking.status).toUpperCase()))throw new Error('PAYMENT_BOOKING_STATUS');
+   if(v.paymentDate>today||v.paymentDate<booking.eventDate)throw new Error('FINAL_PAYMENT_DATE');
+  }
+  const completeEvent=async()=>{
+   if(!options.completeEvent)return;
+   let status=String(booking.status).toUpperCase();
+   if(status==='PAYMENT_VERIFIED'){
+    await transitionBooking({reservationId:v.reservationId,expectedStatus:'PAYMENT_VERIFIED',nextStatus:'CONFIRMED',actor:{type:'ADMIN',id:adminId},reason:'Final payment received and event completion confirmed by staff.',request});
+    status='CONFIRMED';
+   }
+   if(status==='CONFIRMED')await transitionBooking({reservationId:v.reservationId,expectedStatus:'CONFIRMED',nextStatus:'COMPLETED',actor:{type:'ADMIN',id:adminId},reason:'Event finished and full payment recorded.',request});
+  };
   // The existing unique (method, reference) index is the durable replay key. HOLDLOCK also
   // serializes a missing reference, so concurrent retries cannot create two credits.
   if(v.reference){
@@ -59,10 +74,14 @@ export async function recordPayment(adminId:number,v:PaymentInput){
    const entry=previous.recordset[0];
    if(entry){
     if(Number(entry.payment_id)!==Number(row.payment_id)||Math.round(Number(entry.amount)*100)!==Math.round(v.amount*100)||entry.payment_date!==v.paymentDate)throw new Error('PAYMENT_REFERENCE_CONFLICT');
-    await tx.commit();return true;
+    if(options.completeEvent&&Math.round(Number(row.amount_paid)*100)<Math.round(Number(row.amount_due)*100))throw new Error('FINAL_BALANCE_CHANGED');
+    await completeEvent();await tx.commit();return true;
    }
   }
   if(!['AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED'].includes(String(booking.status).toUpperCase()))throw new Error('PAYMENT_BOOKING_STATUS');
+  if(!options.completeEvent&&String(row.payment_method??'').toUpperCase()!==v.method)throw new Error('PAYMENT_METHOD_NOT_SELECTED');
+  if(options.completeEvent&&Math.round(v.amount*100)!==Math.max(0,Math.round(Number(row.amount_due)*100)-Math.round(Number(row.amount_paid)*100)))throw new Error('FINAL_BALANCE_CHANGED');
+  if(options.completeEvent&&v.amount===0){await completeEvent();await tx.commit();return true;}
   const cumulativeCents=Math.round(Number(row.amount_paid)*100)+Math.round(v.amount*100);
   if(cumulativeCents>Math.round(Number(row.amount_due)*100))throw new Error('OVERPAYMENT');
   const cumulativePaid=cumulativeCents/100;
@@ -78,6 +97,7 @@ export async function recordPayment(adminId:number,v:PaymentInput){
   }
   await writeAdminAudit({adminId,action:'PAYMENT_RECORDED',entityType:'PAYMENT',entityId:Number(row.payment_id),oldValues:{amountPaid:Number(row.amount_paid)},newValues:{amountPaid:cumulativePaid,amount:v.amount,method:v.method,reference:v.reference??null}},request);
   await queueBookingNotification(v.reservationId,'PAYMENT_RECORDED',request,{amount:v.amount.toFixed(2)});
+  await completeEvent();
   await tx.commit();return true;
  }catch(error){try{await tx.rollback();}catch{/* Preserve the original failure. */}throw error;}
 }
@@ -162,33 +182,39 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
                AND h.next_status='CONFIRMED' AND h.created_at>=@periodStart AND h.created_at<@periodEnd
              )) averageConfirmedBookingValue;
 
-          ;WITH attention AS (
+          ;WITH bookingUpdates AS (
+            SELECT h.reservation_id,MAX(h.created_at) updatedAt
+            FROM dbo.BOOKING_STATUS_HISTORY h GROUP BY h.reservation_id
+          ), attention AS (
             SELECT 1 urgencyRank,'PAYMENT_PROOF' type,CONVERT(varchar(20),pp.payment_proof_id) stableId,
               CONCAT('Review proof for ',r.booking_reference) title,CONCAT(c.first_name,' ',c.last_name) detail,
-              CONVERT(varchar(10),r.event_date,23) eventDate
+              CONVERT(varchar(10),r.event_date,23) eventDate,pp.updated_at updatedAt
             FROM dbo.PAYMENT_PROOF pp JOIN dbo.RESERVATION r ON r.reservation_id=pp.reservation_id
             JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE pp.status='SUBMITTED'
             UNION ALL
             SELECT 2,'BOOKING',CONVERT(varchar(20),r.reservation_id),CONCAT('Review ',r.booking_reference),
-              CONCAT(c.first_name,' ',c.last_name),CONVERT(varchar(10),r.event_date,23)
-            FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id WHERE r.status='PENDING'
+              CONCAT(c.first_name,' ',c.last_name),CONVERT(varchar(10),r.event_date,23),COALESCE(bu.updatedAt,r.created_at)
+            FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+            LEFT JOIN bookingUpdates bu ON bu.reservation_id=r.reservation_id WHERE r.status='PENDING'
             UNION ALL
             SELECT 3,'OVERDUE_BALANCE',CONVERT(varchar(20),r.reservation_id),CONCAT('Outstanding ',r.booking_reference),
-              CONCAT('PHP ',CONVERT(varchar(30),p.amount_due-p.amount_paid)),CONVERT(varchar(10),r.event_date,23)
+              CONCAT('PHP ',CONVERT(varchar(30),p.amount_due-p.amount_paid)),CONVERT(varchar(10),r.event_date,23),COALESCE(bu.updatedAt,r.created_at)
             FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id
+            LEFT JOIN bookingUpdates bu ON bu.reservation_id=r.reservation_id
             WHERE r.event_date<@today AND p.amount_due>p.amount_paid AND r.status NOT IN('REJECTED','CANCELLED')
             UNION ALL
             SELECT 4,'EMAIL_OUTBOX',CONVERT(varchar(20),notification_id),'Retry failed email',recipient,
-              CONVERT(varchar(10),created_at,23) FROM dbo.EMAIL_OUTBOX WHERE status='FAILED'
+              CONVERT(varchar(10),created_at,23),updated_at FROM dbo.EMAIL_OUTBOX WHERE status='FAILED'
           )
-          SELECT TOP (10) urgencyRank,type,stableId id,title,detail,eventDate
-          FROM attention ORDER BY urgencyRank,eventDate,stableId;
+          SELECT TOP (10) urgencyRank,type,stableId id,title,detail,eventDate,updatedAt
+          FROM attention ORDER BY updatedAt DESC,type,stableId DESC;
         `);
       const sets = (result.recordsets ?? []) as unknown as Record<string, unknown>[][];
       const metrics = sets[0]?.[0] ?? {};
       const attention = (sets[1] ?? []).map(row => ({
         type: String(row['type']), id: String(row['id']), title: String(row['title']),
-        detail: String(row['detail'] ?? ''), eventDate: dateValue(row['eventDate']), urgencyRank: numberValue(row['urgencyRank'])
+        detail: String(row['detail'] ?? ''), eventDate: dateValue(row['eventDate']),
+        updatedAt: dateValue(row['updatedAt']), urgencyRank: numberValue(row['urgencyRank'])
       }));
       const priority = {
         pendingBookingReviews: numberValue(metrics['pendingBookingReviews']),

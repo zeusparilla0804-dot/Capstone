@@ -55,10 +55,24 @@ describe('AdminBookingDetailPage', () => {
     restoreDialog();
   });
 
+  it('shows the final-payment form after a deposit and a direct receipt link after completion', () => {
+    const component = fixture.componentInstance as any;
+    component.booking.set({ ...detail, status: 'PAYMENT_VERIFIED', eventDate: '2026-01-01', amountPaid: 40000, total: 80000 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-event-completion')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Record final payment & complete event');
+    component.booking.set({ ...detail, status: 'COMPLETED', eventDate: '2026-01-01', amountPaid: 80000, total: 80000, invoiceId: 8 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-event-completion')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.completion-summary a')?.textContent).toContain('View updated receipt');
+    expect(fixture.nativeElement.querySelector('.booking-lead')?.textContent).toContain('Completed');
+    expect(fixture.nativeElement.querySelector('.booking-lead')?.textContent).toContain('Fully Paid');
+  });
+
   it('shows only valid actions for the current booking status and renders history', () => {
     const text = fixture.nativeElement.textContent;
-    expect(text).toContain('Approve reservation');
-    expect(text).toContain('Reject reservation');
+    expect(text).toContain('Approve booking request');
+    expect(text).toContain('Reject request');
     expect(text).toContain('Cancel reservation');
     expect(text).not.toContain('Confirm reservation');
     expect(text).toContain('Submitted by customer');
@@ -68,15 +82,66 @@ describe('AdminBookingDetailPage', () => {
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelectorAll('.financial-strip dl > div')).toHaveLength(3);
     expect(root.querySelector('.booking-lead')?.textContent).toContain('December 10, 2026');
-    expect(root.querySelector('.booking-lead')?.textContent).toContain('18:00');
+    expect(root.querySelector('.booking-lead')?.textContent).toContain('6:00 PM');
     expect(root.querySelector('.financial-strip')?.textContent).not.toContain('Not issued');
     for (const selector of ['.proof-history-section', '.history-section', '.additional-details']) {
       const section = root.querySelector(selector);
       expect(section?.tagName).toBe('DETAILS');
       expect((section as HTMLDetailsElement).open).toBe(false);
     }
-    expect(root.querySelector('[aria-labelledby="booking-actions-title"]')?.textContent).toContain('Approve reservation');
+    expect(root.querySelector('[aria-labelledby="booking-actions-title"]')?.textContent).toContain('Approve booking request');
     expect(root.querySelector('[aria-labelledby="customer-details-title"]')?.textContent).toContain('09171234567');
+  });
+
+  it('renders the review layout from live booking amounts and keeps Cancel secondary', () => {
+    const component = fixture.componentInstance as any;
+    component.booking.set({ ...detail, subtotal: 100000, discount: 2000, total: 98000,
+      addOns: [{ name: 'Coffee Bar', quantity: 2, unitPrice: 7500, price: 15000 }] });
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('.admin-page-header h1')?.textContent).toBe('Reservation details');
+    expect(root.querySelector('.booking-lead__schedule')?.textContent).toContain('6:00 PM');
+    expect(root.querySelector('.price-breakdown')?.textContent).toContain('Coffee Bar');
+    expect(root.querySelector('.price-breakdown')?.textContent).toContain('85,000.00');
+    expect(root.querySelector('.price-breakdown')?.textContent).toContain('98,000.00');
+    expect(root.querySelector('.payment-after-approval')?.textContent).toContain('49,000.00');
+    expect(root.querySelector('.review-decision .action-list')?.textContent).not.toContain('Cancel');
+    expect(root.querySelector('.secondary-actions')?.textContent).toContain('Cancel');
+    expect(root.querySelector('.payment-history-section summary')?.textContent).toContain('0 records');
+  });
+
+  it('shows the suggested 24 or 48 hour payment window and waits for approval to show a date', () => {
+    const component = fixture.componentInstance as any;
+    const payment = () => (fixture.nativeElement as HTMLElement).querySelector('.payment-after-approval')!.textContent!;
+    component.booking.set({ ...detail, guestCount: 499, total: 100000, amountPaid: 0 });
+    fixture.detectChanges();
+    expect(payment()).toContain('₱50,000.00');
+    expect(payment()).toContain('24 hours after approval');
+    expect(payment()).not.toContain('Suggested payment date');
+
+    component.booking.set({ ...detail, guestCount: 500, status: 'APPROVED', statusHistory: [
+      ...detail.statusHistory,
+      { id: 2, previousStatus: 'PENDING', nextStatus: 'APPROVED', actorType: 'ADMIN', actorId: 1,
+        reason: null, createdAt: '2026-11-06T01:00:00.000Z' },
+    ] });
+    fixture.detectChanges();
+    expect(payment()).toContain('48 hours after approval');
+    expect(payment()).toContain('November 8, 2026, 9:00 AM');
+  });
+
+  it('shows special requests and add-on quantities before an admin decides', () => {
+    const component = fixture.componentInstance as any;
+    component.booking.set({ ...detail, specialRequest: 'No shellfish', addOns: [
+      { name: 'Coffee Bar for 100 Guests', quantity: 5, unitPrice: 22000, price: 110000 },
+    ] });
+    fixture.detectChanges();
+    const details = fixture.nativeElement.querySelector('#event-details-title')?.closest('section') as HTMLElement;
+    expect(details.textContent).toContain('No shellfish');
+    expect(details.textContent).toContain('Coffee Bar for 100 Guests');
+    expect(details.textContent).toContain('5 ×');
+    expect(details.textContent).toContain('110,000');
+    expect(fixture.nativeElement.querySelector('#booking-actions-title')?.parentElement?.textContent).toContain('Approval allows the customer');
+    expect(details.compareDocumentPosition(fixture.nativeElement.querySelector('.operations')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('labels capacity with its event date and uses the independently supplied count for another date', () => {
@@ -117,10 +182,10 @@ describe('AdminBookingDetailPage', () => {
     expect(section.querySelector('[data-proof-id="900"] a')?.textContent).toContain('View receipt');
   });
 
-  it('hides an empty proof section for cash but keeps historical receipts accessible', () => {
+  it('keeps an empty cash payment history collapsed and historical receipts accessible', () => {
     const component = fixture.componentInstance as any;
     component.booking.set({ ...detail, paymentMethod: 'CASH' }); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.proof-history-section')).toBeNull();
+    expect((fixture.nativeElement.querySelector('.proof-history-section') as HTMLDetailsElement).open).toBe(false);
     api.paymentProofs.mockReturnValueOnce(of({ success: true, data: { items: [{ id: '901', reservationId: 42, method: 'E_WALLET', claimedAmount: 42500, status: 'VERIFIED', createdAt: '2026-11-01T01:00:00Z' }], page: 1, pageSize: 10, totalItems: 1, totalPages: 1 } }));
     component.loadProofHistory(); fixture.detectChanges();
     const section = fixture.nativeElement.querySelector('.proof-history-section') as HTMLDetailsElement;
@@ -130,13 +195,16 @@ describe('AdminBookingDetailPage', () => {
     expect(section.querySelector('[data-proof-id="901"] a')?.getAttribute('href')).toBe('/admin/payments/proofs/901?booking=42');
   });
 
-  it('keeps invoice navigation accessible beside the compact financial summary', () => {
-    (fixture.componentInstance as any).booking.set({ ...detail, invoiceId: 88, invoiceNumber: 'INV-88', invoiceStatus: 'ISSUED' });
+  it('keeps invoice navigation accessible in secondary actions', () => {
+    (fixture.componentInstance as any).booking.set({ ...detail, invoiceId: 88, invoiceNumber: 'INV-88', invoiceStatus: 'ISSUED', amountPaid: 0 });
     fixture.detectChanges();
-    const link = fixture.nativeElement.querySelector('.financial-strip a') as HTMLAnchorElement;
+    const link = fixture.nativeElement.querySelector('.secondary-actions a') as HTMLAnchorElement;
     expect(link.textContent).toContain('View invoice');
-    expect(link.getAttribute('href')).toBe('/admin/invoices/88');
     expect(fixture.nativeElement.querySelector('.additional-details').textContent).toContain('INV-88');
+    (fixture.componentInstance as any).booking.set({ ...detail, invoiceId: 88, amountPaid: 42500 });
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('.secondary-actions a') as HTMLAnchorElement).textContent).toContain('View receipt');
+    expect(link.getAttribute('href')).toBe('/admin/invoices/88');
   });
 
   it('loads reservation-scoped proof history and links reviewed receipts without offering a second credit', () => {
@@ -226,8 +294,8 @@ describe('AdminBookingDetailPage', () => {
   it('requires explicit capacity confirmation for a medium event before ordinary approval', () => {
  const component=fixture.componentInstance as any;
  component.booking.set({...detail,guestCount:250,capacity:{...detail.capacity,guestCount:250,status:'NEEDS_CONFIRMATION',requiresAdminConfirmation:true}});
- fixture.detectChanges();expect(fixture.nativeElement.textContent).toContain('Approve and confirm capacity');
- component.chooseAction('APPROVED');expect(api.updateBookingStatus).not.toHaveBeenCalled();
+ fixture.detectChanges();expect(fixture.nativeElement.querySelector('.action-list')?.textContent).toContain('Approve booking request');
+ component.chooseAction('APPROVED');fixture.detectChanges();expect(fixture.nativeElement.querySelector('.action-confirmation')?.textContent).toContain('Approve and confirm capacity');expect(api.updateBookingStatus).not.toHaveBeenCalled();
  component.confirmAction();expect(api.updateBookingStatus).toHaveBeenCalledWith(42,'APPROVED',undefined,true);
 });
 
@@ -287,7 +355,7 @@ describe('AdminBookingDetailPage', () => {
       status: 409, error: { code: 'CASH_DEPOSIT_DEADLINE_PASSED', message },
     })));
     const root = fixture.nativeElement as HTMLElement;
-    (Array.from(root.querySelectorAll('.action-list button')).find(button => button.textContent?.includes('Approve reservation')) as HTMLButtonElement).click();
+    (Array.from(root.querySelectorAll('.action-list button')).find(button => button.textContent?.includes('Approve booking request')) as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(root.querySelector('.action-confirmation')).not.toBeNull();
     expect(api.updateBookingStatus).not.toHaveBeenCalled();

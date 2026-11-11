@@ -7,8 +7,10 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import type { AdminPaymentProofDetail } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
+import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
 
 @Component({
   selector: 'app-admin-payment-review',
@@ -18,7 +20,15 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminPaymentReviewPage {
+  protected readonly paymentBadgeStatus = computed(() => {
+    const record = this.detail();
+    if (!record) return '';
+    return adminPaymentDisplayStatus({ total: record.payment?.amountDue ?? 0,
+      amountPaid: record.payment?.amountPaid ?? 0, status: record.booking.status,
+      latestProofStatus: record.proof.status }) ?? record.proof.status;
+  });
   private readonly api = inject(AdminService);
+  private readonly feedbackDialog = inject(ActionFeedbackService);
   private readonly route = inject(ActivatedRoute);
   protected readonly proofId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly detail = signal<AdminPaymentProofDetail | null>(null);
@@ -60,6 +70,29 @@ export class AdminPaymentReviewPage {
         this.verifiedAmount.set(response.data.proof.verifiedAmount ?? response.data.proof.claimedAmount);
       },
       error: () => this.error.set('Unable to load this payment proof.'),
+    });
+  }
+
+  protected requestReview(action: 'verify' | 'reject'): void {
+    if (!this.canReview() || this.mutationPending()) return;
+    const amount = Number(this.verifiedAmount());
+    const reason = (action === 'verify' ? this.correctionReason : this.rejectionReason).trim();
+    if (action === 'verify' && (!Number.isFinite(amount) || amount <= 0 || (this.amountCorrected() && !reason))) {
+      this.feedbackDialog.show({ tone: 'error', title: 'Review the verified amount', message: 'Enter a valid amount and explain any correction before verifying.' });
+      return;
+    }
+    if (action === 'reject' && !reason) {
+      this.feedbackDialog.show({ tone: 'error', title: 'Rejection reason required', message: 'Explain why this payment proof cannot be accepted before continuing.' });
+      return;
+    }
+    const formattedAmount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
+    this.feedbackDialog.confirm({ title: action === 'verify' ? 'Verify and record payment?' : 'Reject payment proof?',
+      confirmLabel: action === 'verify' ? 'Verify and record' : 'Confirm rejection', destructive: action === 'reject',
+      message: action === 'verify' ? `Confirm that ${formattedAmount} was received for ${this.detail()?.booking.reference}. This will update the payment record.`
+        : `Reject the proof for ${this.detail()?.booking.reference}?\n\nReason: ${reason}\n\nThe customer can submit a replacement.`,
+    }, () => {
+      if ((action === 'verify' ? this.correctionReason : this.rejectionReason).trim() !== reason || (action === 'verify' && this.verifiedAmount() !== amount)) return;
+      if (action === 'verify') this.verify(); else this.reject();
     });
   }
 

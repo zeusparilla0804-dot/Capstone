@@ -21,11 +21,12 @@ const file = { path: 'temp', originalFilename: 'receipt.png', declaredMimeType: 
 const input = { method: 'BANK_TRANSFER', claimedAmount: 50.25, transactionReference: ' TX-1 ', paymentDate: '2026-10-02' };
 
 class FakeDb {
+  destinationAvailable = true;
   policy?: Record<string, unknown>;
   status = 'AWAITING_PAYMENT';
   owner = 7;
   exists = true;
-  payment: { id: number; due: number; paid: number; method?: string } | null = { id: 3, due: 100, paid: 10 };
+  payment: { id: number; due: number; paid: number; method?: string } | null = { id: 3, due: 100, paid: 10, method: 'BANK_TRANSFER' };
   proofs: Record<string, unknown>[] = [];
   outbox: Record<string, unknown>[] = [];
   failQueue = false;
@@ -76,6 +77,7 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string) {
     const p = this.params; this.db.queries.push(command);
+    if (/FROM dbo\.BOOKING_PAYMENT_DESTINATION/i.test(command)) return { recordset: this.db.destinationAvailable ? [{ destination_id: 1 }] : [], rowsAffected: [1] };
     if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return { recordset: this.db.policy ? [this.db.policy] : [], rowsAffected: [0] };
     if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
       for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'VerificationDueAt', 'UpdatedAt']) {
@@ -124,6 +126,12 @@ class FakeRequest {
 }
 
 function status(code: number) { return (error: unknown) => { assert.ok(error instanceof AppError); assert.equal(error.statusCode, code); return true; }; }
+
+test('online proof requires an available QR assigned to this booking', async () => {
+  const db = new FakeDb(); db.destinationAvailable = false;
+  await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
+  assert.equal(db.proofs.length, 0);
+});
 
 test('eligible owner submits exact bytes and initial transition records customer history', async () => {
   const db = new FakeDb();

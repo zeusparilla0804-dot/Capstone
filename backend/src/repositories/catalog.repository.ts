@@ -1,6 +1,8 @@
 import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
 import type { AddOnRecord, PackageRecord } from '../types/domain.types.js';
+import { addOnEventTypes } from '../services/add-on-event-policy.js';
+import { packageImages } from './package-images.repository.js';
 
 type PackageRow = Record<string, unknown>;
 
@@ -41,7 +43,9 @@ export async function findPackages(): Promise<PackageRecord[]> {
     FROM dbo.PACKAGE p JOIN dbo.EVENT e ON e.event_id = p.event_id
     LEFT JOIN dbo.MENU_ITEM m ON m.package_id = p.package_id
     WHERE p.is_active = 1 ORDER BY p.package_id, m.menu_item_id`);
-  return mapPackageRows(result.recordset);
+  const images = await packageImages();
+  return mapPackageRows(result.recordset).map(item => ({ ...item,
+    galleryImageUrls: images.filter(image => image.packageId === item.id).map(image => image.url) }));
 }
 
 export async function findPackageById(id: number, request?: sql.Request): Promise<PackageRecord | undefined> {
@@ -64,5 +68,5 @@ export async function findAddOns(ids?: number[], request?: sql.Request): Promise
     where += ` AND add_on_id IN (${parameters.join(',')})`;
   }
   const result = await runner.query(`SELECT add_on_id, add_on_name, description, price FROM dbo.ADD_ON ${where} ORDER BY add_on_name`);
-  return result.recordset.map((row) => ({ id: Number(row.add_on_id), name: row.add_on_name, description: row.description ?? '', price: Number(row.price) }));
+  return result.recordset.map((row) => ({ id: Number(row.add_on_id), name: row.add_on_name, description: row.description ?? '', price: Number(row.price), eventTypes: addOnEventTypes(String(row.add_on_name)) }));
 }

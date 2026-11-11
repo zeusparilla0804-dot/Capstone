@@ -9,11 +9,28 @@ import { AuthService } from '../../core/services/auth.service';
 export class EmailVerificationForm {
   private readonly auth = inject(AuthService);
   readonly email = input('');
-  readonly verified = output<void>();
+  readonly verified = output<boolean>();
   protected readonly busy = signal(false);
   protected readonly resendIn = signal(0);
   protected readonly error = signal('');
   protected readonly notice = signal('');
+  protected readonly codeFocused = signal(false);
+  protected readonly digitSlots = [0, 1, 2, 3, 4, 5];
+  protected activeDigit(): number { return Math.min(this.form.controls.code.value.length, 5); }
+  protected updateCode(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const value = input.value.replace(/\D/g, '').slice(0, 6);
+    input.value = value;
+    this.form.controls.code.setValue(value);
+  }
+  protected pasteCode(event: ClipboardEvent): void {
+    const text = event.clipboardData?.getData('text');
+    if (text === undefined) return;
+    event.preventDefault();
+    const input = event.target as HTMLInputElement;
+    input.value = text.replace(/\D/g, '').slice(0, 6);
+    this.updateCode(event);
+  }
   protected readonly form = new FormGroup({
     email: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.email, Validators.maxLength(255)] }),
     code: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(/^\d{6}$/)] }),
@@ -30,8 +47,8 @@ export class EmailVerificationForm {
     this.busy.set(true); this.error.set(''); this.notice.set('');
     try {
       const values = this.form.getRawValue();
-      await this.auth.verifyEmail(values.email.trim(), values.code);
-      this.completed = true; this.form.controls.code.reset(''); this.verified.emit();
+      const signedIn = await this.auth.verifyEmail(values.email.trim(), values.code);
+      this.completed = true; this.form.controls.code.reset(''); this.verified.emit(signedIn);
     } catch (error) { this.error.set(this.message(error, 'Unable to verify this code. Check your email or request a new code.')); }
     finally { this.busy.set(false); }
   }

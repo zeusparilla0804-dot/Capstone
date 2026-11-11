@@ -2,7 +2,7 @@
   <app-dashboard-sidebar [title]="auth.user()?.fullName ?? 'Customer'" subtitle="Customer" [navItems]="navItems()" (navAction)="handleNavAction($event)" />
   <section class="payment-content"><div class="payment-container">
     <a class="back-link" routerLink="/my-bookings">&larr; Back to My Bookings</a>
-    <header class="payment-header"><p class="page-kicker">Billing & payments</p><h1>{{ cashInstructionsAvailable() ? 'Cash payment instructions' : eligible() ? 'Submit payment proof' : 'Payment record' }}</h1><p>{{ cashInstructionsAvailable() ? 'Cash payments are accepted only at the LA Chef office. Your balance updates when staff record the cash received.' : eligible() ? 'Your payment will be reviewed by LA Chef before it is applied to your booking.' : 'Review your recorded payments and proof history. Contact La Chef before making a new payment.' }}</p></header>
+    <header class="payment-header"><p class="page-kicker">Billing & payments</p><h1>{{ itemStatusApproved() ? 'Waiting for payment request' : paymentChoiceNeeded() ? 'Choose payment method' : cashInstructionsAvailable() ? 'Cash payment instructions' : waitingForQr() ? 'Payment instructions' : eligible() ? 'Submit payment proof' : 'Payment record' }}</h1><p>{{ itemStatusApproved() ? 'Your booking is approved. LA Chef will notify you when payment is requested.' : paymentChoiceNeeded() ? 'LA Chef requested payment. Select how you will pay the required deposit.' : cashInstructionsAvailable() ? 'Cash payments are accepted only at the LA Chef office. Your balance updates when staff record the cash received.' : waitingForQr() ? 'LA Chef will assign an available QR for your chosen payment method before you pay.' : eligible() ? 'Your payment will be reviewed by LA Chef before it is applied to your booking.' : 'Review your recorded payments and proof history. Contact La Chef before making a new payment.' }}</p></header>
     @if (bookingService.loading() && !booking()) { <p class="data-state" role="status">Loading booking...</p> }
     @else if (!booking()) { <section class="data-state data-state--error"><h2>Booking not found</h2><p>Return to your bookings and choose an available payment action.</p></section> }
     @else if (booking(); as item) {
@@ -10,9 +10,20 @@
         <div><p class="summary-label">Booking</p><h2 id="booking-summary-title">{{ item.reference }}</h2><p>{{ item.eventName }} &middot; {{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</p></div>
         <dl><div><dt>Estimated total</dt><dd>{{ estimatedTotal() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Required deposit (50%)</dt><dd>{{ requiredDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Recorded payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div class="summary-balance"><dt>Outstanding balance</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div></dl>
       </section>
-      @if (cashInstructionsAvailable()) {
+      @if (historyError() && paymentChoiceAvailable()) { <p class="field-error method-feedback" role="alert">Payment history could not be checked. <button class="btn btn-tertiary" type="button" (click)="loadProofs()">Try again</button></p> }
+      @if (paymentChoiceError()) { <p class="field-error method-feedback" role="alert">{{ paymentChoiceError() }}</p> }
+      @if (itemStatusApproved()) {
+        <section class="proof-unavailable" role="status"><h2>Awaiting LA Chef's payment request</h2><p>Your approved booking and invoice are ready. You can choose a payment method after the admin requests payment.</p><a class="btn btn-secondary" routerLink="/my-bookings">Back to My Reservations</a></section>
+      } @else if (paymentChoiceNeeded()) {
+        <section class="payment-choice-panel" aria-labelledby="payment-choice-title">
+          <h2 id="payment-choice-title">Choose payment method</h2>
+          <p>Select GCash, bank transfer, or cash at the LA Chef office to continue.</p>
+          <a class="btn btn-primary" routerLink="/book-event" [queryParams]="{ paymentBooking: item.id, step: 4 }">Continue to Step 4</a>
+        </section>
+      } @else if (cashInstructionsAvailable()) {
         <section class="proof-tool cash-instructions" aria-labelledby="cash-instructions-title">
           <div class="section-heading"><div><h2 id="cash-instructions-title">Pay at the LA Chef office</h2><p>No online payment proof is required for cash payments.</p></div></div>
+          <p class="form-row cash-method-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
           <dl class="cash-payment-details">
             <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM <span>Philippine Time</span></dd></div>
             @if (remainingDeposit() > 0) {
@@ -36,6 +47,18 @@
           } @else { <p>Your booking is fully paid. No further cash payment is required.</p> }
           <a class="btn btn-secondary btn-sm" routerLink="/contact">View office location and contact details</a>
         </section>
+      } @else if (waitingForQr()) {
+        <section class="payment-choice-panel qr-waiting" aria-labelledby="qr-waiting-title">
+          <h2 id="qr-waiting-title">Payment instructions</h2>
+          <p>LA Chef will select an available {{ item.paymentMethod === 'gcash' ? 'GCash' : 'bank transfer' }} account for booking {{ item.reference }}. Please wait for the QR before sending money.</p>
+          <p class="form-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
+          @if (destinationLoading()) { <p role="status">Checking payment instructions...</p> }
+          @else if (destinationError()) { <p class="field-error" role="alert">{{ destinationError() }}</p> }
+          @else if (destination()) { <p role="status">Loading your assigned QR image...</p> }
+          @else { <p role="status">No available QR has been assigned yet. This page checks again automatically.</p> }
+          <a class="btn btn-secondary btn-sm" routerLink="/my-bookings">Back to My Reservations</a>
+          @if (proofs().length) { <div class="qr-waiting__history"><h3>Proof history</h3><ul>@for (proof of proofs(); track proof.id) { <li>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }} · {{ statusLabel(proof) }}</li> }</ul></div> }
+        </section>
       } @else if (eligible()) {
         <div class="payment-grid">
           <section class="proof-tool" aria-labelledby="proof-form-title">
@@ -56,7 +79,18 @@
                 </div>
                 <p class="field-help">The remaining balance is due on the event date.</p>
               </fieldset>
-              <div class="form-row"><label for="payment-method">Payment method</label><select id="payment-method" formControlName="method"><option value="E_WALLET">GCash</option><option value="BANK_TRANSFER">Bank transfer</option></select></div>
+              <p class="form-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
+              <section class="destination-panel" aria-labelledby="destination-title">
+                <div class="destination-panel__heading"><h3 id="destination-title">Where to send your payment</h3><button type="button" class="btn btn-tertiary" (click)="loadDestination()">Refresh</button></div>
+                @if (destinationLoading()) { <p role="status">Checking assigned payment QR...</p> }
+                @else if (destinationError()) { <p class="field-error" role="alert">{{ destinationError() }}</p> }
+                @else if (destination(); as account) {
+                  <p><strong>{{ account.label }}</strong> · {{ account.accountName }} · {{ account.accountHint }}</p>
+                  @if (destinationImage()) { <img [src]="destinationImage()" [alt]="account.label + ' payment QR code'" /> }
+                  @else { <p role="status">Loading QR image...</p> }
+                  <p class="field-help">Pay only to this assigned account, then upload the receipt below. Include your booking reference {{ item.reference }}.</p>
+                } @else { <p role="status">Waiting for payment instructions. LA Chef will assign an available QR for this booking before you submit proof.</p> }
+              </section>
               <div class="form-pair">
                 <div class="form-row"><label for="claimed-amount">Amount shown on receipt</label><div class="money-input"><span aria-hidden="true">₱</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" (input)="useEnteredAmount()" /></div><p class="field-help">Edit only when your receipt shows a different amount.</p>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
                 <div class="form-row"><label for="payment-date">Payment date</label><input id="payment-date" type="date" formControlName="paymentDate" />@if(form.controls.paymentDate.touched && form.controls.paymentDate.invalid){<p class="field-error">Choose the payment date.</p>}</div>
@@ -78,7 +112,7 @@
               </div>
               @if (submitError()) { <p class="form-message form-message--error" role="alert">{{ submitError() }}</p> }
               @if (submitting()) { <div class="upload-state" role="status"><div><span>Uploading proof</span><strong>{{ uploadProgress() }}%</strong></div><progress max="100" [value]="uploadProgress()">{{ uploadProgress() }}%</progress></div> }
-              <button class="btn btn-primary submit-button" type="submit" [disabled]="submitting()">{{ submitting() ? 'Submitting...' : 'Submit for verification' }}</button>
+              <button class="btn btn-primary submit-button" type="submit" [disabled]="submitting() || choosingPayment() || !destinationImage()">{{ submitting() ? 'Submitting...' : 'Submit for verification' }}</button>
             </form>
           </section>
           <section class="proof-history" aria-labelledby="proof-history-title">

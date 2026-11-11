@@ -1,7 +1,7 @@
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import type { AdminDashboard } from '../../core/models';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminService } from '../../core/services/admin.service';
@@ -23,6 +23,7 @@ const dashboard: AdminDashboard = {
 describe('AdminDashboardPageComponent', () => {
   let fixture: ComponentFixture<AdminDashboardPageComponent>;
   let api: { dashboard: ReturnType<typeof vi.fn> };
+  afterEach(() => vi.useRealTimers());
   beforeEach(async () => {
     api = { dashboard: vi.fn(() => of({ success: true, data: dashboard })) };
     await TestBed.configureTestingModule({ imports: [AdminDashboardPageComponent], providers: [provideRouter([]), { provide: AdminService, useValue: api }, { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }] }).compileComponents();
@@ -77,6 +78,62 @@ describe('AdminDashboardPageComponent', () => {
     expect(label?.textContent).toContain('Reporting month');
     expect(label?.nextElementSibling).toBe(input);
     expect(input.nextElementSibling?.tagName).toBe('BUTTON');
+  });
+
+  it('displays the actual update time in Philippine time instead of the event schedule', () => {
+    api.dashboard.mockReturnValue(of({ success: true, data: { ...dashboard, attention: [
+      { ...dashboard.attention[0]!, eventDate: '2026-12-20', updatedAt: '2026-11-09T02:30:00Z' }
+    ] } }));
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    const time = fixture.nativeElement.querySelector('.attention-list time') as HTMLTimeElement;
+    expect(time.dateTime).toBe('2026-11-09T02:30:00Z');
+    expect(time.textContent).toContain('Nov 9');
+    expect(time.textContent).toContain('10:30 AM');
+    expect(time.textContent).not.toContain('Dec 20');
+  });
+
+  it('silently refreshes on a timer and focus, preserves the applied period, and stops after leaving', () => {
+    vi.useFakeTimers();
+    fixture.destroy();
+    api.dashboard.mockClear();
+    fixture = TestBed.createComponent(AdminDashboardPageComponent);
+    fixture.detectChanges();
+    (fixture.componentInstance as unknown as { period: string }).period = '2026-10';
+    fixture.nativeElement.querySelector('form').dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+    (fixture.componentInstance as unknown as { period: string }).period = '2026-12';
+    const pending = new Subject<{ success: boolean; data: AdminDashboard }>();
+    api.dashboard.mockReturnValue(pending);
+    vi.advanceTimersByTime(30_000);
+    fixture.detectChanges();
+    expect(api.dashboard).toHaveBeenLastCalledWith('2026-10');
+    expect(fixture.nativeElement.querySelector('.attention-list')).not.toBeNull();
+    const calls = api.dashboard.mock.calls.length;
+    window.dispatchEvent(new Event('focus'));
+    expect(api.dashboard).toHaveBeenCalledTimes(calls);
+    pending.next({ success: true, data: dashboard });
+    pending.complete();
+    window.dispatchEvent(new Event('focus'));
+    expect(api.dashboard).toHaveBeenCalledTimes(calls + 1);
+    fixture.destroy();
+    vi.advanceTimersByTime(60_000);
+    window.dispatchEvent(new Event('focus'));
+    expect(api.dashboard).toHaveBeenCalledTimes(calls + 1);
+    vi.useRealTimers();
+  });
+
+  it('keeps existing records visible during a failed background refresh and clears the warning after recovery', () => {
+    api.dashboard.mockReturnValue(throwError(() => new Error('Offline')));
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.attention-list')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('last successful refresh');
+    api.dashboard.mockReturnValue(of({ success: true, data: dashboard }));
+    window.dispatchEvent(new Event('focus'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('last successful refresh');
+    expect(fixture.nativeElement.querySelector('.attention-list')).not.toBeNull();
   });
 });
 

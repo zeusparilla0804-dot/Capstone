@@ -11,7 +11,7 @@ const commonPasswords = new Set([
 ]);
 
 export function newPassword(value: unknown): string {
-  const password = text(value, 'Password', { min: 15, max: 128 });
+  const password = text(value, 'Password', { min: 8, max: 128 });
   if (commonPasswords.has(password.toLowerCase())) {
     throw new AppError(400, 'This password is commonly used. Choose a longer, unique passphrase.', 'PASSWORD_TOO_COMMON');
   }

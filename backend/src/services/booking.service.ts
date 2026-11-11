@@ -4,9 +4,16 @@ import type { CreateBookingDto, UpdatePendingBookingDto } from '../types/domain.
 import { AppError } from '../utils/app-error.js';
 import { transitionBooking } from './booking-status.service.js';
 import { bookingAvailabilityService } from './booking-availability.service.js';
+import { assertPaymentDeferred } from './booking-payment-policy.js';
 export const bookingService={
-  create(customerId:number,dto:CreateBookingDto){ return createBooking(customerId,dto); },
-  updateDetails(customerId:number,id:number,dto:UpdatePendingBookingDto){ return updatePendingBooking(customerId,id,dto); },
+  create(customerId:number,dto:CreateBookingDto){
+    assertPaymentDeferred(dto.paymentMethod);
+    return createBooking(customerId,dto);
+  },
+  updateDetails(customerId:number,id:number,dto:UpdatePendingBookingDto){
+    assertPaymentDeferred(dto.paymentMethod);
+    return updatePendingBooking(customerId,id,dto);
+  },
   async availability(date:string,guestCount:number,customerId?:number,reservationId?:number){
     if (reservationId !== undefined) {
       if (!customerId) throw new AppError(404, 'Pending booking not found.');

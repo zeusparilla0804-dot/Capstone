@@ -2,10 +2,12 @@ import type { NextFunction,Request,Response } from 'express'; import { bookingSe
 import { identifier, isoDate, text, time24 } from '../utils/validation.js';
 import { assertCustomerBookingDate, parseBookingSubmissionKey } from '../services/booking-submission-policy.js';
 import { assertCashPaymentWindow } from '../services/cash-payment-policy.js';
+import { chooseBookingPayment } from '../services/booking-payment.service.js';
+import { calendarMonthAvailability } from '../services/booking-calendar.service.js';
 
-function customerEventDate(value: unknown): string {
+function customerEventDate(value: unknown, guestCount: number): string {
   const date = isoDate(value, 'Event date');
-  assertCustomerBookingDate(date);
+  assertCustomerBookingDate(date, guestCount);
   return date;
 }
 
@@ -29,7 +31,7 @@ export function parseBooking(body: Record<string, unknown>, validateTiming = tru
   }
   const paymentMethod = body['paymentMethod'] === undefined ? undefined : text(body['paymentMethod'], 'Payment method', { max: 30 });
   if (paymentMethod && !['cash', 'bank-transfer', 'e-wallet'].includes(paymentMethod)) throw new AppError(400, 'Payment method is invalid.');
-  const eventDate = validateTiming ? customerEventDate(body['eventDate']) : isoDate(body['eventDate'], 'Event date');
+  const eventDate = validateTiming ? customerEventDate(body['eventDate'], guestCount) : isoDate(body['eventDate'], 'Event date');
   if (validateTiming && paymentMethod === 'cash') assertCashPaymentWindow(eventDate, guestCount);
   const rawSpecialRequest = body['specialRequest'];
   const specialRequest = rawSpecialRequest === undefined || rawSpecialRequest === null || rawSpecialRequest === ''
@@ -52,7 +54,6 @@ export function parsePendingBookingUpdate(body: Record<string, unknown>): Update
   return parseBooking(body);
 }
 export function parseAvailabilityQuery(query: Record<string, unknown>): { date: string; guestCount: number; reservationId?: number } {
-  const date = customerEventDate(query['date']);
   const rawGuestCount = query['guestCount'];
   if (typeof rawGuestCount !== 'string' || !/^[1-9]\d*$/.test(rawGuestCount)) {
     throw new AppError(400, 'Guest count is invalid.');
@@ -62,6 +63,7 @@ export function parseAvailabilityQuery(query: Record<string, unknown>): { date: 
   if (!Number.isSafeInteger(guestCount)) {
     throw new AppError(400, 'Guest count must be a whole number from 1 to 1,500.');
   }
+  const date = customerEventDate(query['date'], guestCount);
   const rawReservationId = query['reservationId'];
   if (rawReservationId !== undefined && (typeof rawReservationId !== 'string'
     || !/^[1-9]\d*$/.test(rawReservationId) || Number(rawReservationId) > 2_147_483_647)) {
@@ -75,7 +77,14 @@ export function parseAvailabilityQuery(query: Record<string, unknown>): { date: 
 }
 export async function create(req:Request,res:Response,next:NextFunction){try{const submissionKey=parseBookingSubmissionKey(req.headers['idempotency-key']);const dto=parseBooking(req.body,submissionKey===undefined);if(submissionKey)dto.submissionKey=submissionKey;res.status(201).json({success:true,data:await bookingService.create(req.customer!.id,dto)});}catch(e){next(e);}}
 export async function updateDetails(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.updateDetails(req.customer!.id,identifier(req.params['id']),parsePendingBookingUpdate(req.body))});}catch(e){next(e);}}
+export async function choosePayment(req:Request,res:Response,next:NextFunction){try{const method=text(req.body?.method,'Payment method',{max:30});res.json({success:true,data:await chooseBookingPayment(req.customer!.id,identifier(req.params['id']),method)});}catch(e){next(e);}}
 export async function availability(req:Request,res:Response,next:NextFunction){try{const input=parseAvailabilityQuery(req.query);res.json({success:true,data:await bookingService.availability(input.date,input.guestCount,req.customer!.id,input.reservationId)});}catch(e){next(e);}}
+export async function monthAvailability(req:Request,res:Response,next:NextFunction){try{
+  const month=text(req.query['month'],'Calendar month',{max:7});
+  const guestCount=Number(req.query['guestCount']);
+  const reservationId=req.query['reservationId']===undefined?undefined:identifier(req.query['reservationId'],'Reservation identifier');
+  res.json({success:true,data:await calendarMonthAvailability(month,guestCount,req.customer!.id,reservationId)});
+}catch(e){next(e);}}
 export async function mine(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.list(req.customer!.id)});}catch(e){next(e);}}
 export async function one(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.byId(req.customer!.id,identifier(req.params['id']))});}catch(e){next(e);}}
 export async function dashboard(req:Request,res:Response,next:NextFunction){try{res.json({success:true,data:await bookingService.dashboard(req.customer!.id)});}catch(e){next(e);}}

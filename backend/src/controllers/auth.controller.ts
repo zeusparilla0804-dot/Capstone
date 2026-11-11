@@ -5,7 +5,7 @@ import { passwordRecoveryService } from '../services/password-recovery.service.j
 import type { PasswordResetPrincipal } from '../utils/password-reset-token.js';
 import { AppError } from '../utils/app-error.js';
 import { ADMIN_SESSION_COOKIE, readCookie, SESSION_COOKIE } from '../utils/session.js';
-import { emailAddress, philippineMobileNumber, text } from '../utils/validation.js';
+import { emailAddress, philippineMobileNumber, registrationEmailAddress, text } from '../utils/validation.js';
 import { newPassword } from '../utils/password-policy.js';
 
 const cookieOptions = (expires?: Date) => ({
@@ -22,7 +22,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
     const result = await authService.register({
       firstName: text(body['firstName'], 'First name', { max: 100 }),
       lastName: text(body['lastName'], 'Last name', { max: 100 }),
-      email: emailAddress(body['email']),
+      email: registrationEmailAddress(body['email']),
       phone: philippineMobileNumber(body['phone']),
       password: newPassword(body['password'])
     });
@@ -34,7 +34,7 @@ export async function register(req: Request, res: Response, next: NextFunction) 
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await authService.login(emailAddress(req.body?.email), text(req.body?.password, 'Password', { max: 128 }), req.ip);
+    const result = await authService.login(registrationEmailAddress(req.body?.email), text(req.body?.password, 'Password', { max: 128 }), req.ip);
     res.cookie(SESSION_COOKIE, result.session.token, cookieOptions(result.session.expiresAt)).json({ success: true, data: result.user });
   } catch (error) {
     next(error);
@@ -77,7 +77,7 @@ function resetPassword(principalType: PasswordResetPrincipal) {
     try {
       const token = text(req.body?.token, 'Reset token', { max: 100 });
       const password = newPassword(req.body?.password);
-      const confirmation = text(req.body?.confirmPassword, 'Password confirmation', { min: 15, max: 128 });
+      const confirmation = text(req.body?.confirmPassword, 'Password confirmation', { min: 8, max: 128 });
       if (password !== confirmation) throw new AppError(400, 'Passwords do not match.');
       await passwordRecoveryService.reset(principalType, token, password, confirmation);
       res.status(200).json({ success: true, message: 'Your password has been changed. Please sign in again.' });

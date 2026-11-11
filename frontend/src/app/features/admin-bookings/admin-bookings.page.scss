@@ -9,15 +9,14 @@
 .admin-table--bookings th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
 .admin-table--bookings td { font-size: 13px; font-weight: 400; }
 .admin-table--bookings td[data-label='Reference'] strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.booking-reference-link { color: var(--color-primary); text-decoration: underline; text-underline-offset: 3px; }
+.booking-reference-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .admin-table--bookings td:is([data-label='Customer'], [data-label='Event'], [data-label='Guests']) { font-weight: 500; }
 .admin-table--bookings td[data-label='Total'] { font-weight: 600; font-variant-numeric: tabular-nums; }
 .bookings-records ::ng-deep .status-badge { font-size: 11px; font-weight: 500; }
-.booking-row-actions__links .btn { font-size: 12px; font-weight: 500; }
-.admin-status-select { font-family: var(--font-admin); font-size: 12px; font-weight: 400; }
-.admin-status-unavailable { font-size: 11px; font-weight: 400; }
 .admin-pagination > span { font-size: 12px; font-weight: 400; }
 .admin-pagination .btn { font-size: 12px; font-weight: 500; }
-.admin-table--bookings { min-width: 1080px; table-layout: fixed; }
+.admin-table--bookings { min-width: 1120px; table-layout: fixed; }
 .approval-progress { display: flex; align-items: center; gap: 8px; margin: 12px 0; color: var(--color-primary); font: 500 13px/1.5 var(--font-sans); }
 .admin-table--bookings th:nth-child(1) { width: 100px; }
 .admin-table--bookings th:nth-child(2) { width: 110px; }
@@ -26,8 +25,9 @@
 .admin-table--bookings th:nth-child(5) { width: 115px; }
 .admin-table--bookings th:nth-child(6) { width: 120px; }
 .admin-table--bookings th:nth-child(7) { width: 90px; }
-.admin-table--bookings th:nth-child(8) { width: 150px; }
+.admin-table--bookings th:nth-child(8) { width: 190px; }
 .admin-table--bookings th:nth-child(9) { width: 195px; }
+.admin-table--bookings th:nth-child(9) { text-align: center; }
 @media (min-width: 768px) {
   .admin-table--bookings :is(th, td):nth-child(7) {
     text-align: center;
@@ -36,13 +36,27 @@
   }
   .admin-table--bookings :is(th, td):nth-child(8) { text-align: center; }
   .admin-table--bookings td:nth-child(8) app-status-badge {
-    --status-badge-width: 120px;
+    --status-badge-width: 170px;
   }
 }
-.admin-status-select { width: 100%; min-width: 142px; max-width: 100%; min-height: 44px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; padding: 8px 10px; }
-.admin-status-unavailable { color: var(--color-text-muted); }
-.booking-row-actions { display: grid; justify-items: start; gap: 8px; }
-.booking-row-actions__links { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.admin-table--bookings td[data-label='Actions'] { padding-block: 16px; }
+.admin-table--bookings td[data-label='Actions'] .booking-row-actions { width: 160px; max-width: 100%; margin-inline: auto; }
+.admin-table--bookings td[data-label='Actions'] .booking-row-actions__links { display: grid; justify-items: center; gap: 8px; }
+.admin-table--bookings td[data-label='Actions'] .booking-row-actions__links > .btn { justify-self: center; }
+.admin-table--bookings td[data-label='Actions'] .admin-status-select {
+  box-sizing: border-box;
+  width: 160px;
+  max-width: 100%;
+  height: 36px;
+  min-height: 36px;
+  border: 1px solid #b9b3a7;
+  border-radius: 6px;
+  background: #fff;
+  font-family: var(--font-admin);
+  font-size: 13px;
+}
+.admin-table--bookings td[data-label='Actions'] .booking-row-actions__links > .btn-tertiary { font-family: var(--font-admin); font-size: 14px; font-weight: 500; }
+.admin-table--bookings td[data-label='Actions'] .admin-status-select { padding: 0 10px; font-weight: 400; }
 .capacity-meta { display: block; min-width: 0; margin-top: 4px; color: var(--color-text-muted); font-size: 11px; font-weight: 400; line-height: 1.4; }
 .admin-status-reason-row { background: #faf9f6; }
 .admin-status-reason { display: grid; gap: 10px; width: min(100%, 440px); }
@@ -55,7 +69,6 @@
 @media (max-width: 767px) {
   .admin-table--bookings { min-width: 0; table-layout: auto; }
   .capacity-meta { min-width: 0; }
-  .admin-status-select { width: min(100%, 280px); }
   .admin-status-reason { width: 100%; }
   .admin-status-reason__actions .btn { flex: 1; min-width: 130px; }
 }

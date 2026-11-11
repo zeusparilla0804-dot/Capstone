@@ -21,9 +21,18 @@ test('cash office payment windows include weekends and shift after closing in Ph
     [499, '2026-10-31T16:00:00Z', '2026-11-04'],
     [500, '2026-12-30T01:00:00Z', '2027-01-04'],
   ] as const) {
-    assert.equal(minimumCashEventDate(guestCount, new Date(now)), expected);
+    const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', hourCycle: 'h23' }).format(new Date(now)));
+    const calendarExpected = hour >= 18 && hour < 23 ? `${expected.slice(0,8)}${String(Number(expected.slice(8))-1).padStart(2,'0')}` : expected;
+    assert.equal(minimumCashEventDate(guestCount, new Date(now)), calendarExpected);
     assert.doesNotThrow(() => assertCashPaymentWindow(expected, guestCount, new Date(now)));
   }
+});
+
+test('calendar date rollover is 11 PM but receiving cash still closes at 6 PM', () => {
+  assert.equal(minimumCashEventDate(100, new Date('2026-11-10T14:59:59Z')), '2026-11-13');
+  assert.equal(minimumCashEventDate(100, new Date('2026-11-10T15:00:00Z')), '2026-11-14');
+  assert.equal(minimumCashEventDate(500, new Date('2026-11-10T15:00:00Z')), '2026-11-16');
+  assert.throws(() => assertCashPaymentWindow('2026-11-13', 100, new Date('2026-11-10T12:00:00Z')), /6:00 PM/);
 });
 
 test('cash submission rejects dates inside the preparation cutoff without an extra office-day allowance', () => {

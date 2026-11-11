@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
+export interface AdminPackageImage { readonly id: number; readonly packageId: number; readonly url: string; }
 import { AdminAddOn, AdminAuditLogItem, AdminBooking, AdminBookingDetail, AdminCustomer, AdminCustomerBooking, AdminCustomerPayment, AdminCustomerProfile, AdminCustomerStatus, AdminCustomerUpdateInput, AdminDashboard, AdminEmailOutboxItem, AdminEmailPreview, AdminPackage, AdminPackageInput, AdminPayment, AdminPaymentProof, AdminPaymentProofDetail, AdminPaymentReport, AdminPaymentReportFilter, AdminReservationReport, AdminReservationReportFilter, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -22,6 +23,7 @@ export class AdminService {
     return this.http.patch<ApiResponse<never>>(`${this.base}/bookings/${id}/status`, body, this.options);
   }
   issueInvoice(id: number) { return this.http.post<ApiResponse<Invoice>>(`${this.base}/bookings/${id}/invoice`, {}, this.options); }
+  completeEvent(id: number, value: object) { return this.http.post<ApiResponse<{ status: 'COMPLETED'; amountRecorded: number; reference?: string; invoiceId?: number }>>(`${this.base}/bookings/${id}/complete`, value, this.options); }
   customers(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminCustomer>>>(`${this.base}/customers`, { ...this.options, params: this.params(filters) }); }
   customer(id: number) { return this.http.get<ApiResponse<AdminCustomerProfile>>(`${this.base}/customers/${id}`, this.options); }
   updateCustomer(id: number, value: AdminCustomerUpdateInput) { return this.http.patch<ApiResponse<AdminCustomerProfile>>(`${this.base}/customers/${id}`, value, this.options); }
@@ -29,6 +31,8 @@ export class AdminService {
   customerBookings(id: number, page = 1, pageSize = 10) { return this.http.get<ApiResponse<PageResult<AdminCustomerBooking>>>(`${this.base}/customers/${id}/bookings`, { ...this.options, params: this.params({ page, pageSize }) }); }
   customerPayments(id: number, page = 1, pageSize = 10) { return this.http.get<ApiResponse<PageResult<AdminCustomerPayment>>>(`${this.base}/customers/${id}/payments`, { ...this.options, params: this.params({ page, pageSize }) }); }
   packages() { return this.http.get<ApiResponse<readonly AdminPackage[]>>(`${this.base}/packages`, this.options); }
+  packageImages(id: number) { return this.http.get<ApiResponse<readonly AdminPackageImage[]>>(`${this.base}/packages/${id}/images`, this.options); }
+  savePackageImages(id: number, data: FormData) { return this.http.put<ApiResponse<readonly AdminPackageImage[]>>(`${this.base}/packages/${id}/images`, data, this.options); }
   eventTypes() { return this.http.get<ApiResponse<readonly EventTypeOption[]>>(`${this.base}/event-types`, this.options); }
   savePackage(value: AdminPackageInput, id?: number) { return id ? this.http.put(`${this.base}/packages/${id}`, value, this.options) : this.http.post(`${this.base}/packages`, value, this.options); }
   addOns() { return this.http.get<ApiResponse<readonly AdminAddOn[]>>(`${this.base}/add-ons`, this.options); }
@@ -46,7 +50,7 @@ export class AdminService {
   retryEmail(id: string) { return this.http.post<ApiResponse<never>>(`${this.base}/email-outbox/${id}/retry`, {}, this.options); }
   emailPreview(id: string) { return this.http.get<ApiResponse<AdminEmailPreview>>(`${this.base}/email-outbox/${id}/preview`, this.options); }
   auditLog(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminAuditLogItem>>>(`${this.base}/audit-log`, { ...this.options, params: this.params(filters) }); }
-  recordPayment(value: object) { return this.http.post(`${this.base}/payments`, value, this.options); }
+  recordPayment(value: object) { return this.http.post<ApiResponse<{ reference: string }>>(`${this.base}/payments`, value, this.options); }
   private proofFileUrl(value: string) { if (/^https?:\/\//i.test(value)) return value; if (/^https?:\/\//i.test(environment.apiBaseUrl)) return `${new URL(environment.apiBaseUrl).origin}${value.startsWith('/') ? '' : '/'}${value}`; return value; }
   private params(values: object) { let params = new HttpParams(); Object.entries(values).forEach(([key, value]) => { if (value !== '' && value !== undefined) params = params.set(key, String(value)); }); return params; }
 }

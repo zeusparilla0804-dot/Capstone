@@ -2,7 +2,7 @@ import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { computed, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { Booking, BookingAvailability, BookingDraft, CateringPackage } from '../../core/models';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
@@ -10,6 +10,8 @@ import { BookingService } from '../../core/services/booking.service';
 import { PackageService } from '../../core/services/package.service';
 import { BookingPageComponent } from './booking.page';
 import { environment } from '../../../environments/environment';
+import { stubNativeDialogs } from '../../shared/testing/native-dialog';
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 const pkg: CateringPackage = {
   id: '10', name: 'Intimate Wedding Table', category: 'wedding', description: 'Package',
@@ -36,14 +38,18 @@ const initialDraft: BookingDraft = {
 };
 
 describe('BookingPageComponent submission validation', () => {
+  let restoreDialogs: () => void;
   let draftState: ReturnType<typeof signal<BookingDraft>>;
   let resetDraft: ReturnType<typeof vi.fn>;
   let routeParams: Record<string, string>;
+  let availableMethods: ReturnType<typeof vi.fn>;
   let bookingService: {
     submitDraft: ReturnType<typeof vi.fn>;
     updatePendingBooking: ReturnType<typeof vi.fn>;
     loadBookingById: ReturnType<typeof vi.fn>;
     checkAvailability: ReturnType<typeof vi.fn>;
+    checkMonthAvailability: ReturnType<typeof vi.fn>;
+    choosePaymentMethod: ReturnType<typeof vi.fn>;
   };
 
   const editableBooking: Booking = {
@@ -68,21 +74,28 @@ describe('BookingPageComponent submission validation', () => {
   });
 
   beforeEach(() => {
+    restoreDialogs = stubNativeDialogs();
     vi.useFakeTimers();
     routeParams = {};
+    availableMethods = vi.fn(() => of(['BANK_TRANSFER', 'E-WALLET']));
     draftState = signal(initialDraft);
     resetDraft = vi.fn();
     bookingService = {
       submitDraft: vi.fn(async () => 'BK-TEST'),
+      choosePaymentMethod: vi.fn(async () => ({ ...editableBooking, status: 'awaiting_payment', paymentMethod: 'gcash' })),
       updatePendingBooking: vi.fn(async () => editableBooking),
       loadBookingById: vi.fn(() => of(editableBooking)),
       checkAvailability: vi.fn(() => of(availability('AVAILABLE'))),
+      checkMonthAvailability: vi.fn(() => of([
+        { date: '2026-11-10', status: 'FULL' }, { date: '2026-11-11', status: 'AVAILABLE' },
+      ])),
     };
     const draftService = {
       submissionKey: signal('56df1d5f-10d0-463c-8035-143b1046643b'),
       editingBookingId: signal<string | null>(null),
       catalogSelectionError: signal(''), addOnsLoading: signal(false), addOnsError: signal(''),
       missingAddOnIds: signal<string[]>([]), removeUnavailableAddOns: () => undefined,
+      incompatibleAddOnIds: signal<string[]>([]), availableAddOns: signal([]),
       unlockedStep: signal<1 | 2 | 3 | 4>(1),
       draft: draftState.asReadonly(), selectedPackage: signal(pkg), selectedAddOns: signal<[]>([]),
       pricing: signal({ packageTotal: 21600, addOnTotal: 0, subtotal: 21600, discount: 0, total: 21600, downPayment: 10800, remainingBalance: 10800 }),
@@ -102,12 +115,230 @@ describe('BookingPageComponent submission validation', () => {
         { provide: BookingDraftService, useValue: draftService },
         { provide: BookingService, useFactory: () => bookingService },
         { provide: PackageService, useValue: packageService },
+        { provide: PaymentDestinationService, useValue: { availableMethods } },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: { get: (key: string) => routeParams[key] ?? null } } } },
       ],
     });
   });
 
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => { TestBed.resetTestingModule(); restoreDialogs(); vi.useRealTimers(); });
+
+  it('keeps the selected package fixed and explains preparation and venue requirements upfront', () => {
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('select#packageId')).toBeNull();
+    expect(page.querySelector('#packageId')?.textContent).toContain(pkg.name);
+    expect((fixture.componentInstance as any).eventForm.getRawValue().packageId).toBe(pkg.id);
+    expect(page.querySelector('#date-preparation-note')?.textContent).toContain('500 or more');
+    expect(page.querySelector('#venue-address-note')?.textContent).toContain('complete address');
+  });
+
+  it('shows one photobooth selector, coffee inclusions, and the itemized add-ons total', () => {
+    const { fixture, draft, component } = chairQuantityFixture();
+    draft.addOns.set([...draft.addOns(),
+      { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
+      { id: 'mirror', name: 'Mirror Photobooth (2 Hours Unlimited)', price: 10000 },
+      { id: 'coffee', name: 'Coffee Bar for 50 Guests', price: 15000 },
+    ]);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#addon-basic')).toBeNull();
+    expect(page.querySelector('#addon-mirror')).toBeNull();
+    expect(page.querySelector('.coffee-inclusions')?.textContent).toContain('cookies, and light snacks');
+    expect(page.querySelector('#photobooth-choice')).toBeNull();
+    const checkbox = page.querySelector('#addon-photobooth') as HTMLInputElement;
+    checkbox.click(); fixture.detectChanges();
+    expect(checkbox.closest('.selection-row')?.classList.contains('is-selected')).toBe(true);
+    const select = page.querySelector('#photobooth-choice') as HTMLSelectElement;
+    select.value = 'basic'; select.dispatchEvent(new Event('change'));
+    select.value = 'mirror'; select.dispatchEvent(new Event('change'));
+    expect(draft.draft().selectedAddOnIds).toEqual(['chair', 'lechon', 'mirror']);
+    component.currentStep.set(3);
+    fixture.detectChanges();
+    expect(page.querySelector('.review-addons-total')?.textContent).toContain('24,100');
+    expect(page.querySelector('.review-addons')?.textContent).not.toContain('Basic Photobooth');
+    component.currentStep.set(2); fixture.detectChanges();
+    (page.querySelector('#addon-photobooth') as HTMLInputElement).click(); fixture.detectChanges();
+    expect(draft.draft().selectedAddOnIds).toEqual(['chair', 'lechon']);
+    expect(page.querySelector('#photobooth-choice')).toBeNull();
+  });
+
+  it('offers Cash and only online methods that have an available QR', () => {
+    routeParams['paymentBooking'] = '27';
+    availableMethods.mockReturnValue(of(['BANK_TRANSFER']));
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    const choices = [...fixture.nativeElement.querySelectorAll('input[name="approvedPaymentMethod"]')].map((input: any) => input.value);
+    expect(choices).toEqual(['cash', 'bank-transfer']);
+    (fixture.componentInstance as any).selectApprovedPayment('gcash');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')).toBeNull();
+    expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
+  });
+
+  it('keeps Cash available if QR availability cannot load and allows retrying', () => {
+    routeParams['paymentBooking'] = '27';
+    availableMethods.mockReturnValue(throwError(() => new Error('Offline')));
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('input[name="approvedPaymentMethod"]').length).toBe(1);
+    expect(fixture.nativeElement.textContent).toContain('Unable to check online payment availability');
+    availableMethods.mockReturnValue(of(['E-WALLET']));
+    (fixture.componentInstance as any).loadPaymentMethods(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('input[value="gcash"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('input[value="bank-transfer"]')).toBeNull();
+  });
+
+  it('shows booking-specific Cash terms before saving a Cash payment choice', () => {
+    routeParams['paymentBooking'] = '27';
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null, total: 69_000 }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('input[value="cash"]') as HTMLInputElement).click(); fixture.detectChanges();
+    const dialog = fixture.nativeElement.querySelector('app-payment-choice-dialog');
+    expect(dialog.textContent).toContain('Cash payment terms');
+    expect(dialog.textContent).toContain('34,500.00');
+    expect(dialog.textContent).toContain('January 9, 2027');
+    expect(dialog.querySelector('[data-testid="confirm-approved-payment"]').disabled).toBe(true);
+    expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['PHP 480 Per Head', 'Classic buffet catering tier'],
+    ['PHP 580 Per Head', 'Expanded buffet catering tier'],
+    ['PHP 680 Per Head', 'Full buffet catering tier'],
+    ['Silver Package', 'Silver Package'],
+  ])('presents the event, date and readable package name for %s in the payment summary', (name, title) => {
+    routeParams['paymentBooking'] = '27';
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null,
+      package: { ...editableBooking.package, packageName: name } }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    const summary = fixture.nativeElement.querySelector('[aria-label="Booking details"]');
+    expect(summary).not.toBeNull();
+    expect(summary.querySelector('h3').textContent).toContain('Wedding Event');
+    expect(summary.querySelector('time').getAttribute('datetime')).toBe('2027-01-12');
+    expect(summary.querySelector('time').textContent).toContain('January 12, 2027');
+    expect(summary.textContent).toContain(title);
+    if (name.startsWith('PHP')) expect(summary.textContent).not.toContain(name);
+    expect((fixture.componentInstance as any).approvedPaymentTotal()).toBe(69_000);
+  });
+
+  it('resumes an approved payment request at step 4 without resubmitting the booking', async () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    routeParams['paymentBooking'] = '27';
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null, total: 69_000 }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    fixture.detectChanges();
+    expect(component.currentStep()).toBe(4);
+    expect(fixture.nativeElement.textContent).toContain('Payment Method');
+    expect(fixture.nativeElement.textContent).toContain('BK-EDIT');
+    expect(component.approvedPaymentTotal()).toBe(69_000);
+    await component.selectApprovedPayment('gcash');
+    fixture.detectChanges();
+    expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')?.textContent).toContain('GCash');
+    expect(fixture.nativeElement.querySelector('app-success-dialog')).toBeNull();
+    await component.confirmApprovedPayment();
+    expect(bookingService.choosePaymentMethod).toHaveBeenCalledWith('27', 'gcash');
+    fixture.detectChanges();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('app-success-dialog')?.textContent).toContain('Payment method submitted');
+    expect(fixture.nativeElement.querySelector('app-success-dialog a')?.getAttribute('href')).toBe('/my-bookings');
+    expect(bookingService.submitDraft).not.toHaveBeenCalled();
+    expect(bookingService.updatePendingBooking).not.toHaveBeenCalled();
+    expect(resetDraft).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed payment choice on step 4 for retry', async () => {
+    routeParams['paymentBooking'] = '27';
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null }));
+    bookingService.choosePaymentMethod.mockRejectedValue(new HttpErrorResponse({ status: 409, error: { message: 'Payment method can no longer be changed.' } }));
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    await component.selectApprovedPayment('cash');
+    await component.confirmApprovedPayment();
+    fixture.detectChanges();
+    expect(component.currentStep()).toBe(4);
+    expect(component.isSubmitting()).toBe(false);
+    expect(component.approvedPaymentMethod()).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Payment method can no longer be changed.');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('cancels payment confirmation without saving and allows confirming the same choice once', async () => {
+    routeParams['paymentBooking'] = '27';
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    fixture.detectChanges();
+    component.selectApprovedPayment('bank-transfer'); fixture.detectChanges();
+    component.cancelApprovedPayment(); fixture.detectChanges();
+    expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
+    expect(component.approvedPaymentMethod()).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-success-dialog')).toBeNull();
+    component.selectApprovedPayment('bank-transfer');
+    await component.confirmApprovedPayment();
+    await component.confirmApprovedPayment();
+    expect(bookingService.choosePaymentMethod).toHaveBeenCalledExactlyOnceWith('27', 'bank-transfer');
+  });
+
+  it('does not unlock payment for a pending reservation', () => {
+    routeParams['paymentBooking'] = '27';
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('not ready for payment');
+    expect(fixture.nativeElement.querySelector('[data-testid="confirm-approved-payment"]')).toBeNull();
+  });
+
+  it('locks the event type when the selected package has a specific event category', () => {
+    routeParams['package'] = unboundedPackage.id;
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    const eventType = fixture.nativeElement.querySelector('#eventType') as HTMLSelectElement;
+    expect(eventType.value).toBe('debut');
+    expect(eventType.disabled).toBe(true);
+  });
+  it('disables dates before the current size cutoff', () => {
+    vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
+    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 500, eventDate: '' });
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    (fixture.componentInstance as any).openCalendar();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('[data-calendar-date="2026-11-09"]') as HTMLButtonElement).disabled).toBe(true);
+    expect((fixture.nativeElement.querySelector('[data-calendar-date="2026-11-11"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+  it('disables full dates in the calendar before selection', () => {
+    vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
+    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 500, eventDate: '' });
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    component.openCalendar();
+    fixture.detectChanges();
+    const fullDay = fixture.nativeElement.querySelector('[data-calendar-date="2026-11-10"]') as HTMLButtonElement;
+    const openDay = fixture.nativeElement.querySelector('[data-calendar-date="2026-11-11"]') as HTMLButtonElement;
+    expect(fullDay.disabled).toBe(true);
+    expect(openDay.disabled).toBe(false);
+  });
+
+  it('submits the request from review without asking for a payment method', async () => {
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    component.currentStep.set(3);
+    fixture.detectChanges();
+    const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Submit Booking')) as HTMLButtonElement | undefined;
+    expect(button).toBeDefined();
+    expect(fixture.nativeElement.textContent).not.toContain('Choose Payment Method');
+    await component.confirmBooking();
+    expect(bookingService.submitDraft).toHaveBeenCalledOnce();
+  });
 
   it('restores availability after the same date is cleared and restored inside the debounce window', () => {
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
@@ -176,10 +407,10 @@ describe('BookingPageComponent submission validation', () => {
   });
 
   for (const { guestCount, eventDate } of [
-    { guestCount: 100, eventDate: '2026-11-01' },
-    { guestCount: 500, eventDate: '2026-11-03' },
+    { guestCount: 100, eventDate: '2026-11-02' },
+    { guestCount: 500, eventDate: '2026-11-04' },
   ]) {
-    it(`accepts a ${guestCount}-guest cash event with only its preparation days remaining before office closing`, async () => {
+    it(`accepts a ${guestCount}-guest cash event with one deposit day before preparation before office closing`, async () => {
       vi.setSystemTime(new Date('2026-10-29T09:59:59Z'));
       draftState.set({ ...initialDraft, guestCount, packageId: standardPackage.id, eventDate });
       const fixture = TestBed.createComponent(BookingPageComponent);
@@ -190,7 +421,7 @@ describe('BookingPageComponent submission validation', () => {
       expect(component.eventForm.controls.eventDate.valid).toBe(true);
       const cashTerms = fixture.nativeElement.querySelector('.cash-payment-note') as HTMLElement;
       expect(cashTerms.querySelector('[role="alert"]')).toBeNull();
-      expect(cashTerms.textContent).toContain('October 29, 2026');
+      expect(cashTerms.textContent).toContain('October 30, 2026');
       expect(cashTerms.textContent).toContain('6:00 PM');
       await component.confirmBooking();
       expect(component.bookingReference()).toBe('BK-TEST');
@@ -212,7 +443,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(draftState().eventDate).toBe('2026-11-02');
     expect(draftState().paymentMethod).toBe('cash');
     component.selectPayment('gcash');
-    expect(component.eventForm.controls.eventDate.valid).toBe(true);
+    expect(component.eventForm.controls.eventDate.valid).toBe(false);
   });
 
   function chairQuantityFixture() {
@@ -318,7 +549,7 @@ describe('BookingPageComponent submission validation', () => {
     }
   });
 
-  it('enforces three calendar days for all new bookings and pending edits', () => {
+  it('enforces four calendar days for all new bookings and pending edits', () => {
     routeParams['booking'] = editableBooking.id;
     vi.setSystemTime(new Date('2026-10-29T04:00:00Z'));
     const fixture = TestBed.createComponent(BookingPageComponent);
@@ -328,14 +559,14 @@ describe('BookingPageComponent submission validation', () => {
       fixture.detectChanges();
       expect(component.dateUnavailable()).toBe(true);
       const feedback = fixture.nativeElement.querySelector('#availability-feedback');
-      expect(feedback.textContent).toContain('Unavailable Date. Please select a date at least 3 days in advance.');
+      expect(feedback.textContent).toContain('Unavailable Date. Please select a date at least 4 days in advance.');
       expect(feedback.textContent).not.toContain('Choose a future date');
       component.continueToAddOns();
       expect(component.currentStep()).toBe(1);
       expect(component.canContinueToAddOns()).toBe(false);
       expect(fixture.nativeElement.querySelector('form button[type="submit"]').disabled).toBe(true);
     }
-    component.eventForm.controls.eventDate.setValue('2026-11-01');
+    component.eventForm.controls.eventDate.setValue('2026-11-02');
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
     expect(component.dateUnavailable()).toBe(false);
@@ -344,18 +575,18 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.currentStep()).toBe(2);
   });
 
-  it('revalidates on every Continue click after Philippine midnight', () => {
+  it('revalidates on every Continue click at the 11 PM Philippine calendar rollover', () => {
     routeParams['booking'] = editableBooking.id;
     const draft = TestBed.inject(BookingDraftService);
     draft.editingBookingId.set(editableBooking.id);
-    vi.setSystemTime(new Date('2026-10-29T15:59:59Z'));
-    draftState.set({ ...initialDraft, eventDate: '2026-11-01' });
+    vi.setSystemTime(new Date('2026-10-29T14:59:59Z'));
+    draftState.set({ ...initialDraft, eventDate: '2026-11-02' });
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
     component.continueToAddOns();
     expect(component.currentStep()).toBe(2);
     component.goToStep(1);
-    vi.setSystemTime(new Date('2026-10-29T16:00:00Z'));
+    vi.setSystemTime(new Date('2026-10-29T15:00:00Z'));
     component.continueToAddOns();
     expect(component.currentStep()).toBe(1);
     expect(component.dateUnavailable()).toBe(true);
@@ -370,17 +601,16 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.furthestStep()).toBe(1);
   });
 
-  it('revisits unlocked steps without losing event, add-on, or payment data', () => {
+  it('revisits unlocked steps without losing event or add-on data', () => {
     draftState.set({ ...initialDraft, selectedAddOnIds: ['5'] });
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
     component.continueToAddOns();
     component.goToStep(3);
-    component.goToStep(4);
     const saved = draftState();
     component.navigateFromStepper(1);
-    component.navigateFromStepper(4);
-    expect(component.currentStep()).toBe(4);
+    component.navigateFromStepper(3);
+    expect(component.currentStep()).toBe(3);
     expect(draftState()).toEqual(saved);
   });
 
@@ -541,6 +771,7 @@ describe('BookingPageComponent submission validation', () => {
   });
 
   it('only offers specialized packages matching the occasion while keeping standard catering available', () => {
+    draftState.set({ ...initialDraft, packageId: null });
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     component.eventForm.controls.eventType.setValue('wedding');

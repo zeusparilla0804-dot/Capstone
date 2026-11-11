@@ -5,13 +5,14 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AuthService } from '../../core/services/auth.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
+import { AsteriskPasswordDirective } from '../../shared/directives/asterisk-password.directive';
 
 type RecoveryAudience = 'customer' | 'admin';
 type RecoveryMode = 'forgot' | 'reset';
 
 @Component({
   selector: 'app-password-recovery',
-  imports: [PublicHeaderComponent, ReactiveFormsModule, RouterLink],
+  imports: [PublicHeaderComponent, ReactiveFormsModule, RouterLink, AsteriskPasswordDirective],
   templateUrl: './password-recovery.page.html',
   styleUrl: './password-recovery.page.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -43,11 +44,11 @@ export class PasswordRecoveryPage {
   protected readonly resetForm = new FormGroup({
     password: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(15), Validators.maxLength(128)],
+      validators: [Validators.required, Validators.minLength(8), Validators.maxLength(128)],
     }),
     confirmPassword: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.minLength(15), Validators.maxLength(128)],
+      validators: [Validators.required, Validators.minLength(8), Validators.maxLength(128)],
     }),
   });
 

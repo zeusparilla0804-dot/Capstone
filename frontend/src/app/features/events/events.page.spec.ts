@@ -24,6 +24,8 @@ describe('EventsPageComponent client galleries', () => {
       'Design image 1 of 13',
       'Design image 1 of 29',
       'Design image 1 of 10',
+      'Design image 1 of 5',
+      'Design image 1 of 4',
     ]);
   });
 

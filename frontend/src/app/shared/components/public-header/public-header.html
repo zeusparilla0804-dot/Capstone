@@ -7,6 +7,7 @@
       <small class="public-header__brand-tagline">Event Catering Services</small>
     </a>
 
+    @if (authenticated()) { <app-notification-bell class="public-header__mobile-notifications" /> }
     <button
       class="public-header__toggle"
       type="button"
@@ -45,6 +46,7 @@
 
       <div class="public-header__actions">
         @if (authenticated()) {
+          <app-notification-bell class="public-header__desktop-notifications" />
           <div #accountArea class="public-header__account" (keydown)="onAccountKeydown($event)" (focusout)="onAccountFocusOut($event)">
             <button #accountTrigger class="public-header__account-trigger" type="button" [attr.aria-expanded]="isAccountOpen()" aria-controls="customer-account-menu" [attr.aria-label]="'Account for ' + (auth.user()?.fullName ?? 'Customer')" (click)="toggleAccount()">
               <span class="public-header__account-avatar" aria-hidden="true">{{ customerInitials() }}</span>
@@ -62,6 +64,7 @@
         } @else {
           <a class="public-header__login" routerLink="/login" (click)="closeMenu()">Log in</a>
         }
+        @if (showBookingButton()) {
         <a
           class="public-header__auth btn btn-primary btn-sm"
           routerLink="/book-event" [queryParams]="{ new: 1 }"
@@ -72,6 +75,7 @@
           (click)="closeMenu()"
           >Book now</a
         >
+        }
       </div>
     </nav>
     <button

@@ -9,6 +9,7 @@ export interface BookingAddOn {
   readonly name: string;
   readonly description?: string;
   readonly price: number;
+  readonly eventTypes?: readonly EventType[];
   readonly quantity?: number;
   readonly unitPrice?: number;
 }
@@ -65,6 +66,8 @@ export interface Booking {
   readonly status: BookingStatus;
   readonly total?: number;
   readonly paymentMethod?: PaymentMethod;
+  readonly latestProofStatus?: 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | 'SUPERSEDED';
+  readonly paymentQrReady?: boolean;
   readonly amountPaid: number;
   readonly createdAt: string;
   readonly cancelledAt?: string;

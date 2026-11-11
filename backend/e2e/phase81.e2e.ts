@@ -148,8 +148,8 @@ try {
   const addOns = await request(base, '/add-ons');
   assert.ok(addOns.body.data.some((item: { id: number }) => Number(item.id) === created.addOn));
 
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-  const bookingCreate = await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: `${marker} Venue`, guestCount: 10, packageId: created.package, addOnIds: [created.addOn], paymentMethod: 'cash', total: 0 }) }, 201);
+  const tomorrow = new Date(Date.now() + 8 * 86_400_000).toISOString().slice(0, 10);
+  const bookingCreate = await request(base, '/bookings', { method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({ eventType: event.event_type, eventDate: tomorrow, eventTime: '12:30', venue: `${marker} Venue`, guestCount: 10, packageId: created.package, addOnIds: [created.addOn], total: 0 }) }, 201);
   created.booking = Number(bookingCreate.body.data.id);
   createdBookingIds.push(created.booking);
   assert.equal(bookingCreate.body.data.total, 1280.17, 'Server must ignore the manipulated client total.');
@@ -167,7 +167,6 @@ try {
     guestCount,
     packageId: created.capacityPackage,
     addOnIds: [],
-    paymentMethod: 'cash',
   });
   const createCapacityBooking = async (eventDate: string, guestCount: number, sessionCookie: string, expected = 201) => {
     const result = await request(base, '/bookings', {
@@ -268,17 +267,19 @@ try {
 
   await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'COMPLETED' }) }, 409);
   await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' }) });
+  await request(base, `/bookings/${created.booking}/payment-method`, { method: 'PATCH', headers: { cookie: customerACookie }, body: JSON.stringify({ method: 'cash' }) });
   const search = await request(base, `/admin/bookings?search=${encodeURIComponent("%' OR 1=1;--")}`, { headers: { cookie: adminCookie } });
   assert.equal(search.body.data.totalItems, 0);
   const invoiceIssue = await request(base, `/admin/bookings/${created.booking}/invoice`, { method: 'POST', headers: { cookie: adminCookie }, body: '{}' }, 201);
   const invoiceId = Number(invoiceIssue.body.data.invoiceId);
-  await request(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'AWAITING_PAYMENT' }) });
+  const afterApproval = await request(base, `/admin/bookings/${created.booking}`, { headers: { cookie: adminCookie } });
+  assert.equal(afterApproval.body.data.status, 'AWAITING_PAYMENT', 'Approval automatically requests payment.');
   await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerACookie } });
   await request(base, `/invoices/${invoiceId}`, { headers: { cookie: customerBCookie } }, 404);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: -1, method: 'CASH', reference: `${marker}-NEGATIVE`, paymentDate: tomorrow }) }, 400);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 999999, method: 'CASH', reference: `${marker}-OVERPAYMENT`, paymentDate: tomorrow }) }, 409);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 100, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 201);
-  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 1, method: 'CASH', reference: `${marker}-PAY`, paymentDate: tomorrow }) }, 409);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: -1, method: 'CASH', reference: `${marker}-NEGATIVE`, paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) }) }, 400);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 999999, method: 'CASH', requestId: '44410af2-ec71-449b-b3f6-f458a839cf33', paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) }) }, 409);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 100, method: 'CASH', requestId: 'a9733867-a447-4356-b501-5620b69775a8', paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) }) }, 201);
+  await request(base, '/admin/payments', { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ reservationId: created.booking, amount: 1, method: 'CASH', requestId: 'a9733867-a447-4356-b501-5620b69775a8', paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) }) }, 409);
   const invoice = await request(base, `/admin/invoices/${invoiceId}`, { headers: { cookie: adminCookie } });
   assert.equal(invoice.body.data.amountPaid, 100);
   const auditCount = await pool.request().input('adminId', sql.Int, created.admin).query('SELECT COUNT(*) count FROM dbo.ADMIN_AUDIT_LOG WHERE admin_id=@adminId');

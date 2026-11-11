@@ -16,7 +16,10 @@ import { environment } from './config/environment.js';
 import { isAllowedFrontendOrigin } from './config/cors.js';
 import { paymentProofRoutes, proofFileRoutes } from './routes/payment-proof.routes.js';
 import customEventRoutes from './routes/custom-event.routes.js';
+import { adminPaymentDestinationRoutes, paymentDestinationRoutes } from './routes/payment-destination.routes.js';
 import { createCsrfProtection } from './middleware/csrf.middleware.js';
+import customerNotificationRoutes from './routes/customer-notifications.routes.js';
+import { adminPackageImageRoutes, publicPackageImageRoutes } from './routes/package-images.routes.js';
 
 const app = express();
 
@@ -92,11 +95,16 @@ app.use('/api/auth/email/verify', verificationLimiter);
 app.use('/api/auth/email/resend', verificationResendLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/packages', packageRoutes);
+app.use('/api/packages', publicPackageImageRoutes);
+app.use('/api/notifications', customerNotificationRoutes);
 app.use('/api/add-ons', addOnRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/payment-destinations', paymentDestinationRoutes);
 app.use('/api/bookings', paymentProofRoutes);
 app.use('/api/custom-events', customEventRoutes);
 app.use('/api/payment-proofs', proofFileRoutes);
+app.use('/api/admin/payment-destinations', adminPaymentDestinationRoutes);
+app.use('/api/admin/packages', adminPackageImageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use(notFoundHandler);

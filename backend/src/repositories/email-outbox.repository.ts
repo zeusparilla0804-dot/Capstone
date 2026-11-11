@@ -104,7 +104,8 @@ export function createEmailOutboxRepository(deps: Dependencies): EmailOutboxRepo
             SELECT TOP (@batchSize) * FROM dbo.EMAIL_OUTBOX WITH(UPDLOCK,READPAST,ROWLOCK)
             WHERE (status='PENDING' AND (next_attempt_at IS NULL OR next_attempt_at<=@now))
                OR (status='PROCESSING' AND updated_at<=@leaseCutoff)
-            ORDER BY created_at,notification_id
+            ORDER BY CASE WHEN template_key IN ('EMAIL_VERIFICATION_CODE','PASSWORD_RESET_REQUESTED') THEN 0 ELSE 1 END,
+              created_at,notification_id
           )
           UPDATE due SET status='PROCESSING',attempt_count=attempt_count+1,updated_at=@now
           OUTPUT CONVERT(varchar(20), INSERTED.notification_id) id,INSERTED.recipient,

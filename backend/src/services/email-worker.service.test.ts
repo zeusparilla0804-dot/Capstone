@@ -310,8 +310,24 @@ test('email outbox SMTP absent is disabled; any partial or unsafe configuration 
     { EMAIL_WORKER_RETRY_BASE_MS: '4000000' }, { EMAIL_WORKER_LEASE_MS: '1' }]) assert.throws(() => read({ ...complete, ...invalid }));
   assert.throws(() => read({ SMTP_FROM_NAME: 'Chef' }));
   const enabled = read(complete); assert.equal(enabled.worker.enabled, true); assert.equal(enabled.smtp.from.name, 'LA Chef Event Catering Services');
-  assert.equal(enabled.worker.pollIntervalMs, 30_000); assert.equal(enabled.worker.batchSize, 10); assert.equal(enabled.worker.maxAttempts, 5);
+  assert.equal(enabled.worker.pollIntervalMs, 5_000); assert.equal(read({ ...complete, EMAIL_WORKER_POLL_INTERVAL_MS: '30000' }).worker.pollIntervalMs, 30_000);
+  assert.equal(enabled.worker.batchSize, 10); assert.equal(enabled.worker.maxAttempts, 5);
   assert.equal(enabled.worker.retryBaseMs, 60_000); assert.equal(enabled.worker.retryCapMs, 3_600_000); assert.equal(enabled.worker.leaseMs, 300_000);
+});
+
+test('email worker sends time-sensitive codes before ordinary notifications even when SQL output is unordered', async () => {
+  const db = new OutboxDb(); await db.seed();
+  await db.notification().queueNotification({ recipient: 'customer@example.test', templateKey: 'EMAIL_VERIFICATION_CODE',
+    payload: { accountName: 'Customer', selector: 'a'.repeat(22), accountType: 'CUSTOMER' } });
+  db.rows.forEach((row, index) => { row.id = String(index + 1); });
+  const subjects: string[] = [];
+  const rendered = { subject: 'Verification code', text: 'test code', html: '<p>test code</p>' };
+  const result = await db.worker({ sendMail: async (message: any) => { subjects.push(message.subject); return {}; } }, {},
+    async () => undefined, async () => undefined, async () => rendered).processEmailBatch(now);
+  assert.equal(result.sent, 2);
+  assert.equal(subjects[0], 'Verification code');
+  const claim = db.commands.find(item => /UPDATE due/.test(item.command))!;
+  assert.match(claim.command, /ORDER BY CASE WHEN template_key IN\s*\('EMAIL_VERIFICATION_CODE',\s*'PASSWORD_RESET_REQUESTED'\)/);
 });
 
 test('email outbox worker lifecycle is non-overlapping and stop awaits delivery before closing transport', async () => {

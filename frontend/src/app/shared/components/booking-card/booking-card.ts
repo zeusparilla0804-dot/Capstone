@@ -2,7 +2,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Booking } from '../../../core/models';
-import { customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction } from '../../../core/utils/customer-payment-status';
+import { customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr } from '../../../core/utils/customer-payment-status';
 import { StatusBadgeComponent } from '../status-badge/status-badge';
 
 @Component({
@@ -18,6 +18,7 @@ export class BookingCardComponent {
   protected readonly paymentStatus = computed(() => customerPaymentStatus(this.booking()));
   protected readonly cashPaymentAction = computed(() => hasCashPaymentAction(this.booking()));
   protected readonly onlinePaymentAction = computed(() => hasOnlinePaymentAction(this.booking()));
+  protected readonly waitingForPaymentQr = computed(() => isWaitingForPaymentQr(this.booking()));
   readonly cancelRequested = output<{ booking: Booking; trigger: HTMLButtonElement }>();
 
   protected requestCancellation(event: MouseEvent): void {

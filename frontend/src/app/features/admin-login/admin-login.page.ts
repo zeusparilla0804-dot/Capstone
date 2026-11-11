@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AdminAuthService, type AdminMfaChallenge } from '../../core/services/admin-auth.service';
@@ -38,8 +39,10 @@ export class AdminLoginPage {
         return;
       }
       await this.router.navigateByUrl('/admin/dashboard');
-    } catch {
-      this.error.set('Invalid administrator credentials.');
+    } catch (error) {
+      this.error.set(error instanceof HttpErrorResponse && error.status === 0
+        ? 'Cannot connect to the server. Please try again shortly.'
+        : 'Invalid administrator credentials.');
     } finally {
       this.busy.set(false);
     }

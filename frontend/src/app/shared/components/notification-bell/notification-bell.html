@@ -1,0 +1,27 @@
+<div class="notifications" (focusout)="focusOut($event)">
+  <button #trigger type="button" class="notifications__trigger" [attr.aria-controls]="panelId" [attr.aria-expanded]="open()"
+    [attr.aria-label]="updates.unreadCount() ? 'Notifications, ' + updates.unreadCount() + ' unread' : 'Notifications'" (click)="toggle()">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+    @if (updates.unreadCount()) { <span class="notifications__count" aria-hidden="true">{{ updates.unreadCount() > 9 ? '9+' : updates.unreadCount() }}</span> }
+  </button>
+  @if (open()) {
+    <section [id]="panelId" class="notifications__panel" aria-label="Notifications">
+      <div class="notifications__heading"><h2>Notifications</h2>
+        @if (updates.unreadCount()) { <button type="button" (click)="updates.markAllRead()">Mark all as read</button> }
+      </div>
+      @if (updates.error()) { <p class="notifications__state" role="alert">{{ updates.error() }} <button type="button" (click)="updates.refresh()">Try again</button></p> }
+      @if (updates.items().length) {
+        <ul>
+          @for (item of updates.items(); track item.id) {
+            <li><a [routerLink]="routePath(item.link)" [queryParams]="routeQuery(item.link)" [class.is-unread]="!item.isRead" (click)="visit(item.id)">
+              <strong>{{ item.title }} @if (!item.isRead) { <span class="notifications__dot" aria-label="Unread"></span> }</strong>
+              <span>{{ item.message }}</span><small>{{ item.reference }} · {{ item.createdAt | date:'MMM d, h:mm a' }}</small>
+            </a></li>
+          }
+        </ul>
+      } @else if (updates.loading()) { <p class="notifications__state" role="status">Loading updates…</p>
+      } @else if (!updates.error()) { <p class="notifications__state">No updates yet. Booking and payment updates will appear here.</p> }
+      <a class="notifications__footer" routerLink="/my-bookings" (click)="open.set(false)">View My Reservations</a>
+    </section>
+  }
+</div>

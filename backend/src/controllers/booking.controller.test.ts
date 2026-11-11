@@ -191,27 +191,27 @@ test('booking routes expose owner-only pending details updates', () => {
   assert.match(source, /\.patch\('\/:id\/details',\s*updateDetails\)/);
 });
 
- test('booking and availability enforce three Manila calendar days, including month rollover', t => {
-  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T15:59:59Z') });
+ test('booking and availability enforce four Manila calendar days, including month rollover', t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T14:59:59Z') });
   for (const eventDate of ['2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31']) {
-    assert.throws(() => parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate }), /at least 3 days/);
-    assert.throws(() => parseAvailabilityQuery({ date: eventDate, guestCount: '100' }), /at least 3 days/);
+    assert.throws(() => parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate }), /at least 4 days/);
+    assert.throws(() => parseAvailabilityQuery({ date: eventDate, guestCount: '100' }), /at least 4 days/);
   }
-  assert.equal(parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-11-01' }).eventDate, '2026-11-01');
-  assert.throws(() => parsePendingBookingUpdate({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-10-31' }), /at least 3 days/);
+  assert.equal(parseBooking({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-11-02' }).eventDate, '2026-11-02');
+  assert.throws(() => parsePendingBookingUpdate({ ...validBookingBody, paymentMethod: 'e-wallet', eventDate: '2026-10-31' }), /at least 4 days/);
  });
- test('cash submissions need only three or five preparation days before office closing', t => {
+ test('cash submissions include one deposit day before three or five preparation days', t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T04:00:00Z') });
-  for (const [guestCount, earliest, earlier] of [[499,'2026-11-01','2026-10-31'],[500,'2026-11-03','2026-11-02']]) {
+  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[500,'2026-11-04','2026-11-03']]) {
     assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
-    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /cash|at least 3 days/i);
+    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /at least [46] days/i);
   }
  });
 
- test('cash submission cutoff advances one day at 6 PM Philippine time', t => {
+ test('cash booking allowance remains available after 6 PM Philippine time', t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T10:00:00Z') });
   for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[500,'2026-11-04','2026-11-03']]) {
     assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
-    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /cash/i);
+    assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /at least [46] days/i);
   }
  });

@@ -46,7 +46,27 @@ describe('AuthService', () => {
     const result = service.register({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
     http.expectOne(`${environment.apiBaseUrl}/auth/register`).flush({ success: true, data: { id: 42, fullName: 'New Customer', email: 'new@example.test', role: 'customer' } });
     await result;
+    http.expectNone(`${environment.apiBaseUrl}/auth/logout`);
     expect(service.user()).toBeNull();
+  });
+
+  it('replaces the previous customer with the newly verified account before returning home', async () => {
+    service.user.set({ id: '7', fullName: 'Michael Escalera', email: 'michael@example.test', role: 'customer' });
+    const registration = service.register({ firstName: 'Klint', lastName: 'Fajardo', phone: '09171234567', email: 'klint@example.test', password: 'new-password-123' });
+    http.expectOne(`${environment.apiBaseUrl}/auth/register`).flush({ success: true, data: { id: 42, fullName: 'Klint Fajardo', email: 'klint@example.test', role: 'customer' } });
+    await Promise.resolve();
+    http.expectOne(`${environment.apiBaseUrl}/auth/logout`).flush(null);
+    await registration;
+    expect(service.user()).toBeNull();
+    const verification = service.verifyEmail('klint@example.test', '012345');
+    http.expectOne(`${environment.apiBaseUrl}/auth/email/verify`).flush({ success: true });
+    await Promise.resolve();
+    const login = http.expectOne(`${environment.apiBaseUrl}/auth/login`);
+    expect(login.request.body).toEqual({ email: 'klint@example.test', password: 'new-password-123' });
+    login.flush({ success: true, data: { id: 42, fullName: 'Klint Fajardo', email: 'klint@example.test', role: 'customer' } });
+    await expect(verification).resolves.toBe(true);
+    expect(service.user()?.fullName).toBe('Klint Fajardo');
+    expect(service.user()?.id).toBe('42');
   });
 
   let service: AuthService;

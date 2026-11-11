@@ -50,4 +50,25 @@ describe('Customer email code form', () => {
       fixture.destroy();
     } finally { vi.useRealTimers(); }
   });
+  it('shows six digit slots, supports pasting a spaced code, and submits leading zeroes intact', async () => {
+    const fixture = TestBed.createComponent(EmailVerificationForm);
+    fixture.componentRef.setInput('email', 'customer@example.test'); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.verification-digit').length).toBe(6);
+    const code: HTMLInputElement = fixture.nativeElement.querySelector('#verification-code');
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => '012 345' } });
+    code.dispatchEvent(paste); fixture.detectChanges();
+    expect(code.value).toBe('012345');
+    expect([...fixture.nativeElement.querySelectorAll('.verification-digit')].map((slot: any) => slot.textContent.trim()).join('')).toBe('012345');
+    await (fixture.componentInstance as any).submit();
+    expect(auth.verifyEmail).toHaveBeenCalledWith('customer@example.test', '012345');
+  });
+  it('accepts autofill and removes non-digit characters without auto-submitting', () => {
+    const fixture = TestBed.createComponent(EmailVerificationForm); fixture.detectChanges();
+    const code: HTMLInputElement = fixture.nativeElement.querySelector('#verification-code');
+    code.value = '01a2345'; code.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    expect(code.value).toBe('012345');
+    expect((fixture.componentInstance as any).form.controls.code.value).toBe('012345');
+    expect(auth.verifyEmail).not.toHaveBeenCalled();
+  });
 });

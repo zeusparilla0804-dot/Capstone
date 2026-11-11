@@ -9,6 +9,9 @@
   </nav>
 
   @if (message()) { <p class="admin-feedback" role="status">{{ message() }}</p> }
+  @if (imagePackage(); as imageItem) {
+    <app-package-images-editor [item]="imageItem" (closed)="imagePackage.set(null)" (saved)="imagesSaved()" />
+  }
 
   @if (showForm()) {
     <section class="package-editor admin-panel" aria-labelledby="package-editor-title">
@@ -66,7 +69,7 @@
                   <td data-label="Pricing"><span class="pricing-summary">{{ pricingSummary(item) }}</span></td>
                   <td data-label="Guest limits">{{ guestRange(item) }}</td>
                   <td data-label="Status"><span class="package-status" [class.is-inactive]="!item.isActive">{{ item.isActive ? 'Active' : 'Inactive' }}</span></td>
-                  <td data-label="Actions"><div class="row-actions"><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="edit(item)">Edit</button><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="toggle(item)">{{ item.isActive ? 'Deactivate' : 'Activate' }}</button></div></td>
+                  <td data-label="Actions"><div class="row-actions"><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="edit(item)">Edit</button><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="imagePackage.set(item)">Manage Images</button><button class="btn btn-tertiary" type="button" [disabled]="saving()" (click)="toggle(item)">{{ item.isActive ? 'Deactivate' : 'Activate' }}</button></div></td>
                 </tr>
               }
             </tbody>

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { Booking, BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -21,7 +21,7 @@ interface PlanningProgress {
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './customer-dashboard.page.scss',
 })
-export class CustomerDashboardPageComponent {
+export class CustomerDashboardPageComponent implements OnDestroy {
   protected readonly bookingService = inject(BookingService);
   protected readonly paymentStatus = customerPaymentStatus;
   protected readonly badgeState = inject(PortalBadgeStateService);
@@ -31,6 +31,7 @@ export class CustomerDashboardPageComponent {
   protected readonly bookings = this.bookingService.bookings;
   protected readonly upcomingBookings = computed(() => this.bookingService.getBookingsByTab('upcoming').slice(0, 4));
   protected readonly nextBooking = computed(() => this.upcomingBookings()[0]);
+  private readonly refreshTimer: ReturnType<typeof setInterval>;
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
   protected readonly planningProgress = computed<PlanningProgress>(() => this.progressFor(this.nextBooking()?.status));
   protected readonly paymentSummary = computed(() => {
@@ -50,7 +51,13 @@ export class CustomerDashboardPageComponent {
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookings()));
     this.bookingService.loadMine();
+    this.refreshTimer = setInterval(() => this.bookingService.loadMine(), 30_000);
   }
+
+  ngOnDestroy(): void { clearInterval(this.refreshTimer); }
+
+  @HostListener('window:focus')
+  protected refreshOnFocus(): void { this.bookingService.loadMine(); }
 
   protected isStepComplete(step: 1 | 2 | 3): boolean {
     return this.planningProgress().completedThrough >= step;

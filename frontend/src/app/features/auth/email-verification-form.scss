@@ -5,7 +5,17 @@ label { font-size: 13px; font-weight: 500; line-height: 1.5; }
 input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 50px; padding: 12px 14px; border: 1px solid var(--auth-border); border-radius: 8px; background: #fffdfa; color: var(--auth-text); font: inherit; font-size: 14px; }
 input:focus-visible { outline: 2px solid var(--auth-gold); outline-offset: 2px; }
 input[aria-invalid='true'] { border-color: #b42318; }
-.verification-code { font-size: 24px; font-weight: 500; letter-spacing: .25em; font-variant-numeric: tabular-nums; }
+.verification-code-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.verification-code-heading > span { color: var(--auth-muted); font-size: 12px; }
+.verification-code-entry { position: relative; isolation: isolate; }
+input.verification-code { position: absolute; z-index: 1; inset: 0; height: 100%; min-height: 0; margin: 0; border: 0; padding: 0; background: transparent; color: transparent; caret-color: transparent; -webkit-text-fill-color: transparent; letter-spacing: normal; }
+input.verification-code:focus-visible { outline: none; }
+.verification-digits { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; pointer-events: none; }
+.verification-digit { display: grid; place-items: center; height: 60px; min-width: 0; border: 1px solid var(--auth-border); border-radius: 8px; background: #fffdfa; color: var(--auth-text); font-size: 25px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.verification-digit.is-filled { border-color: var(--auth-gold); }
+.verification-digit.is-active { outline: 2px solid var(--auth-gold); outline-offset: 2px; }
+.verification-code-entry.is-invalid .verification-digit { border-color: #b42318; }
+@media (forced-colors: active) { input.verification-code { position: relative; color: CanvasText; -webkit-text-fill-color: CanvasText; caret-color: CanvasText; border: 1px solid CanvasText; padding: 12px; min-height: 50px; } .verification-digits { display: none; } }
 small { font-size: 12px; color: var(--auth-muted); line-height: 1.5; }
 p { margin: 0; font-size: 13px; line-height: 1.6; }
 .verification-error { color: #b42318; }
@@ -17,4 +27,4 @@ button:disabled { opacity: .6; cursor: default; }
 .verification-resend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 20px; font-size: 13px; color: var(--auth-muted); line-height: 1.5; }
 .verification-resend button { border: 0; padding: 0; background: transparent; color: var(--auth-gold); font: inherit; font-weight: 500; cursor: pointer; }
 .verification-return { display: block; margin-top: 16px; text-align: center; color: var(--auth-gold); font-size: 13px; font-weight: 500; }
-@media(max-width:760px) { input { font-size: 16px; } .verification-code { font-size: 24px; } }
+@media(max-width:760px) { input { font-size: 16px; } .verification-digits { gap: 6px; } .verification-digit { height: 54px; font-size: 23px; } }

@@ -11,7 +11,8 @@ const templates: Record<EmailTemplateKey, { subject: string; message: string; ex
   EMAIL_VERIFICATION_CODE: { subject: 'Your LA Chef verification code', message: 'Email verification requires the protected renderer.' },
   ACCOUNT_REGISTERED: { subject: 'Account registration confirmed', message: 'Your LA Chef customer account is ready. You can now reserve an event and manage your billing details.' },
   BOOKING_RECEIVED: { subject: 'Booking received', message: 'We received your booking request. It is pending review.' },
-  BOOKING_APPROVED: { subject: 'Booking approved', message: 'Your booking has been approved. Please check your booking for the next payment steps.', extras: ['cashPaymentInstructions'] },
+  BOOKING_APPROVED: { subject: 'Booking approved', message: 'Your booking has been approved. LA Chef will notify you when payment is requested. You can review your invoice in your account.', extras: ['cashPaymentInstructions'] },
+  PAYMENT_REQUESTED: { subject: 'Payment requested for your booking', message: 'LA Chef has requested payment for your approved booking. Sign in to your account and choose GCash, bank transfer, or cash. If you choose an online method, wait for your assigned QR before paying.' },
   BOOKING_REJECTED: { subject: 'Booking request rejected', message: 'Your booking request has been rejected. Please check your booking or contact LA Chef for details.' },
   INVOICE_ISSUED: { subject: 'Invoice issued', message: 'Your invoice is available. Please review it in your account.', extras: ['invoiceNumber'] },
   PAYMENT_PROOF_SUBMITTED: { subject: 'Payment proof received', message: 'Your payment proof was received for manual verification. Your recorded balance will change only after verification.' },
@@ -124,7 +125,7 @@ function invoiceSection(heading: string, rows: readonly (readonly [string, strin
 
 function renderInvoiceEmail(payload: Record<string, string>): RenderedEmail {
   const approved = payload.bookingStatus === 'APPROVED';
-  const intro = approved ? 'Your reservation has been approved. Your invoice is ready to review.' : 'Your invoice is ready to review.';
+  const intro = approved ? 'Your reservation has been approved and your invoice is ready to review. LA Chef will notify you when payment is requested.' : 'Your invoice is ready to review.';
   const eventRows: [string, string][] = [['Booking reference', payload.bookingReference!]];
   if (payload.eventType) eventRows.push(['Event', payload.eventType]);
   eventRows.push(['Event date', invoiceDate(payload.eventDate!)]);
@@ -167,7 +168,9 @@ function renderInvoiceEmail(payload: Record<string, string>): RenderedEmail {
     html += office.map(emailParagraph).join('') + '<ol style="margin:0 0 16px;padding-left:22px">' +
       steps.map(step => `<li style="padding:0 0 8px">${escapeHtml(step)}</li>`).join('') + '</ol>' + emailParagraph(proof);
   } else {
-    const instructions = 'Review your invoice and follow the payment instructions in your account. Contact LA Chef if you need payment details.';
+    const instructions = approved
+      ? 'Review your invoice now. Wait for LA Chef to request payment before choosing a payment method or sending a deposit.'
+      : 'Review your invoice and follow the payment instructions in your account. Contact LA Chef if you need payment details.';
     text.push(instructions); html += emailParagraph(instructions);
   }
   if (['APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED'].includes(payload.bookingStatus ?? '')) {

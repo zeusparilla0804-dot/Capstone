@@ -69,6 +69,9 @@ export const EXPECTED_MIGRATIONS = [
   '019_customer_email_verification.sql',
   '020_booking_timing_policy.sql',
   '021_admin_mfa.sql',
+  '022_payment_destinations.sql',
+  '022_payment_destinations_seed',
+  '023_customer_updates_package_images.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -107,6 +110,20 @@ function datetime2(table: string, name: string, nullable = false, scale = 7): Co
 }
 
 const columns: ColumnShape[] = [
+  integer('PAYMENT_DESTINATION', 'destination_id', false, true),
+  nvarchar('PAYMENT_DESTINATION', 'method', 30), nvarchar('PAYMENT_DESTINATION', 'label', 100),
+  nvarchar('PAYMENT_DESTINATION', 'account_name', 200), nvarchar('PAYMENT_DESTINATION', 'account_hint', 50),
+  nvarchar('PAYMENT_DESTINATION', 'image_mime', 30),
+  column('PAYMENT_DESTINATION', 'image_bytes', 'varbinary', -1, 0, 0, false),
+  column('PAYMENT_DESTINATION', 'is_available', 'bit', 1, 1, 0, false),
+  datetime2('PAYMENT_DESTINATION', 'created_at', false, 0), datetime2('PAYMENT_DESTINATION', 'updated_at', false, 0),
+  integer('BOOKING_PAYMENT_DESTINATION', 'reservation_id'), integer('BOOKING_PAYMENT_DESTINATION', 'destination_id'),
+  integer('BOOKING_PAYMENT_DESTINATION', 'assigned_by'), datetime2('BOOKING_PAYMENT_DESTINATION', 'assigned_at', false, 0),
+  integer('CUSTOMER_NOTIFICATION_READ', 'customer_id'), nvarchar('CUSTOMER_NOTIFICATION_READ', 'notification_key', 120),
+  datetime2('CUSTOMER_NOTIFICATION_READ', 'read_at'),
+  integer('PACKAGE_IMAGE', 'image_id', false, true), integer('PACKAGE_IMAGE', 'package_id'), integer('PACKAGE_IMAGE', 'sort_order'),
+  nvarchar('PACKAGE_IMAGE', 'asset_path', 300, true), nvarchar('PACKAGE_IMAGE', 'image_mime', 30, true),
+  column('PACKAGE_IMAGE', 'image_bytes', 'varbinary', -1, 0, 0, true),
   nvarchar('SCHEMA_MIGRATION', 'migration_name', 255), datetime2('SCHEMA_MIGRATION', 'applied_at'),
 
   integer('CUSTOMER', 'customer_id', false, true), nvarchar('CUSTOMER', 'first_name', 100),

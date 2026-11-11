@@ -41,6 +41,10 @@ form { display: grid; gap: 20px; padding-top: 20px; }
 .payment-amount-options { align-items: stretch; }
 .form-row { display: grid; min-width: 0; gap: 8px; }
 .form-row label { font-size: 14px; font-weight: 500; }
+.destination-panel { display: grid; gap: 10px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; padding: 16px; font-size: 14px; line-height: 1.5; }
+.destination-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.destination-panel h3 { font: 600 16px/1.5 var(--font-sans); }
+.destination-panel img { width: min(100%, 280px); max-height: 320px; object-fit: contain; }
 .form-row input, .form-row select { box-sizing: border-box; width: 100%; min-width: 0; height: 46px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; color: var(--color-text); padding: 10px 12px; font: 400 14px/1.5 var(--font-sans); }
 .form-row input:focus, .form-row select:focus { border-color: var(--color-primary); outline: 3px solid color-mix(in srgb, var(--color-primary) 16%, transparent); outline-offset: 0; }
 .money-input { position: relative; }
@@ -102,3 +106,14 @@ form { display: grid; gap: 20px; padding-top: 20px; }
   > .btn { margin-top: 18px; }
 }
 @media (max-width: 480px) { .cash-instructions .cash-payment-details > div { grid-template-columns: minmax(0, 1fr); gap: 3px; } }
+.payment-choice-panel { margin-top: 28px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface-alt); padding: 22px; }
+.payment-choice-panel h2 { font-family: var(--font-sans); font-size: 19px; font-weight: 600; }
+.payment-choice-panel > p { margin-top: 8px; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+.payment-choice-panel .form-row { margin-top: 18px; }
+.qr-waiting { max-width: 720px; }
+.qr-waiting > .btn { margin-top: 16px; }
+.qr-waiting__history { border-top: 1px solid var(--color-border); margin-top: 20px; padding-top: 16px; }
+.qr-waiting__history h3 { font: 600 15px/1.5 var(--font-sans); }
+.qr-waiting__history ul { margin: 8px 0 0; padding-left: 20px; color: var(--color-text-muted); font: 400 13px/1.6 var(--font-sans); }
+.cash-method-row { margin-top: 20px; }
+.method-feedback { margin-top: 14px; }

@@ -1,0 +1,23 @@
+:host { display: contents; }
+.payment-choice-dialog { box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface, #fff); color: var(--color-text); font-family: var(--font-sans); overscroll-behavior: contain; }
+.payment-choice-dialog::backdrop { background: rgb(23 24 22 / 58%); }
+.payment-choice-dialog__content { padding: 32px; }
+h2 { margin: 0 0 14px; font: 400 30px/1.2 var(--font-serif); text-wrap: balance; }
+p { margin: 0; color: var(--color-text-muted); font-size: 14px; line-height: 1.65; }
+p strong { color: var(--color-text); }
+dl { margin: 24px 0; border-block: 1px solid var(--color-border); padding-block: 16px; display: grid; gap: 12px; }
+dl div { display: flex; justify-content: space-between; gap: 20px; font-size: 13px; line-height: 1.5; }
+dt { color: var(--color-text-muted); }
+dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.payment-choice-dialog__actions { display: flex; justify-content: flex-end; gap: 12px; }
+.cash-terms { margin-bottom: 24px; font-size: 14px; line-height: 1.6; }
+.cash-terms h3 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.cash-terms p + p { margin-top: 4px; }
+.cash-terms ol { display: grid; gap: 12px; margin: 20px 0; padding-left: 20px; }
+.cash-terms__deadline { display: block; margin-top: 8px; }
+.cash-terms__agreement { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer; }
+.cash-terms__agreement input { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 3px; accent-color: var(--color-primary); }
+.cash-terms__agreement input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+button { min-height: 44px; }
+button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+@media (max-width: 480px) { .payment-choice-dialog__content { padding: 28px 24px; } .payment-choice-dialog__actions { flex-direction: column; } }

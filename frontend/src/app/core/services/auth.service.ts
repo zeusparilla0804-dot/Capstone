@@ -11,6 +11,8 @@ export class AuthService {
   private authenticationCheck: Promise<boolean> | null = null;
   private readonly accountScope = inject(CustomerAccountScopeService);
   private revision = 0;
+  private pendingVerificationLogin?: { email: string; password: string; expiresAt: number };
+  private pendingVerificationTimer?: ReturnType<typeof setTimeout>;
   get sessionVersion(): number { return this.revision; }
 
   readonly user = signal<User | null>(null);
@@ -27,13 +29,17 @@ export class AuthService {
 
   async login(email: string, password: string): Promise<void> {
     const revision = ++this.revision;
-    const response = await firstValueFrom(
-      this.http.post<ApiResponse<User>>(
-        `${environment.apiBaseUrl}/auth/login`,
-        { email, password },
-        { withCredentials: true },
-      ),
-    );
+    let response: ApiResponse<User>;
+    try {
+      response = await firstValueFrom(this.http.post<ApiResponse<User>>(
+        `${environment.apiBaseUrl}/auth/login`, { email, password }, { withCredentials: true }));
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.error?.code === 'EMAIL_NOT_VERIFIED') {
+        this.rememberVerificationLogin(email, password);
+      }
+      throw error;
+    }
+    this.forgetVerificationLogin();
     if (revision === this.revision) this.setUser(response.data);
   }
 
@@ -49,6 +55,13 @@ export class AuthService {
         withCredentials: true,
       }),
     );
+    // A new registration must not keep showing or using the previous customer's session.
+    if (this.user()) {
+      try { await this.logout(); } catch { this.clearSession(); }
+    } else {
+      this.clearSession();
+    }
+    this.rememberVerificationLogin(value.email, value.password);
   }
 
   async logout(): Promise<void> {
@@ -64,8 +77,17 @@ export class AuthService {
     }
   }
 
-  async verifyEmail(email: string, code: string): Promise<void> {
+  async verifyEmail(email: string, code: string): Promise<boolean> {
     await firstValueFrom(this.http.post(`${environment.apiBaseUrl}/auth/email/verify`, { email, code }));
+    const pending = this.pendingVerificationLogin;
+    this.forgetVerificationLogin();
+    if (pending && pending.email === email.trim().toLowerCase() && pending.expiresAt > Date.now()) {
+      try {
+        await this.login(email, pending.password);
+        return this.user()?.email?.toLowerCase() === pending.email;
+      } catch { this.clearSession(); }
+    }
+    return false;
   }
   async resendEmailCode(email: string): Promise<void> {
     await firstValueFrom(this.http.post(`${environment.apiBaseUrl}/auth/email/resend`, { email }));
@@ -133,8 +155,21 @@ export class AuthService {
   }
 
   clearSession(): void {
+    this.forgetVerificationLogin();
     this.revision += 1;
     this.accountScope.setPrincipal(null);
     this.user.set(null);
+  }
+
+  private rememberVerificationLogin(email: string, password: string): void {
+    this.forgetVerificationLogin();
+    this.pendingVerificationLogin = { email: email.trim().toLowerCase(), password, expiresAt: Date.now() + 10 * 60_000 };
+    this.pendingVerificationTimer = setTimeout(() => this.forgetVerificationLogin(), 10 * 60_000);
+  }
+
+  private forgetVerificationLogin(): void {
+    clearTimeout(this.pendingVerificationTimer);
+    this.pendingVerificationTimer = undefined;
+    this.pendingVerificationLogin = undefined;
   }
 }

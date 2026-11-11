@@ -8,7 +8,7 @@
   } @else if (detail(); as record) {
     <section class="review-lead">
       <div><p class="section-label">{{ record.booking.reference }}</p><h2>{{ record.customer.name }}</h2><p>{{ record.customer.email }} · Event {{ record.booking.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</p></div>
-      <app-status-badge [status]="record.proof.status" />
+      <app-status-badge [status]="paymentBadgeStatus()" />
     </section>
     @if (feedback()) { <p class="admin-feedback" role="status">{{ feedback() }}</p> }
     @if (reviewError()) { <p class="admin-action-error" role="alert">{{ reviewError() }}</p> }
@@ -25,14 +25,14 @@
       </section>
     </div>
 
-    <section class="balance-strip" aria-label="Payment and deposit position"><dl><div><dt>Required deposit</dt><dd>{{ (record.payment?.requiredDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>50% to secure reservation</span></div><div><dt>Already verified</dt><dd>{{ (record.payment?.amountPaid ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>{{ record.payment?.status || 'No payments' }}</span></div><div class="deposit"><dt>Remaining to secure reservation</dt><dd>{{ (record.payment?.remainingDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Deposit threshold only</span></div><div class="balance"><dt>Outstanding balance</dt><dd>{{ (record.payment?.outstandingBalance ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Full unpaid balance</span></div></dl></section>
+    <section class="balance-strip" aria-label="Payment and deposit position"><dl><div><dt>Required deposit</dt><dd>{{ (record.payment?.requiredDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>50% to secure reservation</span></div><div><dt>Already verified</dt><dd>{{ (record.payment?.amountPaid ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span><app-status-badge [status]="paymentBadgeStatus()" /></span></div><div class="deposit"><dt>Remaining to secure reservation</dt><dd>{{ (record.payment?.remainingDeposit ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Deposit threshold only</span></div><div class="balance"><dt>Outstanding balance</dt><dd>{{ (record.payment?.outstandingBalance ?? 0) | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd><span>Full unpaid balance</span></div></dl></section>
 
     @if (canReview()) {
       <section class="review-actions" aria-labelledby="review-actions-title">
         <div class="review-copy"><h2 id="review-actions-title">Review payment</h2><p>Verify the receipt details before recording the payment, or reject the submission with a reason.</p></div>
         <div class="decision-tools">
-          <div class="decision-column verify-column"><h3>Verify payment</h3><label for="verified-amount">Verified amount<div class="currency-input"><span aria-hidden="true">₱</span><input id="verified-amount" type="number" min="0.01" step="0.01" inputmode="decimal" [ngModel]="verifiedAmount()" (ngModelChange)="verifiedAmount.set(+$event)" /></div></label>@if (amountCorrected()) { <label for="correction-reason">Correction reason<textarea id="correction-reason" [(ngModel)]="correctionReason" maxlength="1000" rows="3" placeholder="Why does the verified amount differ?"></textarea></label> }<button data-testid="verify-proof" class="btn btn-primary" type="button" (click)="verify()" [disabled]="mutationPending()">{{ mutationPending() ? 'Processing...' : 'Verify and record payment' }}</button></div>
-          <div class="decision-column reject-column"><h3>Reject proof</h3><label for="rejection-reason">Reason for rejection<textarea id="rejection-reason" [(ngModel)]="rejectionReason" maxlength="1000" rows="3" placeholder="Explain why the payment proof cannot be accepted."></textarea></label><button class="btn btn-secondary danger-action" type="button" (click)="reject()" [disabled]="mutationPending()">Reject proof</button></div>
+          <div class="decision-column verify-column"><h3>Verify payment</h3><label for="verified-amount">Verified amount<div class="currency-input"><span aria-hidden="true">₱</span><input id="verified-amount" type="number" min="0.01" step="0.01" inputmode="decimal" [ngModel]="verifiedAmount()" (ngModelChange)="verifiedAmount.set(+$event)" /></div></label>@if (amountCorrected()) { <label for="correction-reason">Correction reason<textarea id="correction-reason" [(ngModel)]="correctionReason" maxlength="1000" rows="3" placeholder="Why does the verified amount differ?"></textarea></label> }<button data-testid="verify-proof" class="btn btn-primary" type="button" (click)="requestReview('verify')" [disabled]="mutationPending()">{{ mutationPending() ? 'Processing...' : 'Verify and record payment' }}</button></div>
+          <div class="decision-column reject-column"><h3>Reject proof</h3><label for="rejection-reason">Reason for rejection<textarea id="rejection-reason" [(ngModel)]="rejectionReason" maxlength="1000" rows="3" placeholder="Explain why the payment proof cannot be accepted."></textarea></label><button class="btn btn-secondary danger-action" type="button" (click)="requestReview('reject')" [disabled]="mutationPending()">Reject proof</button></div>
         </div>
       </section>
     } @else {

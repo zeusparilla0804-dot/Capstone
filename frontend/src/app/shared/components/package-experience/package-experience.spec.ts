@@ -3,7 +3,7 @@ import { CateringPackage } from '../../../core/models';
 import { PackageExperienceComponent } from './package-experience';
 
 const debutPackage: CateringPackage = {
-  id: '20', name: 'Amethyst Package', category: 'debut',
+  id: '20', name: 'Sample Debut Package', category: 'debut',
   description: 'A complete debut setting shaped for an unforgettable milestone.',
   pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 85_888,
   includedGuests: 50, excessGuestPrice: 650, minGuests: null, maxGuests: null,

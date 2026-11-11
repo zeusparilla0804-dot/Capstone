@@ -21,17 +21,21 @@ export function cashDepositDeadline(eventDate: string, guestCount: number): { da
 }
 
 export function minimumCashEventDate(guestCount: number, now = new Date()): string {
+  return minimumEventDateAtHour(guestCount, now, 23);
+}
+
+function minimumEventDateAtHour(guestCount: number, now: Date, rolloverHour: number): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
   }).formatToParts(now);
   const part = (name: string) => parts.find(value => value.type === name)!.value;
   const today = `${part('year')}-${part('month')}-${part('day')}`;
-  // The office opens daily; at closing, the next cash payment date is tomorrow.
-  return shiftDate(today, (Number(part('hour')) >= 18 ? 1 : 0) + cashPreparationDays(guestCount));
+  return shiftDate(today, (Number(part('hour')) >= rolloverHour ? 1 : 0) + cashPreparationDays(guestCount));
 }
 
 export function assertCashPaymentWindow(eventDate: string, guestCount: number, now = new Date(), status = 400): void {
-  const minimum = minimumCashEventDate(guestCount, now);
+  // Calendar rollover is 11 PM; the office cash deadline remains 6 PM.
+  const minimum = minimumEventDateAtHour(guestCount, now, 18);
   if (eventDate < minimum) {
     throw new AppError(status, `Cash down payment must be received by 6:00 PM Philippine Time on the ${cashPreparationDays(guestCount)}-day preparation cutoff. Select an event date on or after ${minimum}.`, 'CASH_PAYMENT_WINDOW_UNAVAILABLE');
   }

@@ -320,9 +320,9 @@ async function completeManualPayment(db: ReviewDb, t: TestContext): Promise<void
       return { recordset: [{ status: db.booking!.status, customerId: db.booking!.customerId,
         eventDate: '2026-12-01', guestCount: 100 }], rowsAffected: [1] };
     }
-    if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) {
+    if (/SELECT payment_id,amount_due,amount_paid,payment_method FROM dbo\.PAYMENT/i.test(command)) {
       assert.match(command, /UPDLOCK,HOLDLOCK/);
-      return { recordset: [{ payment_id: 3, amount_due: 100, amount_paid: 10 }], rowsAffected: [] };
+      return { recordset: [{ payment_id: 3, amount_due: 100, amount_paid: 10, payment_method: 'CASH' }], rowsAffected: [] };
     }
     if (/FROM dbo\.PAYMENT_TRANSACTION WITH\(UPDLOCK,HOLDLOCK\)/i.test(command)) return { recordset: [], rowsAffected: [] };
     if (/UPDATE dbo\.PAYMENT_PROOF SET status='SUPERSEDED'/i.test(command)) {

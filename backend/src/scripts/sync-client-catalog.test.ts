@@ -10,7 +10,7 @@ process.env.DB_PASSWORD ??= 'test';
 
 const catalogSync = await import('./sync-client-catalog.js');
 
-test('client catalog defines exactly the three supplied per-head rates and three debut formulas', () => {
+test('client catalog defines the supplied standard, wedding and debut package rates', () => {
   assert.deepEqual(catalogSync.CLIENT_PACKAGE_DEFINITIONS.map((item) => ({
     name: item.name,
     eventType: item.eventType,
@@ -25,6 +25,9 @@ test('client catalog defines exactly the three supplied per-head rates and three
     { name: 'PHP 480 Per Head', eventType: 'Standard Catering', pricingType: 'PER_HEAD', pricePerGuest: 480, basePrice: null, includedGuests: null, excessGuestPrice: null, minGuests: null, maxGuests: null },
     { name: 'PHP 580 Per Head', eventType: 'Standard Catering', pricingType: 'PER_HEAD', pricePerGuest: 580, basePrice: null, includedGuests: null, excessGuestPrice: null, minGuests: null, maxGuests: null },
     { name: 'PHP 680 Per Head', eventType: 'Standard Catering', pricingType: 'PER_HEAD', pricePerGuest: 680, basePrice: null, includedGuests: null, excessGuestPrice: null, minGuests: null, maxGuests: null },
+    { name: 'Bronze Package', eventType: 'Wedding', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 32_500, includedGuests: 50, excessGuestPrice: 650, minGuests: null, maxGuests: null },
+    { name: 'Silver Package', eventType: 'Wedding', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 75_000, includedGuests: 100, excessGuestPrice: 750, minGuests: null, maxGuests: null },
+    { name: 'Gold Package', eventType: 'Wedding', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 102_000, includedGuests: 120, excessGuestPrice: 850, minGuests: null, maxGuests: null },
     { name: 'Amethyst Package', eventType: 'Debut', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 85_888, includedGuests: 50, excessGuestPrice: 650, minGuests: null, maxGuests: null },
     { name: 'Diamond Package', eventType: 'Debut', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 138_888, includedGuests: 100, excessGuestPrice: 750, minGuests: null, maxGuests: null },
     { name: 'Ruby Package', eventType: 'Debut', pricingType: 'BASE_PLUS_EXCESS', pricePerGuest: null, basePrice: 198_888, includedGuests: 120, excessGuestPrice: 850, minGuests: null, maxGuests: null },
@@ -86,8 +89,8 @@ test('dry-run reports definitions without invoking the writer', async () => {
   assert.equal(writes, 0);
   assert.deepEqual(result, {
     mode: 'dry-run',
-    packageCount: 6,
-    inclusionCount: 86,
+    packageCount: 9,
+    inclusionCount: 147,
     addOnCount: 17,
     deactivatedProvisional: false,
   });
@@ -113,7 +116,7 @@ test('apply is repeatable and preserves unrelated catalog entries', async () => 
   await catalogSync.syncClientCatalog({ apply: true, writer });
   await catalogSync.syncClientCatalog({ apply: true, writer });
 
-  assert.equal(packages.size, 7);
+  assert.equal(packages.size, 10);
   assert.equal(addOns.size, 18);
   assert.deepEqual(packages.get('unrelated::Existing Package'), { inclusions: ['Keep me'] });
   assert.equal(addOns.get('Existing Add-on'), 321);

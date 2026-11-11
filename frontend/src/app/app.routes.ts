@@ -33,10 +33,8 @@ export const routes: Routes = [
   },
   {
     path: 'checkout',
-    canActivate: [authGuard],
-    loadComponent: () =>
-      import('./features/checkout/checkout.page').then((m) => m.CheckoutPageComponent),
-    title: 'Checkout | LA Chef',
+    redirectTo: 'book-event',
+    pathMatch: 'full',
   },
   {
     path: 'login',
@@ -178,6 +176,12 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/admin-payments/admin-payments.page').then((m) => m.AdminPaymentsPage),
     title: 'Payments | LA Chef Admin',
+  },
+  {
+    path: 'admin/payment-qrs',
+    canActivate: [adminGuard],
+    loadComponent: () => import('./features/admin-payment-qrs/admin-payment-qrs.page').then(m => m.AdminPaymentQrsPage),
+    title: 'Payment QR Codes | LA Chef Admin',
   },
   {
     path: 'admin/reports',

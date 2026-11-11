@@ -3,7 +3,7 @@ import { inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { defer, filter, firstValueFrom, finalize, map, Observable, of, takeUntil, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ApiResponse, Booking, BookingAvailability, BookingDraft, BookingPackageSummary, BookingStatus, BookingTab, CateringPackage } from '../models';
+import { ApiResponse, Booking, BookingAvailability, BookingDraft, BookingPackageSummary, BookingStatus, BookingTab, CateringPackage, PaymentMethod } from '../models';
 import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 interface ApiBooking extends Omit<Booking, 'id' | 'customerId' | 'thumbnailUrl' | 'package' | 'addOns'> {
@@ -15,6 +15,15 @@ interface ApiBooking extends Omit<Booking, 'id' | 'customerId' | 'thumbnailUrl' 
 const tabByStatus: Record<BookingStatus, BookingTab> = {
   pending: 'upcoming', approved: 'upcoming', awaiting_payment: 'upcoming', payment_submitted: 'upcoming',
   payment_verified: 'upcoming', confirmed: 'upcoming', completed: 'past', rejected: 'rejected', cancelled: 'cancelled', expired: 'cancelled',
+};
+
+const imageByEventType: Record<Booking['eventType'], string> = {
+  wedding: 'assets/images/packages/wedding/client-wedding-01.jpg',
+  birthday: 'assets/images/packages/birthday/client-kids-birthday-01.jpg',
+  debut: 'assets/images/packages/debut/client-debut-11.jpg',
+  corporate: 'assets/images/packages/corporate/client-business-forum-01.jpg',
+  anniversary: 'assets/images/packages/anniversary/client-anniversary-01.jpg',
+  other: 'assets/images/packages/custom/client-private-01.jpg',
 };
 
 export class BookingSubmissionConflictError extends Error {
@@ -65,6 +74,18 @@ export class BookingService {
 
   getBookingById(id: string) { return this.state().find(item => item.id === id); }
 
+  async choosePaymentMethod(id: string, method: PaymentMethod): Promise<Booking> {
+    const generation = this.accountScope.generation;
+    const response = await firstValueFrom(this.scoped(this.http.patch<ApiResponse<ApiBooking>>(
+      `${environment.apiBaseUrl}/bookings/${id}/payment-method`,
+      { method: method === 'gcash' ? 'e-wallet' : method }, { withCredentials: true },
+    )));
+    this.assertCurrentGeneration(generation);
+    const booking = this.map(response.data);
+    this.storeBooking(booking);
+    return booking;
+  }
+
   loadBookingById(id: string): Observable<Booking> {
     return defer(() => {
       const cached = this.getBookingById(id);
@@ -77,7 +98,7 @@ export class BookingService {
 
   getBookingsByTab(tab: BookingTab) {
     return [...this.state().filter(item => tabByStatus[item.status] === tab)]
-      .sort((a, b) => a.eventDate.localeCompare(b.eventDate) * (tab === 'upcoming' ? 1 : -1));
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || Number(b.id) - Number(a.id));
   }
 
   checkAvailability(date: string, guestCount: number, reservationId?: string) {
@@ -85,6 +106,14 @@ export class BookingService {
     if (reservationId) params['reservationId'] = reservationId;
     return this.scoped(this.http.get<ApiResponse<BookingAvailability>>(`${environment.apiBaseUrl}/bookings/availability`, { params, withCredentials: true }))
       .pipe(map(response => response.data));
+  }
+
+  checkMonthAvailability(month: string, guestCount: number, reservationId?: string) {
+    const params: Record<string, string> = { month, guestCount: String(guestCount) };
+    if (reservationId) params['reservationId'] = reservationId;
+    return this.scoped(this.http.get<ApiResponse<readonly { date: string; status: BookingAvailability['status'] }[]>>(
+      `${environment.apiBaseUrl}/bookings/availability/month`, { params, withCredentials: true },
+    )).pipe(map(response => response.data));
   }
 
   async cancelBooking(id: string, reason: string): Promise<boolean> {
@@ -156,7 +185,8 @@ export class BookingService {
       eventType: draft.eventType, eventDate: draft.eventDate, eventTime: this.time(draft.eventTime), venue: draft.venue,
       guestCount: draft.guestCount, packageId: Number(pkg.id), addOnIds: addOns.map(item => Number(item.id)),
       addOnQuantities: Object.fromEntries(addOns.map(item => [item.id, item.quantity ?? 1])),
-      paymentMethod: draft.paymentMethod === 'gcash' ? 'e-wallet' : draft.paymentMethod, specialRequest: draft.specialRequest,
+      ...(draft.paymentMethod ? { paymentMethod: draft.paymentMethod === 'gcash' ? 'e-wallet' : draft.paymentMethod } : {}),
+      specialRequest: draft.specialRequest,
     };
   }
 
@@ -168,7 +198,7 @@ export class BookingService {
   private map(item: ApiBooking): Booking {
     return { ...item, id: String(item.id), customerId: '', package: { ...item.package, packageId: String(item.package.packageId) },
       addOns: item.addOns.map(addOn => ({ ...addOn, id: String(addOn.id) })),
-      thumbnailUrl: `assets/images/packages/${item.eventType === 'wedding' ? 'premium' : item.eventType === 'debut' ? 'deluxe' : 'basic'}-package.webp` };
+      thumbnailUrl: imageByEventType[item.eventType] ?? imageByEventType.other };
   }
 
   private time(value: string): string {

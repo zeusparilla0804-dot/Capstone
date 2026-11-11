@@ -104,3 +104,91 @@
   .confirmation-actions .btn { width: 100%; }
   .fact-list > div { grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
 }
+
+/* Reservation review layout. These selectors override the shared admin shell only on this page. */
+:host ::ng-deep app-admin-shell .admin-main { max-width: 1440px; margin-inline: auto; font-family: var(--font-admin); font-size: 14px; line-height: 1.5; }
+:host ::ng-deep app-admin-shell .admin-page-header { position: relative; align-items: center; border: 0; margin-bottom: 0; padding: 0 0 8px; }
+:host ::ng-deep app-admin-shell .admin-page-header::before { position: absolute; top: 31px; right: 0; left: 0; border-top: 1px solid var(--portal-gold-divider); content: ''; }
+:host ::ng-deep app-admin-shell .admin-page-header .page-kicker { color: #8a611e; font-family: var(--font-admin); font-size: 12px; font-weight: 600; line-height: 1.5; letter-spacing: .12em; }
+:host ::ng-deep app-admin-shell .admin-page-header h1 { margin-top: 35px; font-family: 'Playfair Display', Georgia, serif; font-size: 36px; font-weight: 500; line-height: 1.2; letter-spacing: 0; }
+:host ::ng-deep app-admin-shell .admin-page-header p:last-child { margin-top: 5px; color: var(--color-text-muted); font-family: var(--font-admin); font-size: 15px; font-weight: 400; line-height: 1.5; }
+.admin-back-link { color: #8a611e; font-size: 14px; line-height: 1.5; }
+
+.booking-lead { align-items: center; border: 0; padding: 14px 0 18px; }
+.booking-lead h2 { font-family: var(--font-admin); font-size: 22px; font-weight: 600; line-height: 1.3; }
+.booking-lead p { margin-top: 2px; color: var(--color-text); font-size: 15px; line-height: 1.45; }
+.booking-lead .booking-lead__schedule { color: var(--color-text-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+:host ::ng-deep .booking-lead .status-badge { min-height: 34px; padding-inline: 16px; font-family: var(--font-admin); font-size: 13px; font-weight: 600; }
+.booking-review-badge { display: inline-flex; min-height: 34px; align-items: center; border-radius: 999px; background: #fff0d9; padding: 0 16px; color: #a65b00; font-size: 13px; font-weight: 600; line-height: 1.3; white-space: nowrap; }
+
+.financial-strip { display: block; border-top: 1px solid var(--portal-gold-divider); border-bottom: 1px solid var(--portal-gold-divider); padding: 16px 0; }
+.financial-strip dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.financial-strip dl div { padding: 0 28px; border-color: var(--portal-gold-divider); }
+.financial-strip dt { color: var(--color-text); font-size: 14px; font-weight: 400; }
+.financial-strip dd { margin-top: 4px; color: var(--color-text); font-family: var(--font-admin); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.3; }
+.financial-strip .balance dd { color: var(--color-text); }
+
+.detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 48px; margin: 18px 0 16px; }
+.section-heading { border: 0; padding: 0 0 5px; }
+.section-heading h2, .price-breakdown h2, .operations h2 { color: var(--color-text); font-family: var(--font-admin); font-size: 20px; font-weight: 600; line-height: 1.35; }
+.fact-list > div { grid-template-columns: minmax(120px, 34%) minmax(0, 1fr); gap: 16px; padding: 6px 0; border-color: var(--portal-divider); }
+.fact-list dt, .fact-list dd { color: var(--color-text); font-size: 14px; line-height: 1.5; }
+.fact-list dt { font-weight: 400; }
+.capacity-strip { display: block; border: 0; padding: 0; }
+.capacity-strip .fact-list > div { padding-top: 8px; }
+.capacity-state { display: block; margin-top: 3px; color: var(--color-text-muted); font-size: 12px; font-style: italic; font-weight: 400; line-height: 1.45; }
+.capacity-state[data-status='FULL'] { color: var(--color-danger); }
+
+.price-breakdown { margin: 14px 0 18px; }
+.price-breakdown h2 { margin: 0 0 7px; }
+.price-breakdown dl { margin: 0; }
+.price-breakdown dl > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; border-bottom: 1px solid var(--portal-divider); padding: 6px 0; }
+.price-breakdown dt, .price-breakdown dd { margin: 0; font-family: var(--font-admin); font-size: 14px; font-weight: 400; line-height: 1.5; }
+.price-breakdown dd { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.price-breakdown .price-breakdown__total { border: 0; padding-top: 9px; }
+.price-breakdown__total dt, .price-breakdown__total dd { font-size: 17px; font-weight: 600; }
+
+.payment-after-approval { border-radius: 5px; background: #f8f4eb; padding: 12px 20px; }
+.payment-after-approval h2 { margin: 0 0 2px; color: #805919; font-family: var(--font-admin); font-size: 18px; font-weight: 600; line-height: 1.4; }
+.payment-after-approval p { margin: 2px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 1.5; }
+.payment-after-approval strong { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.operations { display: block; padding: 16px 0 20px; }
+.operations > p { margin: 3px 0 0; color: var(--color-text-muted); font-size: 14px; line-height: 1.5; }
+.action-list { margin-top: 14px; }
+.action-list .btn { min-width: 190px; font-size: 14px; font-weight: 600; }
+.action-list .btn-primary { min-width: 280px; border-color: #111; background: #111; color: #fff; }
+.action-list .btn-primary:hover { background: #272727; }
+.action-list .danger-action { border-color: #a43d36; background: #fff; color: #a43d36; }
+.secondary-actions { margin-top: 12px; }
+.secondary-actions > summary { width: fit-content; cursor: pointer; color: var(--color-text-muted); font-size: 13px; }
+.secondary-actions > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.secondary-actions .btn { font-size: 13px; font-weight: 500; }
+.action-confirmation { background: #f8f4eb; }
+
+.disclosure { border-color: var(--portal-gold-divider); }
+.disclosure > summary { padding: 10px 0; }
+.disclosure > summary h2 { font-size: 15px; font-weight: 600; }
+.disclosure > summary > span { font-size: 13px; }
+.cash-summary { border-color: var(--portal-divider); }
+
+@media (max-width: 900px) {
+  .detail-grid { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+}
+@media (max-width: 767px) {
+  :host ::ng-deep app-admin-shell .admin-page-header h1 { font-size: 32px; }
+  :host ::ng-deep app-admin-shell .admin-page-header { align-items: flex-start; }
+  .booking-lead { align-items: flex-start; }
+  .action-list .btn { flex: 1 1 180px; }
+}
+@media (max-width: 520px) {
+  .financial-strip dl { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .financial-strip dl div, .financial-strip dl div:first-child { display: flex; align-items: baseline; justify-content: space-between; border: 0; padding: 0; }
+  .financial-strip dd { margin: 0; font-size: 18px; }
+  .fact-list > div { grid-template-columns: 100px minmax(0, 1fr); gap: 10px; }
+  .action-list .btn, .action-list .btn-primary { width: 100%; min-width: 0; }
+}
+.completion-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.5rem; border-bottom: 1px solid var(--color-border, #ddd7cb); margin-bottom: 1rem; }
+.completion-summary h2 { margin: 0 0 .5rem; }
+.completion-summary p { margin: 0; }
+@media (max-width: 600px) { .completion-summary { align-items: flex-start; flex-direction: column; } }

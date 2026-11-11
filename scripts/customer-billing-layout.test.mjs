@@ -16,7 +16,7 @@ test('customer billing records keep amounts and actions in independent layout ar
 
   assert.match(
     stylesheet,
-    /\.billing-record\s*{[\s\S]*?grid-template-areas:\s*'event'\s+'status'\s+'amounts'\s+'actions';/,
+    /\.billing-record\s*{[\s\S]*?grid-template-areas:\s*'event'\s+'amounts'\s+'side';/,
   );
   assert.match(
     stylesheet,
@@ -24,9 +24,8 @@ test('customer billing records keep amounts and actions in independent layout ar
   );
   assert.doesNotMatch(stylesheet, /translateX\(/);
   assert.match(stylesheet, /@container billing \(min-width: 520px\)/);
-  assert.match(stylesheet, /grid-template-areas:\s*'event status'\s+'amounts amounts'\s+'actions actions';/);
-  assert.match(stylesheet, /@container billing \(min-width: 980px\)/);
-  assert.match(stylesheet, /grid-template-areas:\s*'event amounts actions status';/);
+  assert.match(stylesheet, /@container billing \(min-width: 760px\)/);
+  assert.match(stylesheet, /grid-template-areas:\s*'event amounts side';/);
   assert.match(stylesheet, /@container billing \(max-width: 320px\)/);
 });
 
@@ -38,7 +37,7 @@ test('customer billing status labels fit their available space instead of overfl
 
   assert.match(
     billingStylesheet,
-    /\.billing-record app-status-badge\s*{[\s\S]*?--status-badge-width:\s*auto;/,
+    /\.billing-record__side app-status-badge\s*{[\s\S]*?--status-badge-width:\s*auto;/,
   );
   assert.match(
     badgeStylesheet,

@@ -1,4 +1,3 @@
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
 <main class="billing-layout portal-surface">
   <app-dashboard-sidebar
     appearance="editorial"
@@ -13,7 +12,7 @@
       <header class="billing-header">
         <div>
           <p class="page-kicker">Customer portal</p>
-          <h1>Billing & Payments</h1>
+          <h1>Billing &amp; Payments</h1>
           <p>Track invoices, recorded payments, and remaining balances for your events.</p>
         </div>
       </header>
@@ -56,17 +55,24 @@
                   <div><dt>Paid</dt><dd>{{ formatCurrency(record.paid) }}</dd></div>
                   <div><dt>Balance</dt><dd>{{ formatCurrency(record.balance) }}</dd></div>
                 </dl>
-                <div class="billing-record__actions">
-                  @if (record.invoiceId) {
-                    <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', record.invoiceId]">View Invoice</a>
-                  }
-                  @if (record.acceptsPayment && record.balance > 0) {
-                    <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
-                      {{ record.cashPayment ? 'View Cash Instructions' : record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
-                    </a>
-                  }
+                <div class="billing-record__side">
+                  <app-status-badge [status]="record.paymentStatus" />
+                  <div class="billing-record__actions">
+                    @if (record.invoiceId) {
+                      <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', record.invoiceId]">{{ record.paid > 0 ? 'View Receipt' : 'View Invoice' }}</a>
+                    }
+                    @if (record.acceptsPayment && record.balance > 0) {
+                      @if (record.waitingForPaymentQr) {
+                        <button class="btn btn-primary btn-sm" type="button" disabled data-testid="waiting-payment-qr">Waiting for Payment QR</button>
+                      } @else {
+                      <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
+                        {{ record.cashPayment ? 'View Cash Instructions' : record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
+                      </a>
+                      }
+                    }
+                    @if (record.needsPaymentChoice) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: record.id, step: 4 }">Choose Payment Method</a> }
+                  </div>
                 </div>
-                <app-status-badge [status]="record.paymentStatus" />
               </article>
             }
           </div>

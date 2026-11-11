@@ -1,6 +1,14 @@
 .packages-page { min-height: 100vh; min-height: 100dvh; background: var(--color-background); }
-.packages-intro { border-bottom: 1px solid var(--color-border); padding-block: 76px 70px; }
+.packages-intro { background: var(--color-cream); border-bottom: 1px solid var(--color-border); padding-block: 76px 70px; }
 .packages-intro__inner { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); align-items: end; gap: 48px 80px; }
+@media (min-width: 921px) {
+  .packages-intro__inner {
+    // Match the public header logo's desktop gutter.
+    position: relative;
+    width: min(100% - 40px, var(--content-width));
+    left: min(0px, calc((var(--content-width) - 100vw) / 2 + clamp(24px, 6vw, 112px)));
+  }
+}
 .packages-intro__label, .custom-event__label, .planning-cta__inner > div > p:first-child { grid-column: 1 / -1; color: var(--color-primary-dark); font-size: .74rem; font-weight: 750; text-transform: uppercase; }
 .packages-intro h1 { max-width: 850px; color: var(--color-text); font-family: var(--font-serif); }
 .packages-intro__copy { display: grid; gap: 16px; max-width: 52ch; color: var(--color-text-muted); }
@@ -50,6 +58,7 @@ app-package-experience:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, 
 }
 @media (max-width: 767px) {
   .packages-page .page-container { width: calc(100% - 40px); }
+  .packages-page .packages-intro__inner { width: calc(100% - 32px); }
   .packages-intro { padding-block: 52px 48px; }
   .packages-intro__inner { grid-template-columns: minmax(0, 1fr); gap: 24px; }
   .packages-intro h1 { font-size: 2.85rem; }

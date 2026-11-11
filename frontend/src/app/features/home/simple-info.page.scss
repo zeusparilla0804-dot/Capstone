@@ -16,7 +16,7 @@
   position: absolute;
   z-index: -2;
   inset: 0;
-  background: url('/assets/images/hero/la-chef-hero.webp') center 48% / cover no-repeat;
+  background: url('/assets/images/hero/la-chef-venue-hero.jpg') center 48% / cover no-repeat;
 }
 
 .info-hero::after {
@@ -29,6 +29,23 @@
 
 .info-hero__content {
   padding-block: clamp(76px, 11vw, 132px) clamp(54px, 8vw, 92px);
+}
+
+@media (min-width: 921px) {
+  .info-hero__content,
+  .contact-intro__layout {
+    // Match the public header logo's desktop gutter.
+    --intro-desktop-edge-offset: min(0px, calc((var(--content-width) - 100vw) / 2 + clamp(24px, 6vw, 112px)));
+    position: relative;
+    width: min(100% - 40px, var(--content-width));
+    left: var(--intro-desktop-edge-offset);
+  }
+
+  .contact-intro__layout > p {
+    // Match the header actions' right gutter while preserving the heading layout.
+    position: relative;
+    right: calc(2 * var(--intro-desktop-edge-offset));
+  }
 }
 
 .info-hero__identity,

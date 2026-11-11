@@ -37,10 +37,14 @@ export class BookingDraftService {
   readonly addOnsError = signal('');
   readonly addOnsLoaded = signal(false);
   readonly editingBookingId = signal<string | null>(null);
+  readonly availableAddOns = computed(() => this.addOns().filter(item => !this.draftState().eventType
+    || !item.eventTypes || item.eventTypes.includes(this.draftState().eventType!)));
   readonly missingAddOnIds = computed(() => this.draftState().selectedAddOnIds.filter(id => !this.addOns().some(item => item.id === id)));
+  readonly incompatibleAddOnIds = computed(() => this.draftState().selectedAddOnIds.filter(id =>
+    !this.availableAddOns().some(item => item.id === id) && this.addOns().some(item => item.id === id)));
   readonly catalogSelectionError = computed(() => this.addOnsError()
     || (this.addOnsLoading() || !this.addOnsLoaded() ? 'Please wait for add-ons to load.' : '')
-    || (this.missingAddOnIds().length ? 'Some selected add-ons are unavailable. Review them before saving.' : ''));
+    || (this.missingAddOnIds().length || this.incompatibleAddOnIds().length ? 'Some selected add-ons are unavailable for this event. Review them before saving.' : ''));
 
   constructor() {
     this.accountScope.changes.pipe(takeUntilDestroyed()).subscribe(() => {
@@ -81,13 +85,27 @@ export class BookingDraftService {
   }
 
   toggleAddOn(addOnId: string): void {
+    if (!this.availableAddOns().some(item => item.id === addOnId)) return;
     const selected = this.draftState().selectedAddOnIds;
-    this.update({ selectedAddOnIds: selected.includes(addOnId) ? selected.filter((id) => id !== addOnId) : [...selected, addOnId] });
+    if (selected.includes(addOnId)) {
+      this.update({ selectedAddOnIds: selected.filter((id) => id !== addOnId) });
+      return;
+    }
+    const item = this.addOns().find(addOn => addOn.id === addOnId);
+    const capacity = item?.name.match(/^(?:Coffee Bar|Grazing Table) for (50|100) Guests$/i);
+    const quantity = this.draftState().addOnQuantities?.[addOnId]
+      ?? (capacity ? Math.ceil(this.draftState().guestCount / Number(capacity[1])) : 1);
+    const retained = item && /photobooth/i.test(item.name)
+      ? selected.filter(id => !this.addOns().some(other => other.id === id && /photobooth/i.test(other.name)))
+      : selected;
+    this.update({ selectedAddOnIds: [...retained, addOnId],
+      addOnQuantities: { ...this.draftState().addOnQuantities, [addOnId]: Math.max(1, quantity) } });
   }
 
   supportsQuantity(addOn: BookingAddOn): boolean {
     const name = addOn.name.trim().toLowerCase().replace(/[–—]/g, '-');
-    return name === 'tiffany chair' || name === 'lechon (35-40 kg live weight)' || name === 'lechon (25-30 kg live weight)';
+    return name === 'tiffany chair' || name === 'lechon (35-40 kg live weight)' || name === 'lechon (25-30 kg live weight)'
+      || /^(?:coffee bar|grazing table) for (?:50|100) guests$/.test(name);
   }
 
   addOnQuantity(addOnId: string): number {
@@ -107,7 +125,7 @@ export class BookingDraftService {
 
   removeUnavailableAddOns(): void {
     if (!this.addOnsLoaded() || this.addOnsLoading() || this.addOnsError()) return;
-    const missing = new Set(this.missingAddOnIds());
+    const missing = new Set([...this.missingAddOnIds(), ...this.incompatibleAddOnIds()]);
     this.update({ selectedAddOnIds: this.draftState().selectedAddOnIds.filter(id => !missing.has(id)) });
   }
 

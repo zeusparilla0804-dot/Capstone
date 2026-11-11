@@ -6,11 +6,19 @@
     @if (form.controls.email.touched && form.controls.email.invalid) { <small class="verification-error">Enter the email address used for your account.</small> }
   </div>
   <div class="verification-field">
-    <label for="verification-code">Verification code</label>
-    <input id="verification-code" class="verification-code" type="text" formControlName="code" inputmode="numeric" autocomplete="one-time-code"
-      maxlength="6" pattern="[0-9]{6}" placeholder="000000" aria-describedby="verification-help"
-      [attr.aria-invalid]="form.controls.code.touched && form.controls.code.invalid" />
-    <small id="verification-help">Enter the six-digit code from your email. Codes expire 10 minutes after they are requested.</small>
+    <div class="verification-code-heading"><label for="verification-code">Your verification code</label><span>6 digits</span></div>
+    <div class="verification-code-entry" [class.is-invalid]="form.controls.code.touched && form.controls.code.invalid">
+      <input id="verification-code" class="verification-code" type="text" formControlName="code" inputmode="numeric" autocomplete="one-time-code"
+        maxlength="6" pattern="[0-9]{6}" aria-describedby="verification-help" spellcheck="false"
+        (input)="updateCode($event)" (paste)="pasteCode($event)" (focus)="codeFocused.set(true)" (blur)="codeFocused.set(false)"
+        [attr.aria-invalid]="form.controls.code.touched && form.controls.code.invalid" />
+      <div class="verification-digits" aria-hidden="true">
+        @for (slot of digitSlots; track slot) {
+          <span class="verification-digit" [class.is-filled]="form.controls.code.value[slot]" [class.is-active]="codeFocused() && activeDigit() === slot">{{ form.controls.code.value[slot] || '' }}</span>
+        }
+      </div>
+    </div>
+    <small id="verification-help">Enter or paste the code from your email. Valid for 10 minutes from your request.</small>
     @if (form.controls.code.touched && form.controls.code.invalid) { <small class="verification-error">Enter all six digits.</small> }
   </div>
   @if (error()) { <p class="verification-error" role="alert">{{error()}}</p> }

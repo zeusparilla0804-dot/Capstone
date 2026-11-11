@@ -4,13 +4,6 @@
     <div class="page-container packages-intro__inner">
       <p class="packages-intro__label">Catering experiences</p>
       <h1 id="packages-title">Find the right setting for your celebration.</h1>
-      <div class="packages-intro__copy">
-        <p>
-          Explore thoughtfully prepared catering experiences for weddings, birthdays, corporate
-          gatherings, anniversaries, debuts, and intimate celebrations.
-        </p>
-        <p>Every package can be adjusted around your guest count and event needs.</p>
-      </div>
     </div>
   </section>
   <section class="packages-content" aria-labelledby="package-list-title">
@@ -29,7 +22,6 @@
       }
       <div class="filter-heading">
         <p>Choose your package</p>
-        <span>Package group</span>
       </div>
       <div class="category-filters" role="tablist" aria-label="Filter packages by event category">
         @for (category of categories; track category.value) {
@@ -49,7 +41,7 @@
         {{ filteredPackages().length === 1 ? 'catering experience' : 'catering experiences' }}
       </p>
       <div class="package-experiences">
-        @for (cateringPackage of filteredPackages(); track cateringPackage.id; let position = $index) {
+        @for (cateringPackage of packagesForDisplay(); track cateringPackage.id; let position = $index) {
           <app-package-experience
             [id]="'package-' + cateringPackage.id"
             tabindex="-1"

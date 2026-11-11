@@ -121,12 +121,13 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const pool = await getDbPool();
   const request = pool.request().input('invoiceId', sql.Int, invoiceId).input('customerId', sql.Int, customerId ?? null);
   const main = await request.query(`SELECT i.invoice_id,i.invoice_number,i.issued_at,i.due_at,i.status,i.subtotal,
-      i.discount_amount,i.total_amount,r.reservation_id,r.booking_reference,r.event_date,r.event_time,
+      i.discount_amount,i.total_amount,r.reservation_id,r.status reservation_status,r.booking_reference,r.event_date,r.event_time,
       r.venue_address,r.guest_count,e.event_type,c.customer_id,CONCAT(c.first_name,' ',c.last_name) customer_name,
-      c.email,c.contact_number,COALESCE(pay.amount_paid,0) amount_paid
+      c.email,c.contact_number,issuer.full_name issuer_name,COALESCE(pay.amount_paid,0) amount_paid
     FROM dbo.INVOICE i JOIN dbo.RESERVATION r ON r.reservation_id=i.reservation_id
     JOIN dbo.EVENT e ON e.event_id=r.event_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
     LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id
+    LEFT JOIN dbo.ADMIN issuer ON issuer.admin_id=i.issued_by
     WHERE i.invoice_id=@invoiceId AND (@customerId IS NULL OR c.customer_id=@customerId)`);
   const row = main.recordset[0];
   if (!row) return undefined;
@@ -135,15 +136,16 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const payments = await pool.request().input('reservationId', sql.Int, row.reservation_id)
     .query(`SELECT pt.payment_transaction_id id,pt.payment_date,pt.transaction_ref,pt.payment_method,pt.amount,
         'RECORDED' status FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id
-      WHERE p.reservation_id=@reservationId ORDER BY pt.payment_date DESC`);
+      WHERE p.reservation_id=@reservationId ORDER BY pt.payment_date DESC,pt.payment_transaction_id DESC`);
   const paid = Number(row.amount_paid);
   const total = Number(row.total_amount);
   return {
     invoiceId: Number(row.invoice_id), invoiceNumber: row.invoice_number, issueDate: dateValue(row.issued_at)!,
     dueDate: dateValue(row.due_at), status: paid >= total ? 'PAID' : paid > 0 ? 'PARTIALLY_PAID' : row.status,
     customer: { id: Number(row.customer_id), name: row.customer_name, email: row.email, phone: row.contact_number },
+    issuer: { name: row.issuer_name ?? '' },
     booking: {
-      id: Number(row.reservation_id), reference: row.booking_reference, eventType: row.event_type,
+      id: Number(row.reservation_id), status: row.reservation_status, reference: row.booking_reference, eventType: row.event_type,
       eventDate: new Date(row.event_date).toISOString().slice(0,10),
       eventTime: new Date(row.event_time).toISOString().slice(11,16), venue: row.venue_address, guestCount: row.guest_count,
     },

@@ -1,0 +1,32 @@
+SET XACT_ABORT ON;
+IF OBJECT_ID('dbo.PAYMENT_DESTINATION','U') IS NULL
+BEGIN
+  CREATE TABLE dbo.PAYMENT_DESTINATION (
+    destination_id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_PAYMENT_DESTINATION PRIMARY KEY,
+    method nvarchar(30) NOT NULL,
+    label nvarchar(100) NOT NULL,
+    account_name nvarchar(200) NOT NULL,
+    account_hint nvarchar(50) NOT NULL,
+    image_mime nvarchar(30) NOT NULL,
+    image_bytes varbinary(max) NOT NULL,
+    is_available bit NOT NULL CONSTRAINT DF_PAYMENT_DESTINATION_available DEFAULT(1),
+    created_at datetime2(0) NOT NULL CONSTRAINT DF_PAYMENT_DESTINATION_created DEFAULT(sysdatetime()),
+    updated_at datetime2(0) NOT NULL CONSTRAINT DF_PAYMENT_DESTINATION_updated DEFAULT(sysdatetime()),
+    CONSTRAINT CK_PAYMENT_DESTINATION_method CHECK(method IN ('E-WALLET','BANK_TRANSFER')),
+    CONSTRAINT CK_PAYMENT_DESTINATION_mime CHECK(image_mime IN ('image/jpeg','image/png','image/webp')),
+    CONSTRAINT CK_PAYMENT_DESTINATION_image_size CHECK(DATALENGTH(image_bytes) BETWEEN 1 AND 1048576)
+  );
+END;
+IF OBJECT_ID('dbo.BOOKING_PAYMENT_DESTINATION','U') IS NULL
+BEGIN
+  CREATE TABLE dbo.BOOKING_PAYMENT_DESTINATION (
+    reservation_id int NOT NULL CONSTRAINT PK_BOOKING_PAYMENT_DESTINATION PRIMARY KEY,
+    destination_id int NOT NULL,
+    assigned_by int NOT NULL,
+    assigned_at datetime2(0) NOT NULL CONSTRAINT DF_BOOKING_PAYMENT_DESTINATION_assigned DEFAULT(sysdatetime()),
+    CONSTRAINT FK_BOOKING_PAYMENT_DESTINATION_reservation FOREIGN KEY(reservation_id) REFERENCES dbo.RESERVATION(reservation_id),
+    CONSTRAINT FK_BOOKING_PAYMENT_DESTINATION_destination FOREIGN KEY(destination_id) REFERENCES dbo.PAYMENT_DESTINATION(destination_id),
+    CONSTRAINT FK_BOOKING_PAYMENT_DESTINATION_admin FOREIGN KEY(assigned_by) REFERENCES dbo.ADMIN(admin_id)
+  );
+  CREATE INDEX IX_BOOKING_PAYMENT_DESTINATION_destination ON dbo.BOOKING_PAYMENT_DESTINATION(destination_id);
+END;

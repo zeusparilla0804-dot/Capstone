@@ -1,4 +1,4 @@
-import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, signal, ViewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, OnDestroy, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { Booking, BookingTab } from '../../core/models';
@@ -16,7 +16,7 @@ import { customerNavItems } from '../../shared/navigation/customer-navigation';
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './my-bookings.page.scss',
 })
-export class MyBookingsPageComponent implements AfterViewChecked {
+export class MyBookingsPageComponent implements AfterViewChecked, OnDestroy {
   @ViewChild('bookingTabs') private bookingTabs?: ElementRef<HTMLElement>;
   @ViewChild('cancelDialog') private cancellationDialog?: ElementRef<HTMLElement>;
   @ViewChild('cancelReason') private cancellationReasonField?: ElementRef<HTMLTextAreaElement>;
@@ -33,6 +33,7 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   protected readonly cancellationError = signal('');
   protected cancellationReason = '';
   protected readonly filteredBookings = computed(() => this.bookingService.getBookingsByTab(this.activeFilter()));
+  private readonly refreshTimer: ReturnType<typeof setInterval>;
   protected readonly filters: readonly { value: BookingTab; label: string }[] = [
     { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' },
   ];
@@ -40,7 +41,13 @@ export class MyBookingsPageComponent implements AfterViewChecked {
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     this.bookingService.loadMine();
+    this.refreshTimer = setInterval(() => this.bookingService.loadMine(), 30_000);
   }
+
+  ngOnDestroy(): void { clearInterval(this.refreshTimer); }
+
+  @HostListener('window:focus')
+  protected refreshOnFocus(): void { this.bookingService.loadMine(); }
 
   ngAfterViewChecked(): void {
     if (this.focusReasonOnOpen && this.cancellationReasonField) {

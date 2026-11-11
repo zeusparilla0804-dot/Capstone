@@ -1,4 +1,5 @@
-<article class="package-experience" [class.package-experience--reverse]="isReverse()">
+<article class="package-experience" [class.package-experience--reverse]="isReverse()" [class.package-experience--without-images]="!galleryImages().length">
+  @if (galleryImages().length) {
   <div
     class="package-experience__media"
     [class.is-reduced-motion]="reducedMotion"
@@ -22,31 +23,47 @@
     }
   </div>
 
+  }
+
   <div class="package-experience__content">
     <p class="package-experience__category">{{ cateringPackage().category }} catering</p>
-    <h3>{{ cateringPackage().name }}</h3>
-    <p class="package-experience__story">{{ cateringPackage().description }}</p>
+    <h3>{{ useDescriptionAsTitle() ? cateringPackage().description : cateringPackage().name }}</h3>
+    @if (!useDescriptionAsTitle()) {
+      <p class="package-experience__story">{{ cateringPackage().description }}</p>
+    }
     <div class="package-experience__pricing">
       <span>Planning rate</span>
       <strong>{{ pricingExplanation() }}</strong>
       <small>Final details are confirmed by the LA Chef team.</small>
     </div>
 
-    @if (cateringPackage().features.length) {
+    @if (inclusionItems().length) {
       <div class="package-experience__inclusions">
         <p>Selected inclusions</p>
         <ul>
           @if (inclusionsExpanded()) {
-            @for (feature of cateringPackage().features; track feature.label) {
-              <li data-testid="full-inclusion">{{ feature.label }}</li>
+            @for (feature of inclusionItems(); track feature.label) {
+              <li data-testid="full-inclusion">
+                @if ($index < boldInclusionCount()) {
+                  <strong>{{ feature.label }}</strong>
+                } @else {
+                  {{ feature.label }}
+                }
+              </li>
             }
           } @else {
-            @for (feature of cateringPackage().features.slice(0, 3); track feature.label) {
-              <li>{{ feature.label }}</li>
+            @for (feature of inclusionItems().slice(0, inclusionPreviewCount()); track feature.label) {
+              <li>
+                @if ($index < boldInclusionCount()) {
+                  <strong>{{ feature.label }}</strong>
+                } @else {
+                  {{ feature.label }}
+                }
+              </li>
             }
           }
         </ul>
-        @if (cateringPackage().features.length > 3) {
+        @if (inclusionItems().length > inclusionPreviewCount()) {
           <button class="text-action" data-testid="view-inclusions" type="button" [attr.aria-expanded]="inclusionsExpanded()" (click)="toggleInclusions()">
             {{ inclusionsExpanded() ? 'Show fewer inclusions' : 'View full inclusions' }}
           </button>

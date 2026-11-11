@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminLoginPage } from './admin-login.page';
@@ -39,6 +40,14 @@ describe('AdminLoginPage', () => {
     await component.submit();
     expect(navigate).not.toHaveBeenCalled();
     expect(component.error()).toBe('Invalid administrator credentials.');
+  });
+
+  it('explains a backend connection failure without blaming the credentials', async () => {
+    vi.mocked(TestBed.inject(AdminAuthService).login).mockRejectedValueOnce(new HttpErrorResponse({ status: 0 }));
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    expect(component.error()).toBe('Cannot connect to the server. Please try again shortly.');
   });
 
   it('holds navigation for MFA and shows setup instructions', async () => {

@@ -17,6 +17,7 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { LogoutDialogService } from '../../../core/services/logout-dialog.service';
 import { initialsForName } from '../../utils/user-display';
+import { NotificationBellComponent } from '../notification-bell/notification-bell';
 
 interface PublicNavItem {
   readonly label: string;
@@ -26,7 +27,7 @@ interface PublicNavItem {
 
 @Component({
   selector: 'app-public-header',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, NotificationBellComponent],
   templateUrl: './public-header.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './public-header.scss',
@@ -44,6 +45,7 @@ export class PublicHeaderComponent {
   protected readonly auth = inject(AuthService);
   readonly isAuthenticated = input(false);
   readonly appearance = input<'default' | 'auth'>('default');
+  readonly showBookingButton = input(true);
   protected readonly authenticated = computed(
     () => this.isAuthenticated() || this.auth.user() !== null,
   );

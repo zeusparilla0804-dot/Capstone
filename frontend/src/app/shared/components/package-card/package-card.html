@@ -1,10 +1,14 @@
 <article class="package-card">
-  <img class="package-card__image" [src]="cateringPackage().imageUrl" [alt]="cateringPackage().name + ' catering setup'" loading="lazy" />
+  @if (cateringPackage().imageUrl) {
+    <img class="package-card__image" [src]="cateringPackage().imageUrl" [alt]="cateringPackage().name + ' catering setup'" loading="lazy" />
+  }
   <div class="package-card__body">
     <div>
       <p class="package-card__category">{{ cateringPackage().category }} catering</p>
-      <h3>{{ cateringPackage().name }}</h3>
-      <p class="package-card__description">{{ cateringPackage().description }}</p>
+      <h3>{{ useDescriptionAsTitle() ? cateringPackage().description : cateringPackage().name }}</h3>
+      @if (!useDescriptionAsTitle()) {
+        <p class="package-card__description">{{ cateringPackage().description }}</p>
+      }
     </div>
     <p class="package-card__price">{{ priceLabel() }}</p>
     @if (cateringPackage().minGuests !== null && cateringPackage().maxGuests !== null) {

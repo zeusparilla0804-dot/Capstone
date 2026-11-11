@@ -1,0 +1,23 @@
+<dialog #dialog class="action-dialog" aria-labelledby="action-feedback-title" [attr.aria-describedby]="content()?.message ? 'action-feedback-message' : null" (cancel)="escape($event)">
+  @if (content(); as item) {
+    <div class="action-dialog__body" [class.action-dialog__body--error]="!feedback.confirmation() && feedback.notice()?.tone === 'error'" [class.action-dialog__body--centered]="!feedback.confirmation() && feedback.notice()?.centered">
+      @if (!feedback.confirmation()) {
+        <svg class="action-dialog__icon" viewBox="0 0 24 24" aria-hidden="true">
+          @if (feedback.notice()?.tone === 'success') { <path d="m5 12 4 4L19 6" /> }
+          @else { <circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 4h.01" /> }
+        </svg>
+      }
+      <h2 id="action-feedback-title">{{ item.title }}</h2>
+      @if (item.message) { <p id="action-feedback-message">{{ item.message }}</p> }
+      <div class="action-dialog__actions">
+        @if (feedback.confirmation(); as question) {
+          <button type="button" class="btn btn-secondary" data-feedback-safe (click)="decide(false)">Cancel</button>
+          <button type="button" class="btn btn-primary" [class.action-dialog__danger]="question.destructive" (click)="decide(true)">{{ question.confirmLabel }}</button>
+        } @else {
+          <button type="button" class="btn btn-primary" data-feedback-safe (click)="dismiss()">{{ feedback.notice()?.centered ? 'Ok' : 'OK, got it' }}</button>
+        }
+      </div>
+    </div>
+  }
+</dialog>
+

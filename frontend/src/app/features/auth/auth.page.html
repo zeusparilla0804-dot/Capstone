@@ -1,4 +1,4 @@
-<app-public-header [appearance]="registerMode() ? 'auth' : 'default'" />
+<app-public-header [appearance]="registerMode() ? 'auth' : 'default'" [showBookingButton]="!registerMode()" />
 <main class="auth-page" [class.auth-page--register]="registerMode()">
   <section class="auth-shell" [class.auth-shell--register]="registerMode()">
     <aside class="auth-brand">
@@ -31,7 +31,7 @@
         }}
       </p>
       @if (verificationMode()) {
-        <app-email-verification-form [email]="verificationEmail()" (verified)="emailVerified()" />
+        <app-email-verification-form [email]="verificationEmail()" (verified)="emailVerified($event)" />
       } @else {
       <form [formGroup]="form" (ngSubmit)="submit()" autocomplete="on">
         @if (registerMode()) {
@@ -110,7 +110,7 @@
             </svg>
             <input
               id="password"
-              [appAsteriskPassword]="!registerMode()"
+              appAsteriskPassword
               name="customer-password"
               [type]="showPassword() ? 'text' : 'password'"
               formControlName="password"
@@ -139,7 +139,7 @@
               class="field-feedback"
               [class.field-feedback--error]="form.controls.password.touched && form.controls.password.invalid"
               aria-live="polite"
-            >@if (form.controls.password.touched && form.controls.password.invalid) {Password must contain at least 15 characters.} @else {Use at least 15 characters.}</small>
+            >@if (form.controls.password.touched && form.controls.password.invalid) {Password must contain at least 8 characters.} @else {Use at least 8 characters.}</small>
           }
           @if (!registerMode()) {
             <a class="password-assist" routerLink="/forgot-password">Forgot password?</a>
@@ -169,6 +169,3 @@
     </section>
   </section>
 </main>
-@if (registrationSucceeded()) {
-  <app-registration-success-dialog (continued)="continueToSignIn()" />
-}

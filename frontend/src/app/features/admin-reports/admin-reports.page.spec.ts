@@ -32,6 +32,7 @@ const paymentReport: AdminPaymentReport = {
 
 describe('AdminReportsPage', () => {
   let fixture: ComponentFixture<AdminReportsPage>;
+  let urlDescriptors: Record<string, PropertyDescriptor | undefined>;
   let api: {
     reservationReport: ReturnType<typeof vi.fn>;
     paymentReport: ReturnType<typeof vi.fn>;
@@ -40,6 +41,7 @@ describe('AdminReportsPage', () => {
   };
 
   beforeEach(() => {
+    urlDescriptors = { createObjectURL: Object.getOwnPropertyDescriptor(URL, 'createObjectURL'), revokeObjectURL: Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL') };
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-16T08:00:00+08:00'));
     api = {
@@ -64,6 +66,11 @@ describe('AdminReportsPage', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    // These are browser globals shared with upload tests; restore their descriptors too.
+    for (const [key, descriptor] of Object.entries(urlDescriptors)) {
+      if (descriptor) Object.defineProperty(URL, key, descriptor);
+      else Reflect.deleteProperty(URL, key);
+    }
   });
 
   function render(): HTMLElement {
@@ -159,8 +166,8 @@ describe('AdminReportsPage', () => {
     vi.spyOn(document, 'createElement').mockReturnValue(anchor);
     const createObjectUrl = vi.fn(() => 'blob:report');
     const revokeObjectUrl = vi.fn();
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectUrl });
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectUrl });
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, writable: true, value: createObjectUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, writable: true, value: revokeObjectUrl });
     const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
 
     root.querySelector<HTMLButtonElement>('[data-action="export-report"]')!.click();

@@ -54,6 +54,7 @@ class BookingDb {
   invoiceItemWrites = 0;
   invoiceSourceMissing = false;
   failQueue = false;
+  failPaymentRequest = false;
   proofsSuperseded = false;
   afterPaymentLock?: () => void;
   afterCapacityLock?: () => void;
@@ -80,7 +81,7 @@ class FakeRequest {
         totalAmount: 10000, amountPaid: this.db.amountPaid }], rowsAffected: [1] };
     }
     if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) {
-      if (this.db.failQueue) throw new Error('outbox insert failed');
+      if (this.db.failQueue || (this.db.failPaymentRequest && this.params['templateKey'] === 'PAYMENT_REQUESTED')) throw new Error('outbox insert failed');
       this.db.outbox.push({ ...this.params }); return { recordset: [{ id: '9007199254740993' }], rowsAffected: [1] };
     }
     if (/SELECT r\.reservation_id.*FROM dbo\.RESERVATION r WITH/is.test(command)) {
@@ -160,9 +161,9 @@ function assertCodedStatus(error: unknown, statusCode: number, code: string) {
 test('ordinary admin approval and payment request remain available for every method', async () => {
  for (const paymentMethod of ['CASH','BANK_TRANSFER','E-WALLET']) {
   const db=new BookingDb();db.paymentMethod=paymentMethod;db.eventDate='2098-06-15';
-  for(const nextStatus of ['APPROVED','AWAITING_PAYMENT'] as const) {
+  for(const nextStatus of ['APPROVED'] as const) {
    await transitionBooking({reservationId:5,nextStatus,actor:{type:'ADMIN',id:2},mode:'GENERIC_ADMIN',request:db.request});
-   assert.equal(db.status,nextStatus);
+   assert.equal(db.status,'AWAITING_PAYMENT');
   }
   assert.equal(db.amountPaid,0);assert.equal(db.history.length,2);
   assert.equal(db.queries.some(query=>/BOOKING_POLICY/.test(query)),false);
@@ -178,8 +179,8 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
         const db = new BookingDb();
         Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', guestCount, eventDate });
         await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, capacityConfirmed: true, request: db.request });
-        assert.equal(db.status, nextStatus);
-        assert.equal(db.history.length, 1);
+        assert.equal(db.status, 'AWAITING_PAYMENT');
+        assert.equal(db.history.length, nextStatus === 'APPROVED' ? 2 : 1);
       }
     }
   });
@@ -208,7 +209,7 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
       const db = new BookingDb();
       Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', amountPaid, eventDate: '2026-11-07' });
       await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request });
-      assert.equal(db.status, nextStatus);
+      assert.equal(db.status, 'AWAITING_PAYMENT');
       assert.equal(db.amountPaid, amountPaid);
     }
   });
@@ -236,7 +237,7 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
       const db = new BookingDb();
       Object.assign(db, { status: previousStatus, paymentMethod, eventDate: '2026-11-04' });
       await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request });
-      assert.equal(db.status, nextStatus);
+      assert.equal(db.status, 'AWAITING_PAYMENT');
     }
   });
 }
@@ -285,22 +286,40 @@ for (const [previous, next] of [['PENDING', 'REJECTED'], ['PENDING', 'CANCELLED'
   ['PAYMENT_VERIFIED', 'CONFIRMED'], ['CONFIRMED', 'COMPLETED']] as const) {
   test(`email outbox booking ${next} queues once inside the supplied transaction without SMTP`, async () => {
     const db = new BookingDb(); db.status = previous;
+    if (next === 'COMPLETED') { db.amountPaid = 100; db.eventDate = '2026-01-01'; }
     await transitionBooking({ reservationId: 5, nextStatus: next, actor: { type: 'ADMIN', id: 3 }, reason: 'Customer request', request: db.request });
     assert.equal(db.outbox.length, 1); assert.equal(db.outbox[0]!['templateKey'], `BOOKING_${next}`);
     assert.equal(db.outbox[0]!['relatedEntityId'], '5'); assert.ok(db.queries.some(query => /customerEmail/.test(query)));
   });
 }
 
-test('admin approval issues one invoice and consolidated email in the supplied transaction without requesting payment', async t => {
+test('completion requires the recorded full balance, without changing the booking on partial payment', async () => {
+  const db = new BookingDb();
+  db.status = 'CONFIRMED';
+  db.amountPaid = 50;
+  await assert.rejects(
+    transitionBooking({ reservationId: 5, nextStatus: 'COMPLETED', actor: { type: 'ADMIN', id: 3 }, request: db.request }),
+    (error: unknown) => error instanceof AppError && error.statusCode === 409 && /remaining balance/i.test(error.message),
+  );
+  assert.equal(db.status, 'CONFIRMED');
+  assert.equal(db.history.length, 0);
+  assert.equal(db.outbox.length, 0);
+  db.amountPaid = 100;
+  db.eventDate = '2026-01-01';
+  await transitionBooking({ reservationId: 5, nextStatus: 'COMPLETED', actor: { type: 'ADMIN', id: 3 }, request: db.request });
+  assert.equal(db.status, 'COMPLETED');
+});
+
+test('admin approval issues one invoice and automatically requests payment in the same transaction', async t => {
   const db = new BookingDb();
   t.mock.method(sql.Transaction.prototype, 'begin', async () => assert.fail('approval must not open a nested transaction'));
   await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request });
-  assert.equal(db.status, 'APPROVED');
-  assert.equal(db.history.length, 1);
+  assert.equal(db.status, 'AWAITING_PAYMENT');
+  assert.equal(db.history.length, 2);
   assert.equal(db.invoices.length, 1);
   assert.equal(db.invoiceItemWrites, 2);
-  assert.deepEqual(db.audit.map(item => item['auditAction']), ['BOOKING_STATUS_CHANGED', 'INVOICE_ISSUED']);
-  assert.equal(db.outbox.length, 1);
+  assert.deepEqual(db.audit.map(item => item['auditAction']), ['BOOKING_STATUS_CHANGED', 'INVOICE_ISSUED', 'BOOKING_STATUS_CHANGED']);
+  assert.equal(db.outbox.length, 2);
   assert.equal(db.outbox[0]!['templateKey'], 'INVOICE_ISSUED');
   assert.equal(db.outbox[0]!['relatedEntityType'], 'INVOICE');
   assert.equal(db.outbox[0]!['relatedEntityId'], '8');
@@ -308,17 +327,19 @@ test('admin approval issues one invoice and consolidated email in the supplied t
   assert.ok(db.queries.some(query => /NEXT VALUE FOR dbo\.INVOICE_NUMBER_SEQUENCE/.test(query)));
   await assert.rejects(transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request }), error => assertStatus(error, 409));
   assert.equal(db.invoices.length, 1);
-  assert.equal(db.outbox.length, 1);
-  await transitionBooking({ reservationId: 5, nextStatus: 'AWAITING_PAYMENT', actor: { type: 'ADMIN', id: 3 }, request: db.request });
+  assert.equal(db.outbox.length, 2);
+
   assert.equal(db.status, 'AWAITING_PAYMENT');
   assert.equal(db.invoices.length, 1);
-  assert.equal(db.outbox.length, 1);
+  assert.equal(db.outbox.length, 2);
+  assert.equal(db.outbox[1]!['templateKey'], 'PAYMENT_REQUESTED');
 });
 
-for (const failure of ['invoice', 'invoice-items', 'queue', 'missing-source'] as const) {
+for (const failure of ['invoice', 'invoice-items', 'queue', 'payment-request', 'missing-source'] as const) {
   test(`admin approval rolls back all changes when ${failure} persistence fails`, async () => {
     const db = new BookingDb();
     if (failure === 'queue') db.failQueue = true;
+    else if (failure === 'payment-request') db.failPaymentRequest = true;
     else if (failure === 'missing-source') db.invoiceSourceMissing = true;
     else db.failOn = failure;
     const transaction = Object.create(sql.Transaction.prototype) as sql.Transaction;
@@ -361,15 +382,16 @@ test('booking status accepts every approved transition and records its old and n
     for (const nextStatus of targets) {
       const db = new BookingDb();
       db.status = previous;
+      if (nextStatus === 'COMPLETED') { db.amountPaid = 100; db.eventDate = '2026-01-01'; }
       await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 3 }, reason: nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : undefined, request: db.request });
-      assert.equal(db.status, nextStatus, `${previous} -> ${nextStatus}`);
-      assert.equal(db.history.length, 1);
+      assert.equal(db.status, nextStatus === 'APPROVED' ? 'AWAITING_PAYMENT' : nextStatus, `${previous} -> ${nextStatus}`);
+      assert.equal(db.history.length, nextStatus === 'APPROVED' ? 2 : 1);
       assert.equal(db.history[0]?.['previousStatus'], previous);
       assert.equal(db.history[0]?.['nextStatus'], nextStatus);
       assert.equal(db.history[0]?.['actorType'], 'ADMIN');
       assert.equal(db.history[0]?.['actorId'], 3);
       assert.equal(db.history[0]?.['reason'], nextStatus === 'REJECTED' || nextStatus === 'CANCELLED' ? 'Customer request' : null);
-      assert.equal(db.audit.length, nextStatus === 'APPROVED' ? 2 : 1);
+      assert.equal(db.audit.length, nextStatus === 'APPROVED' ? 3 : 1);
       assert.equal(db.audit[0]?.['auditAdminId'], 3);
       assert.equal(db.audit[0]?.['auditAction'], 'BOOKING_STATUS_CHANGED');
       assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditOldValues'])), { status: previous });
@@ -556,7 +578,7 @@ test('small and large booking boundaries approve without medium confirmation', a
     db.guestCount = guestCount;
     db.largestGuestCount = guestCount;
     await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, request: db.request });
-    assert.equal(db.status, 'APPROVED');
+    assert.equal(db.status, 'AWAITING_PAYMENT');
   }
 });
 
@@ -583,7 +605,7 @@ test('confirmed medium approval records the explicit capacity decision in admin 
 
   await transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 3 }, capacityConfirmed: true, request: db.request });
 
-  assert.equal(db.status, 'APPROVED');
+  assert.equal(db.status, 'AWAITING_PAYMENT');
   assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditNewValues'])), {
     status: 'APPROVED',
     reason: null,
@@ -597,7 +619,7 @@ test('capacity confirmation remains strictly boolean and is required before medi
  assert.equal(db.queries.length,0);
  await assert.rejects(transitionBooking({reservationId:5,nextStatus:'APPROVED',actor:{type:'ADMIN',id:3},mode:'GENERIC_ADMIN',request:db.request}),e=>assertCodedStatus(e,400,'CAPACITY_CONFIRMATION_REQUIRED'));
  await transitionBooking({reservationId:5,nextStatus:'APPROVED',actor:{type:'ADMIN',id:3},mode:'GENERIC_ADMIN',capacityConfirmed:true,request:db.request});
- assert.equal(db.status,'APPROVED');
+ assert.equal(db.status,'AWAITING_PAYMENT');
 });
 
 test('booking status endpoint validates status and reason before dispatch', async () => {

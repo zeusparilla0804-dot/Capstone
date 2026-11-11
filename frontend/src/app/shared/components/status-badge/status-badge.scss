@@ -28,6 +28,7 @@
 .status-badge--awaiting_cash_payment,
 .status-badge--payment_submitted,
 .status-badge--pending_payment_verification,
+.status-badge--pending_verification,
 .status-badge--partially_paid,
 .status-badge--submitted {
   background: color-mix(in srgb, var(--color-warning) 18%, #ffffff);
@@ -36,6 +37,7 @@
 
 .status-badge--cancelled,
 .status-badge--rejected,
+.status-badge--payment_rejected,
 .status-badge--inactive {
   background: color-mix(in srgb, var(--color-danger) 14%, #ffffff);
   color: #9c2f2f;
@@ -47,18 +49,13 @@
 }
 
 .status-badge--down_payment_verified {
-  background: #FFF0D9;
-  color: #A65B00;
-  gap: 6px;
+  background: #e4e9de;
+  color: #34482c;
 }
 
-.status-badge--down_payment_verified::before {
-  content: '';
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: #D97706;
+.status-badge--fully_paid {
+  background: #e4e9de;
+  color: #34482c;
 }
 
 .status-badge--down_payment_verified,

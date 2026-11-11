@@ -89,4 +89,59 @@ describe('CustomerBillingPageComponent', () => {
       .map((element: Element) => element.textContent!.trim()))
       .toEqual(['Partially Paid', 'Pending Payment Verification', 'Cancelled']);
   });
+
+  it('hides Submit Payment for a completed booking with a verified down payment', async () => {
+    const bookingService = {
+      bookings: signal<readonly Booking[]>([{
+        ...booking, status: 'completed', paymentMethod: 'gcash', amountPaid: 5000,
+      }]),
+      loading: signal(false), error: signal(''), loadMine: () => undefined,
+    };
+    const auth = {
+      user: signal({ id: '42', fullName: 'Zeus Parilla', email: 'parilla@gmail.com', role: 'customer' as const }),
+      logout: async () => undefined,
+    };
+    TestBed.configureTestingModule({
+      imports: [CustomerBillingPageComponent],
+      providers: [provideRouter([]), { provide: BookingService, useValue: bookingService }, { provide: AuthService, useValue: auth }],
+    });
+
+    const fixture = TestBed.createComponent(CustomerBillingPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const record = fixture.nativeElement.querySelector('.billing-record') as HTMLElement;
+    expect(record.textContent).toContain('₱5,000');
+    const side = record.querySelector('.billing-record__side') as HTMLElement;
+    expect(side.firstElementChild?.tagName).toBe('APP-STATUS-BADGE');
+    expect(side.querySelector('a[href="/invoice/9"]')).not.toBeNull();
+    expect(record.querySelector('a[href="/my-bookings/17/payment"]')).toBeNull();
+  });
+
+  it('shows the most recently created booking first regardless of event date', async () => {
+    const newerBooking: Booking = {
+      ...booking,
+      id: '18', reference: 'LAC-0018', eventDate: '2026-11-10', createdAt: '2026-11-06T10:00:00Z',
+    };
+    const bookingService = {
+      bookings: signal<readonly Booking[]>([booking, newerBooking]),
+      loading: signal(false), error: signal(''), loadMine: () => undefined,
+    };
+    const auth = {
+      user: signal({ id: '42', fullName: 'Zeus Parilla', email: 'parilla@gmail.com', role: 'customer' as const }),
+      logout: async () => undefined,
+    };
+    TestBed.configureTestingModule({
+      imports: [CustomerBillingPageComponent],
+      providers: [provideRouter([]), { provide: BookingService, useValue: bookingService }, { provide: AuthService, useValue: auth }],
+    });
+
+    const fixture = TestBed.createComponent(CustomerBillingPageComponent);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const references = [...fixture.nativeElement.querySelectorAll('.billing-record__event > span')]
+      .map((element: Element) => element.textContent?.trim());
+    expect(references).toEqual(['LAC-0018', 'LAC-0017']);
+  });
 });

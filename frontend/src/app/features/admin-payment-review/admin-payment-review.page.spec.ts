@@ -6,6 +6,7 @@ import { Subject, of, throwError } from 'rxjs';
 import type { AdminPaymentProofDetail } from '../../core/models';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminService } from '../../core/services/admin.service';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { AdminPaymentReviewPage } from './admin-payment-review.page';
 
 const review: AdminPaymentProofDetail = {
@@ -46,6 +47,23 @@ describe('AdminPaymentReviewPage', () => {
     fixture.detectChanges();
   });
 
+  it('confirms rejection with the reason and does not send a cancelled review', () => {
+    const component = fixture.componentInstance as any; const feedback = TestBed.inject(ActionFeedbackService);
+    component.rejectionReason = 'Wrong payment account'; component.requestReview('reject');
+    expect(api.rejectPaymentProof).not.toHaveBeenCalled();
+    expect(feedback.confirmation()?.message).toContain('Wrong payment account');
+    feedback.decide(false); expect(api.rejectPaymentProof).not.toHaveBeenCalled();
+    component.requestReview('reject'); feedback.decide(true);
+    expect(api.rejectPaymentProof).toHaveBeenCalledExactlyOnceWith('9007199254740993', 'Wrong payment account');
+  });
+
+  it('confirms the verified amount before sending a payment review', () => {
+    const component = fixture.componentInstance as any; const feedback = TestBed.inject(ActionFeedbackService);
+    component.requestReview('verify'); expect(api.verifyPaymentProof).not.toHaveBeenCalled();
+    expect(feedback.confirmation()?.message).toContain('5,000.00'); feedback.decide(true);
+    expect(api.verifyPaymentProof).toHaveBeenCalledOnce();
+  });
+
   it('renders protected proof metadata, image, and review controls', () => {
     const image = fixture.nativeElement.querySelector('img[alt="Customer payment receipt"]') as HTMLImageElement;
     const original = fixture.nativeElement.querySelector('a.original-link') as HTMLAnchorElement;
@@ -73,6 +91,24 @@ describe('AdminPaymentReviewPage', () => {
     (fixture.componentInstance as any).reject();
     expect(api.verifyPaymentProof).not.toHaveBeenCalled();
     expect(api.rejectPaymentProof).not.toHaveBeenCalled();
+  });
+
+  it('shows the payment state from the refreshed verified balance and proof decision', () => {
+    const badge = () => fixture.nativeElement.querySelector('.review-lead .status-badge') as HTMLElement;
+    expect(badge().textContent?.trim()).toBe('Pending Verification');
+    for (const [amountPaid, proofStatus, expected] of [
+      [42500, 'VERIFIED', 'Down Payment Paid'],
+      [85000, 'VERIFIED', 'Fully Paid'],
+      [0, 'REJECTED', 'Payment Rejected'],
+    ] as const) {
+      api.paymentProof.mockReturnValue(of({ success: true, data: {
+        ...review, booking: { ...review.booking, status: 'CONFIRMED' }, proof: { ...review.proof, status: proofStatus },
+        payment: { ...review.payment!, amountPaid },
+      } }));
+      (fixture.componentInstance as any).load();
+      fixture.detectChanges();
+      expect(badge().textContent?.trim()).toBe(expected);
+    }
   });
 
   it('distinguishes the required deposit from the full outstanding balance', () => {

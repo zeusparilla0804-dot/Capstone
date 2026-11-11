@@ -19,6 +19,7 @@ export interface CateringPackage {
   readonly excessGuestPrice: number | null;
   readonly imageUrl: string;
   readonly galleryImageUrls?: readonly string[];
+  readonly hasCustomImages?: boolean;
   readonly features: readonly PackageFeature[];
   readonly minGuests: number | null;
   readonly maxGuests: number | null;

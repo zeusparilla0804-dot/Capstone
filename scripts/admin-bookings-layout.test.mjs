@@ -21,6 +21,6 @@ test('admin reservation totals and statuses use aligned desktop columns', async 
   );
   assert.match(
     stylesheet,
-    /\.admin-table--bookings\s+td:nth-child\(8\)\s+app-status-badge\s*{[\s\S]*?--status-badge-width:\s*120px;/,
+    /\.admin-table--bookings\s+td:nth-child\(8\)\s+app-status-badge\s*{[\s\S]*?--status-badge-width:\s*170px;/,
   );
 });

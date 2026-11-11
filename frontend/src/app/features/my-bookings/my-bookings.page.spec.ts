@@ -56,7 +56,7 @@ describe('MyBookingsPage cancellation', () => {
     fixture.detectChanges();
     const badge = () => fixture.nativeElement.querySelector('.booking-card__side .status-badge') as HTMLElement;
     expect(loadMine).toHaveBeenCalledOnce();
-    expect(badge().textContent!.trim()).toBe('50% Down Payment Verified');
+    expect(badge().textContent!.trim()).toBe('Down Payment Paid');
     expect(badge().classList.contains('status-badge--down_payment_verified')).toBe(true);
     expect(badge().classList.contains('status-badge--payment_verified')).toBe(false);
     bookings.set([{ ...reservation, amountPaid: 74300 }]);
@@ -72,6 +72,32 @@ describe('MyBookingsPage cancellation', () => {
     const revisited = TestBed.createComponent(MyBookingsPageComponent);
     revisited.detectChanges();
     expect(loadMine).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps payment choice on the reservation card without repeating a banner after refresh', async () => {
+    const current = signal<readonly Booking[]>([booking]);
+    const loadMine = vi.fn();
+    TestBed.overrideProvider(BookingService, { useValue: {
+      bookings: current.asReadonly(), loading: signal(false), error: signal(''), loadMine,
+      getBookingsByTab: () => current(),
+    } });
+    const fixture = TestBed.createComponent(MyBookingsPageComponent);
+    fixture.detectChanges();
+    current.set([{ ...booking, status: 'approved', paymentMethod: undefined }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
+    current.set([{ ...booking, status: 'awaiting_payment', paymentMethod: undefined }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Payment requested for booking');
+    const paymentLink = [...fixture.nativeElement.querySelectorAll('.booking-card a')]
+      .find((link: unknown) => (link as HTMLAnchorElement).textContent?.trim() === 'Choose Payment Method') as HTMLAnchorElement;
+    expect(paymentLink?.getAttribute('href')).toBe('/book-event?paymentBooking=5&step=4');
+    window.dispatchEvent(new Event('focus'));
+    expect(loadMine).toHaveBeenCalledTimes(2);
+    current.set([{ ...booking, status: 'awaiting_payment', paymentMethod: 'gcash' }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-ready-notice')).toBeNull();
   });
 
   it('uses the warm LA Chef canvas behind white reservation surfaces', async () => {

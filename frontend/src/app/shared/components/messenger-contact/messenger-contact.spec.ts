@@ -48,10 +48,10 @@ describe('MessengerContactComponent', () => {
     expect(link?.rel).toContain('noopener');
     expect(link?.rel).toContain('noreferrer');
     expect(link?.getAttribute('aria-label')).toBe('Message LA Chef on Messenger');
-    expect(link?.textContent).toContain('Chat with LA Chef');
+    expect(link?.textContent).toContain('Message');
     expect(link?.querySelector('.messenger-contact__glyph')).not.toBeNull();
-    expect(getComputedStyle(link!).backgroundColor).toBe('rgb(255, 255, 255)');
-    expect(getComputedStyle(link!.querySelector('.messenger-contact__mark')!).backgroundColor).toBe('rgb(10, 124, 255)');
+    expect(getComputedStyle(link!).backgroundColor).toBe('rgb(8, 102, 255)');
+    expect(getComputedStyle(link!.querySelector('.messenger-contact__mark')!).backgroundColor).toBe('rgb(255, 255, 255)');
   });
 
   it('hides on admin and dedicated contact routes while responding to route changes', async () => {

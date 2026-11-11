@@ -12,10 +12,79 @@ process.env.DB_PASSWORD ??= 'test';
 const { recordPayment } = await import('./admin.repository.js');
 const { closeDatabase } = await import('../config/database.js');
 
+test('an additional verified bank transfer pays the balance without completing an unfinished event or duplicating retries', async t => {
+  const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER' });
+  try {
+    const input = { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER' as const, reference: 'BANK-FINAL-42', paymentDate: '2026-11-08' };
+    assert.equal(await recordPayment(2, input), true);
+    assert.equal(db.amountPaid(), 80000);
+    assert.equal(db.status(), 'PAYMENT_VERIFIED');
+    assert.ok(db.queries.some(query => /UPDATE i SET status/i.test(query)));
+    await recordPayment(2, input);
+    assert.equal(db.credits.length, 1);
+  } finally { await closeDatabase(); }
+});
+
+test('verified final bank payment and event completion commit together', async t => {
+  const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER', eventDate: '2026-01-01' });
+  try {
+    await recordPayment(2, { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER', reference: 'BANK-EVENT-42', paymentDate: '2026-11-08' }, { completeEvent: true });
+    assert.equal(db.amountPaid(), 80000);
+    assert.equal(db.status(), 'COMPLETED');
+    assert.equal(db.credits.length, 1);
+  } finally { await closeDatabase(); }
+});
+
+test('event settlement records only the remaining balance and completes in the same transaction, even for a bank deposit followed by cash', async t => {
+  const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER', eventDate: '2026-01-01' });
+  try {
+    const input = { reservationId: 5, amount: 40000, method: 'CASH' as const, reference: 'CASH-FINAL-1', paymentDate: '2026-11-08' };
+    assert.equal(await recordPayment(2, input, { completeEvent: true }), true);
+    assert.equal(db.amountPaid(), 80000); assert.equal(db.status(), 'COMPLETED'); assert.equal(db.credits.length, 1);
+    assert.ok(db.queries.some(query => /UPDATE i SET status/i.test(query)));
+    assert.deepEqual(db.events, ['begin', 'commit']);
+    await recordPayment(2, input, { completeEvent: true });
+    assert.equal(db.credits.length, 1, 'a retry must not create another payment');
+  } finally { await closeDatabase(); }
+});
+
+test('completion of an already fully paid event creates no payment transaction', async t => {
+  const db = installDatabase(t, 'CONFIRMED', { amountPaid: 100, eventDate: '2026-01-01' });
+  try {
+    await recordPayment(2, { reservationId: 5, amount: 0, method: 'CASH', paymentDate: '2026-11-08' }, { completeEvent: true });
+    assert.equal(db.status(), 'COMPLETED'); assert.equal(db.amountPaid(), 100); assert.equal(db.credits.length, 0);
+  } finally { await closeDatabase(); }
+});
+
+test('event settlement rejects a stale or partial amount instead of completing an unpaid event', async t => {
+  const db = installDatabase(t, 'CONFIRMED', { amountPaid: 50, eventDate: '2026-01-01' });
+  try {
+    await assert.rejects(recordPayment(2, { reservationId: 5, amount: 40, method: 'CASH', paymentDate: '2026-11-08' }, { completeEvent: true }), /FINAL_BALANCE_CHANGED/);
+    assert.equal(db.status(), 'CONFIRMED'); assert.equal(db.credits.length, 0);
+  } finally { await closeDatabase(); }
+});
+
+test('a future event cannot be completed or credited through the completion command', async t => {
+  const db = installDatabase(t, 'CONFIRMED', { amountPaid: 50, eventDate: '2099-12-01' });
+  try {
+    await assert.rejects(recordPayment(2, { reservationId: 5, amount: 50, method: 'CASH', paymentDate: '2026-11-08' }, { completeEvent: true }), /EVENT_NOT_FINISHED/);
+    assert.equal(db.status(), 'CONFIRMED'); assert.equal(db.amountPaid(), 50); assert.equal(db.credits.length, 0);
+  } finally { await closeDatabase(); }
+});
+
+test('a completion failure rolls back the final payment and intermediate confirmation', async t => {
+  const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountPaid: 50, eventDate: '2026-01-01', failCompletion: true });
+  try {
+    await assert.rejects(recordPayment(2, { reservationId: 5, amount: 50, method: 'CASH', paymentDate: '2026-11-08' }, { completeEvent: true }), /completion failed/);
+    assert.equal(db.status(), 'PAYMENT_VERIFIED'); assert.equal(db.amountPaid(), 50); assert.equal(db.credits.length, 0);
+    assert.deepEqual(db.events, ['begin', 'rollback']);
+  } finally { await closeDatabase(); }
+});
+
 function installDatabase(
   t: test.TestContext,
   initialStatus: string,
-  amounts: { amountDue?: number; amountPaid?: number; paymentMethod?: string; policy?: Record<string, unknown>; pendingProofs?: number; previous?: { payment_id: number; amount: number; payment_date: string; actual_payment_at?: Date } } = {},
+  amounts: { amountDue?: number; amountPaid?: number; paymentMethod?: string; eventDate?: string; failCompletion?: boolean; policy?: Record<string, unknown>; pendingProofs?: number; previous?: { payment_id: number; amount: number; payment_date: string; actual_payment_at?: Date } } = {},
 ) {
   let status = initialStatus;
   const amountDue = amounts.amountDue ?? 100;
@@ -27,7 +96,7 @@ function installDatabase(
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   t.mock.method(sql.Transaction.prototype, 'begin', async () => { events.push('begin'); });
   t.mock.method(sql.Transaction.prototype, 'commit', async () => { events.push('commit'); });
-  t.mock.method(sql.Transaction.prototype, 'rollback', async () => { events.push('rollback'); });
+  t.mock.method(sql.Transaction.prototype, 'rollback', async () => { events.push('rollback'); status = initialStatus; amountPaid = amounts.amountPaid ?? 10; credits.length = 0; });
   t.mock.method(sql.Request.prototype, 'query', async function (command: string) {
     queries.push(command);
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, value]) => [key, value.value]));
@@ -42,10 +111,10 @@ function installDatabase(
     if (/SELECT COUNT\(\*\) pendingCount/i.test(command)) return result([{ pendingCount: amounts.pendingProofs ?? 0 }]);
     if (/COUNT_BIG\(\*\) AS activeBookingCount/i.test(command)) return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
     if (/SELECT status,customer_id customerId[\s\S]*FROM dbo\.RESERVATION/i.test(command)) return result([{
-      status, customerId: 7, eventDate: '2026-12-01', guestCount: 100
+      status, customerId: 7, eventDate: amounts.eventDate ?? '2026-12-01', guestCount: 100
     }]);
-    if (/SELECT payment_id,amount_due,amount_paid FROM dbo\.PAYMENT/i.test(command)) return result([{
-      payment_id: 3, amount_due: amountDue, amount_paid: amountPaid
+    if (/SELECT payment_id,amount_due,amount_paid,payment_method FROM dbo\.PAYMENT/i.test(command)) return result([{
+      payment_id: 3, amount_due: amountDue, amount_paid: amountPaid, payment_method: amounts.paymentMethod ?? 'CASH'
     }]);
     if (/SELECT payment_id paymentId,amount_due amountDue,amount_paid amountPaid/i.test(command)) return result([{
       paymentId: 3, amountDue, amountPaid, paymentMethod: amounts.paymentMethod ?? 'CASH'
@@ -59,7 +128,7 @@ function installDatabase(
       return result();
     }
     if (/UPDATE dbo\.PAYMENT SET amount_paid/i.test(command)) { amountPaid = (Math.round(amountPaid * 100) + Math.round(Number(values['amount']) * 100)) / 100; return result(); }
-    if (/UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(command)) { status = String(values['nextStatus']); return result(); }
+    if (/UPDATE dbo\.RESERVATION SET status=@nextStatus/i.test(command)) { if (amounts.failCompletion && values['nextStatus'] === 'COMPLETED') throw new Error('completion failed'); status = String(values['nextStatus']); return result(); }
     if (/UPDATE dbo\.RESERVATION SET status='EXPIRED'/i.test(command)) { status = 'EXPIRED'; return result(); }
     if (/email outbox context.*customerEmail.*FROM dbo\.RESERVATION/is.test(command)) return result([{
       customerEmail: 'customer@example.test', customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-12-01'
@@ -109,7 +178,7 @@ test('manual payment below half supersedes a submitted proof and returns the res
 });
 
 test('manual payment uses cumulative paid amount and advances at the exact half-deposit threshold', async t => {
-  const db = installDatabase(t, 'AWAITING_PAYMENT', { amountPaid: 30 });
+  const db = installDatabase(t, 'AWAITING_PAYMENT', { amountPaid: 30, paymentMethod: 'BANK_TRANSFER' });
   try {
     assert.equal(await recordPayment(2, {
       reservationId: 5, amount: 20, method: 'BANK_TRANSFER', reference: 'BANK-1', paymentDate: '2026-10-02'
@@ -173,7 +242,7 @@ test('exact committed payment retry succeeds without repeating any side effects 
 
 for (const method of ['CASH', 'BANK_TRANSFER', 'E-WALLET'] as const) {
   test(`lost-response ${method} retry records one credit and one set of side effects`, async t => {
-    const db = installDatabase(t, 'AWAITING_PAYMENT');
+    const db = installDatabase(t, 'AWAITING_PAYMENT', { paymentMethod: method });
     const input = { reservationId: 5, amount: 90, method, reference: 'RETRY-1', paymentDate: '2026-10-02' };
     try {
       await recordPayment(2, input);

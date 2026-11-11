@@ -1,8 +1,24 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
 <app-public-header [isAuthenticated]="true" />
 <main class="booking-page">
+  @if (paymentChoiceConfirmation()) {
+    <app-payment-choice-dialog [methodLabel]="approvedPaymentMethodLabel()" [reference]="approvedPaymentBooking()?.reference ?? ''"
+      [cashTerms]="approvedPaymentMethod() === 'cash'" [cashDeposit]="approvedPaymentDeposit()" [cashDeadline]="approvedCashDeadline()"
+      (decided)="$event ? confirmApprovedPayment() : cancelApprovedPayment()" />
+  }
   <div class="booking-container">
-    @if (bookingReference()) {
+    @if (paymentMethodSubmitted()) {
+      <app-success-dialog
+        title="Payment method submitted"
+        [message]="approvedPaymentMethod() === 'cash' ? 'Your cash payment choice has been saved. Visit the LA Chef office to pay; staff will record your payment.' : 'Your payment choice has been submitted to LA Chef. Payment instructions will be available from My Reservations once your QR is ready.'"
+        statusText="Payment choice saved"
+        detailLabel="Booking reference"
+        [detailValue]="approvedPaymentBooking()?.reference ?? ''"
+        primaryLabel="View My Reservations"
+        primaryLink="/my-bookings"
+        (dismissed)="closePaymentConfirmation()"
+      />
+    } @else if (bookingReference()) {
       <app-booking-success
         [bookingReference]="bookingReference()"
         [isEditing]="editingBookingId() !== null"
@@ -11,23 +27,66 @@
       <a class="booking-back-link" routerLink="/dashboard"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7" /></svg>Back to Dashboard</a>
       <header class="booking-header">
         <p class="page-kicker">{{ editingBookingId() ? 'Pending booking' : 'Event booking' }}</p>
-        <h1>{{ editingBookingId() ? 'Update Your Event' : 'Book Your Event' }}</h1>
-        <p>{{ editingBookingId() ? 'Adjust your estimate while LA Chef is reviewing your request.' : 'Tell us about your event and choose the catering options that work for you.' }}</p>
-        <app-booking-stepper [currentStep]="currentStep()" [furthestStep]="furthestStep()" [navigationDisabled]="isSubmitting() || editingLoading() || !!editingError()" (stepSelected)="navigateFromStepper($event)" />
+        <h1>{{ paymentBookingId ? 'Complete Your Booking' : editingBookingId() ? 'Update Your Event' : 'Book Your Event' }}</h1>
+        <p>{{ paymentBookingId ? 'Your booking has been reviewed. Choose your payment method to continue.' : editingBookingId() ? 'Adjust your estimate while LA Chef is reviewing your request.' : 'Tell us about your event and choose the catering options that work for you.' }}</p>
+        <app-booking-stepper [currentStep]="currentStep()" [furthestStep]="paymentBookingId ? 4 : furthestStep()" [showPayment]="!!paymentBookingId" [navigationDisabled]="!!paymentBookingId || isSubmitting() || editingLoading() || !!editingError()" (stepSelected)="navigateFromStepper($event)" />
       </header>
 
-      <section class="booking-surface" [class.booking-surface--addons]="currentStep() === 2" [class.booking-surface--review]="currentStep() === 3">
+      <section class="booking-surface" [class.booking-payment]="currentStep() === 4 || !!paymentBookingId" [class.booking-surface--addons]="currentStep() === 2" [class.booking-review]="currentStep() === 3">
         @if (editingLoading()) {
           <div class="availability-status availability-status--checking" role="status"><span class="availability-status__mark availability-status__mark--loading" aria-hidden="true"></span><div><strong>Loading booking</strong><p>Preparing your event details...</p></div></div>
         } @else if (editingError()) {
-          <div class="availability-status availability-status--error" role="alert"><span class="availability-status__mark" aria-hidden="true">!</span><div><strong>Unable to edit reservation</strong><p>{{ editingError() }}</p><a class="btn btn-tertiary" routerLink="/my-bookings">Return to My Reservations</a></div></div>
+          <div class="availability-status availability-status--error" role="alert"><span class="availability-status__mark" aria-hidden="true">!</span><div><strong>{{ paymentBookingId ? 'Unable to continue to payment' : 'Unable to edit reservation' }}</strong><p>{{ editingError() }}</p><a class="btn btn-tertiary" routerLink="/my-bookings">Return to My Reservations</a></div></div>
+        } @else if (approvedPaymentBooking(); as approved) {
+          <div class="payment-layout" data-testid="approved-payment-step">
+            <div>
+              <div class="step-heading"><p>Step 4</p><h2>Payment Method</h2><span>Select how you will pay for booking {{ approved.reference }}. Review and confirm your choice before submitting.</span></div>
+              <section class="approved-booking-details" aria-label="Booking details">
+                <h3>{{ approved.eventName }}</h3>
+                <dl>
+                  <div><dt>Event date</dt><dd><time [attr.datetime]="approved.eventDate">{{ approved.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</time></dd></div>
+                  <div><dt>Package</dt><dd>{{ approvedPackageDisplayName() }}</dd></div>
+                </dl>
+              </section>
+              <fieldset class="selection-list payment-methods">
+                <legend class="visually-hidden">Payment methods</legend>
+                @for (method of availablePaymentMethods(); track method.value) {
+                  <label class="selection-row" [class.is-selected]="approvedPaymentMethod() === method.value">
+                    <input type="radio" name="approvedPaymentMethod" [value]="method.value" [checked]="approvedPaymentMethod() === method.value" [disabled]="isSubmitting()" (change)="selectApprovedPayment(method.value)" />
+                    <span><strong>{{ method.label }}</strong><small>{{ method.value === 'cash' ? 'Pay at the LA Chef office. Staff will record your payment.' : 'View your assigned QR and submit payment proof for review after continuing.' }}</small></span>
+                  </label>
+                }
+              </fieldset>
+              @if (paymentMethodsLoading()) {
+                <p role="status">Checking available QR payment methods...</p>
+              } @else if (paymentMethodsError()) {
+                <p role="alert">{{ paymentMethodsError() }} <button type="button" class="btn btn-tertiary" (click)="loadPaymentMethods()">Try again</button></p>
+              } @else if (availablePaymentMethods().length === 1) {
+                <p>No online payment QR is currently available. You can choose Cash.</p>
+              }
+              @if (approvedCashDeadline(); as deadline) {
+                <div class="cash-payment-note"><h3>Cash deposit deadline</h3><p>Pay the required 50% deposit by {{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM Philippine Time.</p></div>
+              }
+            </div>
+            <aside class="payment-summary">
+              <h3>Payment Summary</h3>
+              <dl>
+                <div><dt>Outstanding balance</dt><dd>{{ approvedPaymentBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+                <div class="payment-summary__due"><dt>Required deposit (50%)</dt><dd>{{ approvedPaymentDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+                <div class="payment-summary__total"><dt>Total Amount</dt><dd>{{ approvedPaymentTotal() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              </dl>
+              @if (isSubmitting()) { <p role="status">Saving your payment choice...</p> }
+              <p>Online payment proof will be reviewed by LA Chef. Cash payments are recorded by office staff.</p>
+              @if (submissionError()) { <p class="submission-error" role="alert">{{ submissionError() }}</p> }
+            </aside>
+          </div>
         } @else {
           @if (currentStep() >= 2 && draftService.catalogSelectionError()) {
             <div class="availability-status availability-status--error" role="alert">
               <p>{{ draftService.catalogSelectionError() }}</p>
               @if (draftService.addOnsError()) {
                 <button class="btn btn-tertiary" type="button" (click)="draftService.loadAddOns()">Retry add-ons</button>
-              } @else if (!draftService.addOnsLoading() && draftService.missingAddOnIds().length) {
+              } @else if (!draftService.addOnsLoading() && (draftService.missingAddOnIds().length || draftService.incompatibleAddOnIds().length)) {
                 <button class="btn btn-tertiary" type="button" (click)="draftService.removeUnavailableAddOns()">Remove unavailable add-ons</button>
               }
             </div>
@@ -37,10 +96,29 @@
             <form [formGroup]="eventForm" (ngSubmit)="continueToAddOns()" novalidate>
               <div class="step-heading"><p>Step 1</p><h2>Event Details</h2><span>Required fields are marked with an asterisk.</span></div>
               <div class="form-grid booking-form-grid">
-                <div class="form-field"><label for="eventType">Event Type *</label><select id="eventType" formControlName="eventType"><option value="">Select event type</option>@for (type of eventTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select>@if (controlInvalid('eventType')) { <small>Event type is required.</small> }</div>
-                <div class="form-field"><label for="eventDate">Event Date *</label><input id="eventDate" type="date" formControlName="eventDate" [min]="minDate" />@if (controlInvalid('eventDate') && eventForm.controls.eventDate.hasError('required')) { <small>Event date is required.</small> }</div>
-                <div class="form-field"><label for="eventTime">Event Time *</label><select id="eventTime" formControlName="eventTime"><option value="">Select event time</option>@for (time of eventTimes; track time) { <option [value]="time">{{ time }}</option> }</select>@if (controlInvalid('eventTime')) { <small>Event time is required.</small> }</div>
-                <div class="form-field"><label for="guestCount">Estimated number of guests *</label><input id="guestCount" type="number" inputmode="numeric" step="1" [min]="selectedFormPackage()?.minGuests ?? 1" [max]="guestInputMax()" formControlName="guestCount" [class.guest-count-invalid]="guestCountInvalid()" [attr.aria-invalid]="guestCountInvalid()" [attr.aria-describedby]="guestCountInvalid() ? 'guest-count-error' : selectedFormPackage() ? 'guest-count-guidance' : null" /><div class="guest-count-validation">@if (guestCountInvalid()) { <small id="guest-count-error" class="guest-count-warning" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.7 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.7a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4m0 4h.01" /></svg><span>{{ guestCountError() }}</span></small> }</div> @if (selectedFormPackage(); as selectedPackage) { <span id="guest-count-guidance" class="guest-range">{{ packageGuestGuidance(selectedPackage) }}</span> }</div>
+              <div id="date-preparation-note" class="booking-preparation">
+                <span>Book at least 4 calendar days ahead for fewer than 500 guests; 6 days for 500 or more. Includes 1 day for the deposit and 3 or 5 days for preparation.</span>
+              </div>
+                <div class="form-field booking-event-type"><label for="eventType">Event Type *</label><select id="eventType" formControlName="eventType" [attr.disabled]="selectedFormPackage() && selectedFormPackage()?.category !== 'standard' ? '' : null"><option value="">Select event type</option>@for (type of eventTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select>@if (selectedFormPackage() && selectedFormPackage()?.category !== 'standard') { <small>Set by the selected package.</small> } @else if (controlInvalid('eventType')) { <small>Event type is required.</small> }</div>
+                  <div class="form-field booking-date-field">
+                  <label for="eventDate">Event Date *</label>
+                  <div class="booking-date-control"><input id="eventDate" type="text" formControlName="eventDate" readonly (click)="openCalendar()" aria-describedby="date-preparation-note" placeholder="Choose an available date" /><button type="button" class="booking-date-trigger" (click)="openCalendar()" aria-label="Open available dates">Calendar</button></div>
+                  <span class="field-note">Earliest: {{ minimumBookingDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</span>
+                  @if (calendarOpen()) {
+                    <div class="booking-calendar" role="dialog" aria-label="Available event dates">
+                      <p class="booking-help">Allow 4 calendar days for fewer than 500 guests, or 6 days for 500 or more, including 1 day for the deposit. Dates before {{ minimumBookingDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} cannot be selected.</p>
+                      <div class="booking-calendar__header"><button type="button" (click)="moveCalendarMonth(-1)" [disabled]="calendarMonth() <= minimumBookingDate.slice(0, 7)" aria-label="Previous month">&larr;</button><strong>{{ calendarMonth() + '-01T00:00:00Z' | date:'MMMM y':'UTC' }}</strong><button type="button" (click)="moveCalendarMonth(1)" aria-label="Next month">&rarr;</button></div>
+                      <div class="booking-calendar__weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+                      @if (calendarLoading()) { <p role="status">Checking available dates...</p> }
+                      @if (calendarError()) { <p role="alert">{{ calendarError() }} <button type="button" (click)="retryCalendar()">Try again</button></p> }
+                      <div class="booking-calendar__days">@for (day of calendarDays(); track $index) { @if (day.date) { <button type="button" [attr.data-calendar-date]="day.date" [disabled]="day.disabled" [class.is-selected]="eventForm.controls.eventDate.value === day.date" [attr.aria-label]="day.date + (day.disabled ? ' unavailable' : ' available')" (click)="chooseCalendarDate(day.date)">{{ day.day }}</button> } @else { <span></span> } }</div>
+                      <p>Available dates can still fill before you submit. We check capacity again at submission.</p>
+                    </div>
+                  }
+                  @if (controlInvalid('eventDate') && eventForm.controls.eventDate.hasError('required')) { <small>Event date is required.</small> }
+                </div>
+                <div class="form-field booking-event-time"><label for="eventTime">Event Time *</label><select id="eventTime" formControlName="eventTime"><option value="">Select event time</option>@for (time of eventTimes; track time) { <option [value]="time">{{ time }}</option> }</select>@if (controlInvalid('eventTime')) { <small>Event time is required.</small> }</div>
+                <div class="form-field booking-guest-count"><label for="guestCount">Estimated number of guests *</label><input id="guestCount" type="number" inputmode="numeric" step="1" [min]="selectedFormPackage()?.minGuests ?? 1" [max]="guestInputMax()" formControlName="guestCount" [class.guest-count-invalid]="guestCountInvalid()" [attr.aria-invalid]="guestCountInvalid()" [attr.aria-describedby]="guestCountInvalid() ? 'guest-count-error' : selectedFormPackage() ? 'guest-count-guidance' : null" /><div class="guest-count-validation">@if (guestCountInvalid()) { <small id="guest-count-error" class="guest-count-warning" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.7 2.8 18a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 4.7a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4m0 4h.01" /></svg><span>{{ guestCountError() }}</span></small> }</div> @if (selectedFormPackage(); as selectedPackage) { <span id="guest-count-guidance" class="guest-range">{{ packageGuestGuidance(selectedPackage) }}</span> }</div>
                 @if (availabilityState(); as availability) {
                   <div
                     #availabilityFeedback
@@ -97,8 +175,18 @@
                     }
                   </div>
                 }
-                <div class="form-field form-field--wide"><label for="venue">Venue *</label><input id="venue" type="text" formControlName="venue" placeholder="Enter event venue or location" />@if (controlInvalid('venue')) { <small>Please enter an event venue.</small> }</div>
-                <div class="form-field form-field--wide"><label for="packageId">Selected Package *</label><select id="packageId" formControlName="packageId"><option value="">Select a package</option>@for (item of compatiblePackages(); track item.id) { <option [value]="item.id">{{ packagePricingLabel(item) }}</option> }</select>@if (selectedFormPackage(); as selectedPackage) { <span class="package-pricing-note">{{ packagePricingExplanation(selectedPackage) }}</span> } @if (controlInvalid('packageId')) { @if (eventForm.controls.packageId.hasError('packageEvent')) { <small>Choose a package that matches the selected event type.</small> } @else { <small>Please select a package.</small> } } @if (!eventForm.controls.packageId.value) { <a class="btn btn-tertiary choose-package" routerLink="/packages">Browse packages</a> }</div>
+                <div class="form-field form-field--wide"><label for="venue">Venue *</label><input id="venue" type="text" formControlName="venue" placeholder="Enter the complete venue address" aria-describedby="venue-address-note" /><p id="venue-address-note" class="booking-help">Please enter the exact venue name and complete address, including street, barangay, city or municipality, and province. Add a nearby landmark if helpful.</p>@if (controlInvalid('venue')) { <small>Please enter an event venue.</small> }</div>
+                <div class="form-field form-field--wide">
+                  @if (selectedFormPackage(); as selectedPackage) {
+                    <span class="selected-package-label">Selected Package</span>
+                    <p id="packageId" class="selected-package-value">{{ packagePricingLabel(selectedPackage) }}</p>
+                    <span class="package-pricing-note">{{ packagePricingExplanation(selectedPackage) }}</span>
+                  } @else {
+                    <label for="packageId">Selected Package *</label><select id="packageId" formControlName="packageId"><option value="">Select a package</option>@for (item of compatiblePackages(); track item.id) { <option [value]="item.id">{{ packagePricingLabel(item) }}</option> }</select>
+                    <a class="btn btn-tertiary choose-package" routerLink="/packages">Browse packages</a>
+                  }
+                  @if (controlInvalid('packageId')) { @if (eventForm.controls.packageId.hasError('packageEvent')) { <small>Choose a package that matches the selected event type.</small> } @else { <small>Please select a package.</small> } }
+                </div>
               </div>
               <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons <span aria-hidden="true">&rarr;</span></button></div>
             </form>
@@ -106,11 +194,26 @@
           @case (2) {
             <div class="step-heading"><p>Step 2</p><h2>Select Add-ons</h2><span>Add optional services to complete your event setup.</span></div>
             <fieldset class="selection-list"><legend class="visually-hidden">Available add-ons</legend>
-              @for (addOn of draftService.addOns(); track addOn.id) {
+              @if (photoboothOptions().length) {
+                <div class="selection-row" [class.is-selected]="!!selectedPhotoboothId()">
+                  <input id="addon-photobooth" type="checkbox" [checked]="!!selectedPhotoboothId()" (change)="togglePhotobooth($event)" [attr.aria-controls]="selectedPhotoboothId() ? 'photobooth-choice' : null" />
+                  <label class="selection-copy" for="addon-photobooth"><strong>Photobooth (2 Hours Unlimited)</strong><small id="photobooth-help">Unlimited use for two hours. Select a photobooth type.</small></label>
+                  <b>@if (!selectedPhotoboothId()) { From } {{ photoboothPrice() | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
+                  @if (selectedPhotoboothId()) {
+                    <div class="photobooth-variant form-field">
+                      <label for="photobooth-choice">Photobooth type</label>
+                      <select id="photobooth-choice" [value]="selectedPhotoboothId()" (change)="choosePhotobooth($event)" aria-describedby="photobooth-help">
+                        @for (option of photoboothOptions(); track option.id) { <option [value]="option.id">{{ option.name.split(' (')[0] }} — {{ option.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</option> }
+                      </select>
+                    </div>
+                  }
+                </div>
+              }
+              @for (addOn of otherAddOns(); track addOn.id) {
                 <div class="selection-row" [class.is-selected]="isAddOnSelected(addOn.id)">
                   <input [id]="'addon-' + addOn.id" type="checkbox" [checked]="isAddOnSelected(addOn.id)" (change)="toggleAddOn(addOn.id)" />
-                  <label class="selection-copy" [for]="'addon-' + addOn.id"><strong>{{ addOn.name }}</strong><small>{{ addOn.description }}</small></label>
-                  <b>{{ addOn.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
+                  <label class="selection-copy" [for]="'addon-' + addOn.id"><strong>{{ addOn.name }}</strong><small>{{ addOn.description }}</small>@if (isCoffeeBar(addOn.name)) { <small class="coffee-inclusions">Includes coffee service, cookies, and light snacks.</small> }</label>
+                  <b>{{ addOn.price * (isAddOnSelected(addOn.id) ? draftService.addOnQuantity(addOn.id) : 1) | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
                   @if (isAddOnSelected(addOn.id) && draftService.supportsQuantity(addOn)) {
                     <div class="addon-quantity" role="group" [attr.aria-label]="addOn.name + ' quantity'">
                       <span>Quantity</span>
@@ -134,13 +237,14 @@
             <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="!!draftService.catalogSelectionError()" (click)="goToStep(3)">Review Booking</button></div>
           }
           @case (3) {
-            <div class="step-heading"><p>Step 3</p><h2>Review Your Booking</h2><span>Confirm your event information before choosing payment.</span></div>
+            <div class="step-heading"><p>Step 3</p><h2>Review Your Booking</h2><span>Submit your request for LA Chef's review. Choose payment after approval.</span></div>
             <div class="review-grid">
               <section><div class="review-heading"><h3>Event Details</h3></div><dl><div><dt>Event</dt><dd>{{ eventTypeLabel(draftService.draft().eventType) }}</dd></div><div><dt>Date</dt><dd>{{ draftService.draft().eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Time</dt><dd>{{ draftService.draft().eventTime }}</dd></div><div><dt>Venue</dt><dd>{{ draftService.draft().venue }}</dd></div><div><dt>Estimated guests</dt><dd>{{ draftService.draft().guestCount }}</dd></div>@if (draftService.draft().specialRequest) { <div><dt>Special requests</dt><dd>{{ draftService.draft().specialRequest }}</dd></div> }</dl></section>
-              <section><div class="review-heading"><h3>Package & Add-ons</h3></div><p class="review-package">{{ draftService.selectedPackage()?.name }} @if (draftService.selectedPackage(); as selectedPackage) { <span>{{ packagePricingExplanation(selectedPackage) }}</span> }</p>@if (draftService.selectedAddOns().length) { <ul class="review-addons">@for (addOn of draftService.selectedAddOns(); track addOn.id) { <li><span>{{ addOn.name }}@if (draftService.supportsQuantity(addOn)) { <small class="review-addon-quantity">{{ addOn.quantity }} × {{ addOn.unitPrice | currency:'PHP':'symbol-narrow':'1.0-0' }}</small> }</span><strong>{{ addOn.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></li> }</ul> } @else { <p class="empty-note">No add-ons selected.</p> }</section>
+              <section><div class="review-heading"><h3>Package & Add-ons</h3></div><p class="review-package">{{ draftService.selectedPackage()?.name }} @if (draftService.selectedPackage(); as selectedPackage) { <span>{{ packagePricingExplanation(selectedPackage) }}</span> }</p>@if (draftService.selectedAddOns().length) { <ul class="review-addons">@for (addOn of draftService.selectedAddOns(); track addOn.id) { <li><span>{{ addOn.name }}@if (draftService.supportsQuantity(addOn)) { <small class="review-addon-quantity">{{ addOn.quantity }} × {{ addOn.unitPrice | currency:'PHP':'symbol-narrow':'1.0-0' }}</small> }</span><strong>{{ addOn.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></li> }</ul> } @else { <p class="empty-note">No add-ons selected.</p> }<div class="review-addons-total"><span>Add-ons total</span><strong>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></div></section>
               <section class="pricing-review"><h3>Pricing</h3><dl><div><dt>Package</dt><dd>{{ draftService.pricing().packageTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Add-ons</dt><dd>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Subtotal</dt><dd>{{ draftService.pricing().subtotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div class="pricing-review__total"><dt>Total</dt><dd>{{ draftService.pricing().total | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Down Payment (50%)</dt><dd>{{ draftService.pricing().downPayment | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Remaining Balance</dt><dd>{{ draftService.pricing().remainingBalance | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div></dl></section>
             </div>
-            <div class="step-actions"><button class="btn btn-primary" type="button" (click)="goToStep(4)">Choose Payment Method</button></div>
+            <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="isSubmitting() || !!draftService.catalogSelectionError()" (click)="confirmBooking()">{{ isSubmitting() ? 'Submitting...' : editingBookingId() ? 'Save Booking Changes' : 'Submit Booking for Review' }}</button></div>
+            @if (submissionError()) { <p class="submission-error" role="alert">{{ submissionError() }}</p> }
           }
           @case (4) {
             <div class="payment-layout">

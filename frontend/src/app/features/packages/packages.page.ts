@@ -34,6 +34,7 @@ export class PackagesPageComponent {
   protected readonly categories: readonly CategoryFilter[] = [
     { label: 'All Packages', value: 'all' },
     { label: 'Standard Catering', value: 'standard' },
+    { label: 'Wedding Packages', value: 'wedding' },
     { label: 'Debut Packages', value: 'debut' },
   ];
   protected readonly selectedCategory = signal<PackageCategory>(this.readInitialCategory());
@@ -41,6 +42,17 @@ export class PackagesPageComponent {
   protected readonly filteredPackages = computed(() =>
     this.packageService.getPackagesByCategory(this.selectedCategory()),
   );
+  protected readonly packagesForDisplay = computed(() => {
+    const packages = this.filteredPackages();
+    if (this.selectedCategory() !== 'wedding') return packages;
+
+    const order: Record<string, number> = {
+      'Bronze Package': 0,
+      'Silver Package': 1,
+      'Gold Package': 2,
+    };
+    return [...packages].sort((left, right) => (order[left.name] ?? 99) - (order[right.name] ?? 99));
+  });
   constructor() {
     this.packageService.load();
 

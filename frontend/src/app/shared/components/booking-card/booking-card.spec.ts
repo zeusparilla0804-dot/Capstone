@@ -13,6 +13,48 @@ const booking: Booking = {
 };
 
 describe('BookingCardComponent pending actions', () => {
+  it('shows both Completed and Fully Paid with a receipt link after final payment', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, status: 'completed', amountPaid: 54000 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Completed');
+    expect(fixture.nativeElement.textContent).toContain('Fully Paid');
+    expect(fixture.nativeElement.textContent).toContain('View Receipt');
+    expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
+  });
+  it('disables online payment until a QR is assigned, then enables submission after refresh', async () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'gcash', paymentQrReady: false });
+    fixture.detectChanges();
+    const waiting = fixture.nativeElement.querySelector('button[data-testid="waiting-payment-qr"]') as HTMLButtonElement;
+    expect(waiting?.disabled).toBe(true);
+    expect(waiting?.textContent).toContain('Waiting for Payment QR');
+    expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
+    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'gcash', paymentQrReady: true });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[data-testid="waiting-payment-qr"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')?.textContent).toContain('Submit Payment');
+  });
+  it('offers payment selection only after admin approval', async () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', booking);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Choose Payment Method');
+    fixture.componentRef.setInput('booking', { ...booking, status: 'approved' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
+    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const paymentLink = [...fixture.nativeElement.querySelectorAll('a')].find((link: HTMLAnchorElement) => link.textContent?.includes('Choose Payment Method')) as HTMLAnchorElement;
+    expect(paymentLink).toBeDefined();
+    expect(paymentLink.getAttribute('href')).toBe('/book-event?paymentBooking=27&step=4');
+  });
   it('links cash customers to instructions instead of requesting an online payment', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);
@@ -24,6 +66,20 @@ describe('BookingCardComponent pending actions', () => {
     fixture.componentRef.setInput('booking', { ...booking, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 27000 });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).not.toBeNull();
+  });
+
+  it('removes Submit Payment after a verified payment is recorded', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'gcash', status: 'awaiting_payment', paymentQrReady: true });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Submit Payment');
+    expect(fixture.nativeElement.textContent).toContain('View Invoice');
+    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'gcash', status: 'payment_verified', amountPaid: 27000 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
+    expect(fixture.nativeElement.textContent).toContain('View Receipt');
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
   });
 
   it('groups reservation status and available actions in one labelled side rail', () => {

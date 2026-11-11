@@ -52,7 +52,7 @@ export function readEmailConfiguration(env: NodeJS.ProcessEnv) {
   }
   const worker: EmailWorkerSettings = {
     enabled: boolean('EMAIL_WORKER_ENABLED', configured),
-    pollIntervalMs: integer('EMAIL_WORKER_POLL_INTERVAL_MS', 30_000, 1000, 3_600_000),
+    pollIntervalMs: integer('EMAIL_WORKER_POLL_INTERVAL_MS', 5_000, 1000, 3_600_000),
     batchSize: integer('EMAIL_WORKER_BATCH_SIZE', 10, 1, 100),
     maxAttempts: integer('EMAIL_WORKER_MAX_ATTEMPTS', 5, 1, 100),
     retryBaseMs: integer('EMAIL_WORKER_RETRY_BASE_MS', 60_000, 1000, 86_400_000),

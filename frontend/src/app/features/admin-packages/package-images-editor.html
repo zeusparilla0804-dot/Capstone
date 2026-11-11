@@ -1,0 +1,21 @@
+<section class="image-editor admin-panel" aria-labelledby="package-images-title">
+  <header><div><h2 #heading id="package-images-title" tabindex="-1">{{ item().name }} images</h2><p>The first image is the cover. Changes appear on the Packages page and Popular Packages.</p></div>
+    <button type="button" class="btn btn-secondary btn-sm" [disabled]="saving()" (click)="closed.emit()">Close</button></header>
+  @if (error()) { <p class="image-editor__error" role="alert">{{ error() }}</p> }
+  @if (loading()) { <p role="status">Loading images…</p> } @else {
+    <ol class="image-editor__grid">
+      @for (image of images(); track image.key; let index = $index) {
+        <li><img [src]="image.preview" [alt]="item().name + ' image ' + (index + 1)" />
+          <div class="image-editor__caption"><strong>{{ index === 0 ? 'Cover image' : 'Image ' + (index + 1) }}</strong>
+            <div class="image-editor__order"><button type="button" [disabled]="index === 0 || saving()" [attr.aria-label]="'Move image ' + (index + 1) + ' earlier'" (click)="move(index, -1)">Move earlier</button><button type="button" [disabled]="index === images().length - 1 || saving()" [attr.aria-label]="'Move image ' + (index + 1) + ' later'" (click)="move(index, 1)">Move later</button></div>
+            <div class="image-editor__row"><label class="image-editor__file">Replace<input type="file" accept="image/jpeg,image/png,image/webp" [disabled]="saving()" [attr.aria-label]="'Replace image ' + (index + 1)" (change)="select($event, index)" /></label>
+              <button type="button" [disabled]="saving()" [attr.aria-label]="'Remove image ' + (index + 1)" (click)="remove(index)">Remove</button></div>
+          </div>
+        </li>
+      }
+    </ol>
+    @if (!images().length) { <p>Add at least one image before saving.</p> }
+    <div class="image-editor__footer"><div><label class="image-editor__file image-editor__add">Add images<input type="file" accept="image/jpeg,image/png,image/webp" multiple [disabled]="saving() || images().length >= 12" (change)="select($event)" /></label><small>JPEG, PNG, or WebP · Up to 12 images · 5 MB each</small></div>
+      <button type="button" class="btn btn-primary" [disabled]="saving() || !images().length" (click)="save()">{{ saving() ? 'Saving images…' : 'Save Images' }}</button></div>
+  }
+</section>

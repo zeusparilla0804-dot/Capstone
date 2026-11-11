@@ -16,9 +16,11 @@ export class StatusBadgeComponent {
       expired: 'Expired',
       cancelled: 'Cancelled',
       completed: 'Completed',
-      down_payment_verified: '50% Down Payment Verified',
+      down_payment_verified: 'Down Payment Paid',
       fully_paid: 'Fully Paid',
       pending_payment_verification: 'Pending Payment Verification',
+      pending_verification: 'Pending Verification',
+      payment_rejected: 'Payment Rejected',
     };
 
     return statusLabels[this.status().toLowerCase()] ?? this.status().replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase());

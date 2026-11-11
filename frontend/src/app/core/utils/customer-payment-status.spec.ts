@@ -64,4 +64,13 @@ describe('customerPaymentStatus', () => {
     expect(customerPaymentStatus(reservation({ total: undefined, amountPaid: 5000 }))).toBe('down_payment_verified');
     expect(customerPaymentStatus(reservation({ total: undefined, amountPaid: 10000 }))).toBe('fully_paid');
   });
+
+  it('uses the latest proof and verified amount after rejection or refresh', () => {
+    expect(customerPaymentStatus(reservation({ status: 'awaiting_payment', amountPaid: 0, latestProofStatus: 'REJECTED' }))).toBe('payment_rejected');
+    expect(customerPaymentStatus(reservation({ status: 'awaiting_payment', amountPaid: 1000, latestProofStatus: 'REJECTED' }))).toBe('payment_rejected');
+    expect(customerPaymentStatus(reservation({ status: 'payment_verified', amountPaid: 37150, latestProofStatus: 'REJECTED' }))).toBe('down_payment_verified');
+    expect(customerPaymentStatus(reservation({ status: 'completed', amountPaid: 37150 }))).toBe('down_payment_verified');
+    expect(customerPaymentStatus(reservation({ status: 'completed', amountPaid: 74300 }))).toBe('fully_paid');
+    expect(customerPaymentStatus(reservation({ status: 'awaiting_payment', amountPaid: 0, latestProofStatus: 'SUBMITTED' }))).toBe('pending_payment_verification');
+  });
 });

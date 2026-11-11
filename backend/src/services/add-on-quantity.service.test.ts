@@ -32,3 +32,9 @@ test('rejects invalid quantities, unavailable selections, and quantities on othe
   assert.throws(() => priceSelectedAddOns(catalog, { '3': 2 }), /quantity/i);
   assert.throws(() => priceSelectedAddOns(catalog, { '99': 2 }), /selected/i);
 });
+
+test('coffee bar capacity options multiply by the number of stations', () => {
+  const [item] = priceSelectedAddOns([{ id: 5, name: 'Coffee Bar for 100 Guests', description: '', price: 22_000 }], { '5': 5 });
+  assert.equal(item?.quantity, 5);
+  assert.equal(item?.price, 110_000);
+});

@@ -4,6 +4,8 @@ import { provideRouter, Router } from '@angular/router';
 import { signal } from '@angular/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { PublicHeaderComponent } from './public-header';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 
 describe('PublicHeaderComponent', () => {
   let restoreNativeDialog: () => void;
@@ -16,6 +18,7 @@ describe('PublicHeaderComponent', () => {
       imports: [PublicHeaderComponent],
       providers: [
         provideRouter([]),
+        provideHttpClient(), provideHttpClientTesting(),
         {
           provide: AuthService,
           useValue: {

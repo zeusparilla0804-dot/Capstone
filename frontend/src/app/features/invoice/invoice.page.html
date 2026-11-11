@@ -1,7 +1,7 @@
 @if (admin) {
   <app-admin-shell
-    title="Invoice"
-    description="Review and print the issued customer billing agreement."
+    [title]="invoice()?.amountPaid ? 'Payment Receipt' : 'Invoice'"
+    [description]="invoice()?.amountPaid ? 'Review and print verified payments for this booking.' : 'Review and print the issued customer billing agreement.'"
   >
     <ng-container *ngTemplateOutlet="content" />
   </app-admin-shell>
@@ -25,14 +25,14 @@
       <button
         class="btn btn-secondary"
         type="button"
-        data-action="print-billing-agreement"
+        [attr.data-action]="isReceipt(doc) ? 'print-receipt' : 'print-billing-agreement'"
         (click)="print()"
       >
-        Print billing agreement
+        {{ isReceipt(doc) ? 'Print receipt' : 'Print billing agreement' }}
       </button>
     </div>
 
-    <article class="invoice-document">
+    <article class="invoice-document" [class.invoice-document--receipt]="isReceipt(doc)">
       <header class="invoice-header">
         <div class="invoice-brand">
           <strong><span>LA</span> Chef</strong>
@@ -40,20 +40,27 @@
         </div>
 
         <div class="invoice-heading">
-          <p>INVOICE &amp; BILLING AGREEMENT</p>
-          <h1>{{ doc.invoiceNumber }}</h1>
+          <p>{{ isReceipt(doc) ? 'PAYMENT RECEIPT' : 'INVOICE & BILLING AGREEMENT' }}</p>
+          <h1>{{ isReceipt(doc) ? 'Receipt' : doc.invoiceNumber }}</h1>
           <dl>
+            @if (isReceipt(doc)) {
+              <div><dt>Payment reference</dt><dd>{{ doc.payments[0].reference || doc.booking.reference }}</dd></div>
+            } @else {
             <div>
-              <dt>Issue date</dt>
+              <dt>Invoice issued</dt>
               <dd>{{ doc.issueDate | date: 'mediumDate' }}</dd>
             </div>
+            }
+            @if (isReceipt(doc) && doc.payments.length) {
+              <div><dt>Latest payment</dt><dd>{{ doc.payments[0].date | date: 'mediumDate' }}</dd></div>
+            }
             <div>
               <dt>Balance due</dt>
               <dd>{{ doc.dueDate ? (doc.dueDate | date: 'mediumDate': 'UTC') : 'Not set' }}</dd>
             </div>
             <div>
               <dt>Status</dt>
-              <dd><app-status-badge [status]="doc.status" /></dd>
+              <dd><app-status-badge [status]="paymentStatus(doc)" /></dd>
             </div>
           </dl>
         </div>
@@ -74,6 +81,9 @@
               <dt>Reservation</dt>
               <dd>{{ doc.booking.reference }}</dd>
             </div>
+            @if (doc.booking.status === 'COMPLETED') {
+              <div><dt>Event status</dt><dd><app-status-badge status="COMPLETED" /></dd></div>
+            }
             <div>
               <dt>Event</dt>
               <dd>{{ doc.booking.eventType }}</dd>
@@ -127,10 +137,6 @@
             <dt>Subtotal</dt>
             <dd>{{ doc.subtotal | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
           </div>
-          <div>
-            <dt>Discount</dt>
-            <dd>-{{ doc.discount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
-          </div>
           <div class="total">
             <dt>Total</dt>
             <dd>{{ doc.totalAmount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
@@ -148,35 +154,36 @@
 
       <section class="invoice-agreement" aria-labelledby="agreement-title">
         <div class="invoice-agreement__heading">
-          <h2 id="agreement-title">Terms and agreement</h2>
-          <p>Please review these reservation and payment terms before signing.</p>
+          <h2 id="agreement-title">{{ isReceipt(doc) ? 'Payment acknowledgment' : 'Terms and agreement' }}</h2>
+          <p>{{ isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
         </div>
 
-        <ol>
-          <li>A 50% down payment is required to confirm the reservation.</li>
-          <li>The remaining balance is due on the event date.</li>
-          <li>
-            Upon signing this agreement, cancellation by the client will result in forfeiture
-            of 50% of the total reservation amount.
-          </li>
-        </ol>
+        @if (!isReceipt(doc)) {
+          <ol>
+            <li>A 50% down payment is required to confirm the reservation.</li>
+            <li>The remaining balance is due on the event date.</li>
+            <li>
+              Upon signing this agreement, cancellation by the client will result in forfeiture
+              of 50% of the total reservation amount.
+            </li>
+          </ol>
+        }
 
         <div class="invoice-signatures" aria-label="Agreement signatures">
           <div class="invoice-signature">
-            <span aria-hidden="true"></span>
-            <strong>Customer signature</strong>
-            <small>Printed name and date</small>
+            <span class="invoice-signature__line"><span class="invoice-signature__name">{{ doc.customer.name }}</span></span>
+            <strong>Name and signature</strong>
           </div>
           <div class="invoice-signature">
-            <span aria-hidden="true"></span>
+            <span class="invoice-signature__line"><span class="invoice-signature__name">{{ doc.issuer?.name }}</span></span>
             <strong>Authorized LA Chef representative</strong>
-            <small>Printed name and date</small>
           </div>
         </div>
       </section>
 
-      <section class="payment-history no-print">
-        <h2>Payment History</h2>
+      @if (doc.payments.length) {
+      <section class="payment-history" [class.no-print]="!isReceipt(doc)">
+        <h2>Verified payments</h2>
         @if (doc.payments.length) {
           <div class="invoice-table-wrap">
             <table class="invoice-table">
@@ -200,7 +207,7 @@
                         &mdash;
                       }
                     </td>
-                    <td>{{ payment.method.replaceAll('_', ' ') }}</td>
+                    <td>{{ payment.method | paymentMethodLabel }}</td>
                     <td>{{ payment.amount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</td>
                     <td>{{ payment.status }}</td>
                   </tr>
@@ -208,10 +215,9 @@
               </tbody>
             </table>
           </div>
-        } @else {
-          <p>No payments recorded yet.</p>
         }
       </section>
+      }
 
       <footer>Thank you for choosing LA Chef Event Catering Services.</footer>
     </article>

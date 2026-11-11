@@ -59,7 +59,9 @@ export function createEmailWorker(deps: WorkerDependencies) {
     const result: BatchResult = { disabled: !deps.transport || !deps.settings.enabled, claimed: 0, sent: 0, retried: 0, failed: 0 };
     if (result.disabled) return result;
     const transport = deps.transport!;
-    const claimed = await deps.repository.claim(now, deps.settings);
+    const priority = (item: ClaimedEmail) => item.templateKey === 'EMAIL_VERIFICATION_CODE' || item.templateKey === 'PASSWORD_RESET_REQUESTED' ? 0 : 1;
+    // UPDATE ... OUTPUT does not guarantee the order selected by the claim query.
+    const claimed = (await deps.repository.claim(now, deps.settings)).sort((a, b) => priority(a) - priority(b) || +new Date(a.createdAt) - +new Date(b.createdAt));
     result.claimed = claimed.length;
     for (const item of claimed) {
       if (retiredCustomQuotationTemplates.has(item.templateKey)) {

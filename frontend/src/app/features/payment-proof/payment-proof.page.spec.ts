@@ -1,12 +1,13 @@
 import { HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
 import { Subject, of } from 'rxjs';
 import type { Booking, PaymentProof } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PaymentProofService } from '../../core/services/payment-proof.service';
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 import { PaymentProofPageComponent } from './payment-proof.page';
 
 const booking: Booking = {
@@ -14,7 +15,7 @@ const booking: Booking = {
   eventDate: '2026-12-10', eventTime: '18:00', venue: 'Santa Rosa, Laguna', guestCount: 100,
   package: { packageId: '3', packageName: 'Premium', pricingType: 'PER_HEAD', pricePerGuest: 850,
     basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 85000 }, addOns: [], discount: 0,
-  status: 'awaiting_payment', amountPaid: 10000, createdAt: '2026-10-01', thumbnailUrl: 'assets/test.webp'
+  status: 'awaiting_payment', paymentMethod: 'gcash', amountPaid: 10000, createdAt: '2026-10-01', thumbnailUrl: 'assets/test.webp'
 };
 
 const submittedProof: PaymentProof = {
@@ -24,6 +25,23 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+  it('waits for the admin payment request before allowing a payment choice', async () => {
+    bookingState.set([{ ...booking, status: 'approved', amountPaid: 0, paymentMethod: undefined }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Waiting for payment request');
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    const component = fixture.componentInstance as any;
+    await component.choosePayment('gcash');
+    expect(TestBed.inject(BookingService).choosePaymentMethod).not.toHaveBeenCalled();
+    bookingState.set([{ ...booking, status: 'awaiting_payment', amountPaid: 0, paymentMethod: undefined }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Choose payment method');
+    expect(TestBed.inject(Router).navigate).toHaveBeenCalledWith(['/book-event'], {
+      queryParams: { paymentBooking: '42', step: 4 }, replaceUrl: true,
+    });
+    await component.choosePayment('gcash');
+    expect(TestBed.inject(BookingService).choosePaymentMethod).toHaveBeenCalledWith('42', 'gcash');
+  });
 
   it('shows office-only cash instructions instead of an online proof form', () => {
     bookingState.set([{ ...booking, paymentMethod: 'cash' }]);
@@ -68,6 +86,24 @@ describe('PaymentProofPageComponent', () => {
     bookingState.set([{ ...booking, paymentMethod: 'bank-transfer' }]);
     fixture.detectChanges();
     expect((fixture.componentInstance as any).form.controls.method.value).toBe('BANK_TRANSFER');
+    expect(fixture.nativeElement.querySelector('[data-testid="selected-payment-method"]')?.textContent).toContain('Bank transfer');
+    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+  });
+
+  it('displays the saved payment method without asking the customer to select it again', () => {
+    bookingState.set([{ ...booking, amountPaid: 0 }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="selected-payment-method"]')?.textContent).toContain('GCash');
+    expect(TestBed.inject(BookingService).choosePaymentMethod).not.toHaveBeenCalled();
+    bookingState.set([{ ...booking, paymentMethod: 'cash', amountPaid: 0 }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Pay at the LA Chef office');
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+    (fixture.componentInstance as any).proofs.set([submittedProof]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('select')).toBeNull();
   });
 
   let fixture: ComponentFixture<PaymentProofPageComponent>;
@@ -76,6 +112,8 @@ describe('PaymentProofPageComponent', () => {
   let proofApi: { listProofs: ReturnType<typeof vi.fn>; submitProof: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:assigned-qr');
+    URL.revokeObjectURL = vi.fn();
     bookingState = signal<readonly Booking[]>([booking]);
     submitEvents = new Subject();
     proofApi = { listProofs: vi.fn(() => of([])), submitProof: vi.fn(() => submitEvents.asObservable()) };
@@ -84,11 +122,19 @@ describe('PaymentProofPageComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '42' }) } } },
-        { provide: BookingService, useValue: { bookings: bookingState.asReadonly(), loading: signal(false), error: signal(''), loadMine: vi.fn() } },
+        { provide: BookingService, useValue: { bookings: bookingState.asReadonly(), loading: signal(false), error: signal(''), loadMine: vi.fn(),
+          choosePaymentMethod: vi.fn(async (_id: string, method: string) => {
+            bookingState.set([{ ...bookingState()[0]!, status: 'awaiting_payment', paymentMethod: method === 'gcash' ? 'gcash' : method as any }]);
+          }) } },
         { provide: PaymentProofService, useValue: proofApi },
+        { provide: PaymentDestinationService, useValue: {
+          assigned: vi.fn(() => of({ id: 1, label: 'GCash', method: 'E-WALLET', accountName: 'LA Chef', accountHint: 'Ending 1234' })),
+          image: vi.fn(() => of(new Blob(['qr'], { type: 'image/png' }))),
+        } },
         { provide: AuthService, useValue: { user: signal({ id: '7', fullName: 'Klint Charles' }), logout: vi.fn() } }
       ]
     }).compileComponents();
+    vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     fixture = TestBed.createComponent(PaymentProofPageComponent);
     fixture.detectChanges();
   });
@@ -99,6 +145,26 @@ describe('PaymentProofPageComponent', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('input[type="file"]')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Payment proof is not available');
+  });
+
+  it('does not repeat a saved-choice popup when reopening Submit Payment without an assigned QR', () => {
+    bookingState.set([{ ...booking, amountPaid: 0 }]);
+    fixture.detectChanges();
+    const api = TestBed.inject(PaymentDestinationService);
+    vi.mocked(api.assigned).mockReturnValue(of(null));
+    (fixture.componentInstance as any).loadDestination();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-success-dialog')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Payment instructions');
+    expect(fixture.nativeElement.textContent).not.toContain('Check again');
+    expect(fixture.nativeElement.querySelector('.qr-waiting')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.submit-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    vi.mocked(api.assigned).mockReturnValue(of({ id: 1, label: 'GCash', method: 'E-WALLET', accountName: 'LA Chef', accountHint: 'Ending 1234' }));
+    (fixture.componentInstance as any).loadDestination();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Submit payment proof');
+    expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
   });
 
   for (const lifecycle of ['payment_verified', 'confirmed', 'completed'] as const) {
@@ -150,8 +216,12 @@ describe('PaymentProofPageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       form: { setValue(value: unknown): void };
       selectedFile: { set(file: File): void };
+      destination: { set(value: unknown): void };
+      destinationImage: { set(value: string): void };
       submit(): void;
     };
+    component.destination.set({ id: 1, label: 'GCash', method: 'E-WALLET', accountName: 'LA Chef', accountHint: 'Ending 1234' });
+    component.destinationImage.set('blob:test');
     component.form.setValue({ method: 'E_WALLET', claimedAmount: 5000, transactionReference: 'GCASH-42', paymentDate: '2026-10-02' });
     component.selectedFile.set(new File(['proof'], 'proof.png', { type: 'image/png' }));
     component.submit();
@@ -179,8 +249,12 @@ describe('PaymentProofPageComponent', () => {
     const component = fixture.componentInstance as unknown as {
       form: { setValue(value: unknown): void; value: { transactionReference: string } };
       selectedFile: { set(file: File): void };
+      destination: { set(value: unknown): void };
+      destinationImage: { set(value: string): void };
       submit(): void;
     };
+    component.destination.set({ id: 1, label: 'GCash', method: 'E-WALLET', accountName: 'LA Chef', accountHint: 'Ending 1234' });
+    component.destinationImage.set('blob:test');
     component.form.setValue({ method: 'E_WALLET', claimedAmount: 5000, transactionReference: 'USED-REFERENCE', paymentDate: '2026-10-02' });
     component.selectedFile.set(new File(['proof'], 'proof.png', { type: 'image/png' }));
     component.submit();

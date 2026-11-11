@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AppError } from './app-error.js';
-import { emailAddress, finiteMoney, identifier, isoDate, philippineMobileNumber, text, time24 } from './validation.js';
+import { emailAddress, finiteMoney, identifier, isoDate, philippineMobileNumber, registrationEmailAddress, text, time24 } from './validation.js';
 
 test('Philippine mobile numbers accept only local or +63 mobile formats and normalize display spaces', () => {
   for (const [input, expected] of [
@@ -40,4 +40,16 @@ test('text and email enforce normalized length and shape', () => {
   assert.equal(emailAddress(' CHEF@example.com '), 'chef@example.com');
   assert.throws(() => text('123456', 'Name', { max: 5 }), AppError);
   assert.throws(() => emailAddress('not-an-email'), AppError);
+});
+
+test('registration email rejects one-character local names', () => {
+  assert.throws(() => registrationEmailAddress('q@gmail.com'), AppError);
+  assert.equal(registrationEmailAddress('klint@gmail.com'), 'klint@gmail.com');
+});
+
+test('mobile validation rejects repeated and sequential dummy digits', () => {
+  for (const phone of ['09111111111', '09123456789', '09999999999', '+639123456789']) {
+    assert.throws(() => philippineMobileNumber(phone), AppError, phone);
+  }
+  assert.equal(philippineMobileNumber('09171234567'), '09171234567');
 });

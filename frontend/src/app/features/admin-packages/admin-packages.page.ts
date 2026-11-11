@@ -6,10 +6,11 @@ import { finalize, forkJoin } from 'rxjs';
 import { AdminPackage, AdminPackageInput, EventTypeOption, PackagePricingType } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
+import { PackageImagesEditorComponent } from './package-images-editor';
 
 @Component({
   selector: 'app-admin-packages',
-  imports: [AdminShellComponent, ReactiveFormsModule, RouterLink],
+  imports: [AdminShellComponent, ReactiveFormsModule, RouterLink, PackageImagesEditorComponent],
   templateUrl: './admin-packages.page.html',
   styleUrl: './admin-packages.page.scss',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -17,6 +18,8 @@ import { AdminShellComponent } from '../../shared/components/admin-shell/admin-s
 export class AdminPackagesPage {
   private readonly api = inject(AdminService);
   protected readonly items = signal<readonly AdminPackage[]>([]);
+  protected readonly imagePackage = signal<AdminPackage | null>(null);
+  protected imagesSaved(): void { this.imagePackage.set(null); this.message.set('Package images updated.'); }
   protected readonly events = signal<readonly EventTypeOption[]>([]);
   protected readonly loading = signal(true);
   protected readonly loadError = signal('');

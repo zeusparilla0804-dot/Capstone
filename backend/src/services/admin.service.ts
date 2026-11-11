@@ -87,12 +87,17 @@ export const adminService={dashboard:adminOperationsService.dashboard,bookings:r
  async createAddOn(adminId:number,v:AddOnInput){validateAddOn(v);const id=await repo.createAddOn(v);await writeAdminAudit({adminId,action:'ADD_ON_CREATED',entityType:'ADD_ON',entityId:id,newValues:auditAddOn(v)});return id;},async updateAddOn(adminId:number,id:number,v:AddOnInput){validateAddOn(v);if(!(await repo.updateAddOn(id,v)))throw new AppError(404,'Add-on not found.');await writeAdminAudit({adminId,action:'ADD_ON_UPDATED',entityType:'ADD_ON',entityId:id,newValues:auditAddOn(v)});},
  async recordPayment(adminId:number,v:PaymentInput){
   if(!Number.isSafeInteger(v.reservationId)||v.reservationId<1||!['CASH','BANK_TRANSFER','E-WALLET'].includes(v.method))throw new AppError(400,'Payment details are invalid.');
-  if(typeof v.reference!=='string'||!v.reference.trim())throw new AppError(400,'A receipt/transaction reference is required before recording a payment.');
+  if(v.method==='CASH'){
+   if(typeof v.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v.requestId))throw new AppError(400,'A valid cash payment request ID is required. Refresh the page and try again.');
+   // The durable unique (method, reference) key makes retries of this request one receipt.
+   v.reference=`CASH-${v.requestId.replace(/-/g,'').toUpperCase()}`;
+  }else if(typeof v.reference!=='string'||!v.reference.trim())throw new AppError(400,'A receipt/transaction reference is required before recording a payment.');
   v.amount=finiteMoney(v.amount,'Payment amount');
   v.paymentDate=isoDate(v.paymentDate,'Payment date');
   v.reference=text(v.reference,'Payment reference',{max:150});
   try{if(!(await repo.recordPayment(adminId,v)))throw new AppError(404,'Booking payment record not found.');}
-  catch(e){if(e instanceof Error&&e.message==='PAYMENT_REFERENCE_CONFLICT')throw new AppError(409,'This payment reference has already been recorded with different booking, amount, or date details.');if(e instanceof Error&&e.message==='OVERPAYMENT')throw new AppError(409,'Payment exceeds the outstanding balance.');if(e instanceof Error&&e.message==='PAYMENT_BOOKING_STATUS')throw new AppError(409,'Payments can only be recorded for an active approved booking.');if(isDuplicateKey(e))throw new AppError(409,'This payment reference has already been recorded.');throw e;}
+  catch(e){if(e instanceof Error&&e.message==='PAYMENT_REFERENCE_CONFLICT')throw new AppError(409,'This payment reference has already been recorded with different booking, amount, or date details.');if(e instanceof Error&&e.message==='OVERPAYMENT')throw new AppError(409,'Payment exceeds the outstanding balance.');if(e instanceof Error&&e.message==='PAYMENT_BOOKING_STATUS')throw new AppError(409,'Payments can only be recorded for an active approved booking.');if(e instanceof Error&&e.message==='PAYMENT_METHOD_NOT_SELECTED')throw new AppError(409,'The customer must choose this payment method after approval before payment can be recorded.');if(isDuplicateKey(e))throw new AppError(409,'This payment reference has already been recorded.');throw e;}
+  return {reference:v.reference};
  }
 };
 function validateAddOn(v:AddOnInput){v.name=text(v.name,'Add-on name',{max:150});if(v.description.length>1000)throw new AppError(400,'Description is too long.');v.price=finiteMoney(v.price,'Add-on price',true);}

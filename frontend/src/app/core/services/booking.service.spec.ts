@@ -20,6 +20,23 @@ describe('BookingService cancellation', () => {
   });
   afterEach(() => http.verify());
 
+  it('shows the latest created reservation first even when its event is later', () => {
+    (service as any).state.set([
+      { id: '1', status: 'confirmed', eventDate: '2026-11-09', createdAt: '2026-11-01T09:00:00.000Z' },
+      { id: '2', status: 'pending', eventDate: '2026-11-10', createdAt: '2026-11-06T09:00:00.000Z' },
+    ]);
+    expect(service.getBookingsByTab('upcoming').map(item => item.id)).toEqual(['2', '1']);
+  });
+
+  it('chooses payment for an approved booking through its owner-scoped endpoint', async () => {
+    const selected = service.choosePaymentMethod('27', 'gcash').catch(error => error);
+    const request = http.expectOne(`${environment.apiBaseUrl}/bookings/27/payment-method`);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ method: 'e-wallet' });
+    request.flush({ success: true, data: { id: 27, reference: 'BK-27', eventType: 'wedding', package: { packageId: 1 }, addOns: [] } });
+    expect((await selected).id).toBe('27');
+  });
+
   it('retries an uncertain create with the same submission key and canonical request details', async () => {
     const draft = { eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Venue',
       guestCount: 50, selectedAddOnIds: [], paymentMethod: 'gcash' } as any;
@@ -87,6 +104,14 @@ describe('BookingService cancellation', () => {
     expect(request.request.params.get('reservationId')).toBe('27');
     request.flush({ success: true, data: {} });
   });
+  it('loads a whole month of date availability for the selected guest count', () => {
+    service.checkMonthAvailability('2026-11', 500).subscribe(result => {
+      expect(result).toEqual([{ date: '2026-11-10', status: 'FULL' }]);
+    });
+    const request = http.expectOne(req => req.url.endsWith('/bookings/availability/month'));
+    expect(request.request.params.get('guestCount')).toBe('500');
+    request.flush({ success: true, data: [{ date: '2026-11-10', status: 'FULL' }] });
+  });
 
   it('rejects a payload that silently drops a selected add-on before making an HTTP request', async () => {
     await expect(service.submitDraft({ selectedAddOnIds: ['5'], eventTime: '12:00' } as any, { id: '1' } as any, [], submissionKey)).rejects.toThrow(/add-ons/i);
@@ -135,19 +160,26 @@ describe('BookingService cancellation', () => {
     }
   });
 
-  it('maps booking thumbnails to assets that exist in the package image directory', () => {
+  it.each([
+    ['wedding', 'wedding/client-wedding-01.jpg'],
+    ['birthday', 'birthday/client-kids-birthday-01.jpg'],
+    ['debut', 'debut/client-debut-11.jpg'],
+    ['corporate', 'corporate/client-business-forum-01.jpg'],
+    ['anniversary', 'anniversary/client-anniversary-01.jpg'],
+    ['other', 'custom/client-private-01.jpg'],
+  ])('uses a matching event photo for %s bookings', (eventType, image) => {
     service.loadMine();
     http.expectOne(`${environment.apiBaseUrl}/bookings/my`).flush({
       success: true,
       data: [{
-        id: 1, reference: 'LC-1', customerId: '7', eventName: 'Wedding', eventType: 'wedding',
+        id: 1, reference: 'LC-1', customerId: '7', eventName: 'Event', eventType,
         eventDate: '2026-12-10', eventTime: '12:00', venue: 'Venue', guestCount: 50,
         package: { packageId: 1, packageName: 'Package', pricePerGuest: 200 }, addOns: [],
         discount: 0, total: 10000, status: 'pending', amountPaid: 0, createdAt: '2026-10-01'
       }],
     });
 
-    expect(service.bookings()[0]?.thumbnailUrl).toBe('assets/images/packages/premium-package.webp');
+    expect(service.bookings()[0]?.thumbnailUrl).toBe(`assets/images/packages/${image}`);
   });
 
   it('submits GCash as the backend e-wallet payment method', async () => {

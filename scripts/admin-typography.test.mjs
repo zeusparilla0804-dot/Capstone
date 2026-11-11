@@ -32,18 +32,9 @@ test('admin portal uses IBM Plex Sans while preserving the customer and brand ty
     shell,
     /\.admin-page-header h1\s*{[^}]*font-family:\s*var\(--font-admin\);[^}]*font-weight:\s*600;[^}]*letter-spacing:\s*-0\.025em;/,
   );
-  assert.match(
-    login,
-    /\.admin-login\s*{[^}]*--font-serif:\s*var\(--font-admin\);[^}]*font-family:\s*var\(--font-admin\);/,
-  );
-  assert.match(
-    login,
-    /\.admin-brand h1\s*{[^}]*font-family:\s*var\(--font-admin\);[^}]*font-weight:\s*600;/,
-  );
-  assert.match(
-    login,
-    /\.admin-form-panel h2\s*{[^}]*font-family:\s*var\(--font-admin\);[^}]*font-weight:\s*600;/,
-  );
+  // The sign-in screen deliberately uses public brand typography; the admin workspace uses IBM Plex Sans.
+  assert.match(login, /\.admin-login\s*{[^}]*font-family:\s*var\(--font-sans\);/);
+  assert.match(login, /\.admin-form-panel h1\s*{[^}]*font-family:\s*var\(--font-serif\);/);
   assert.match(
     dashboard,
     /\.priority-grid strong\s*{[^}]*font-family:\s*var\(--font-admin\);[^}]*font-weight:\s*600;/,

@@ -54,14 +54,18 @@ export class EventsPageComponent {
       name: 'Anniversaries',
       category: 'anniversary',
       packageCategory: 'standard',
-      images: ['assets/images/packages/anniversary/anniversary-wide.png'],
+      images: [1, 2, 3, 4, 5].map(
+        (index) => `assets/images/packages/anniversary/client-anniversary-${String(index).padStart(2, '0')}.jpg`,
+      ),
       copy: 'Warm menus for couples and families marking meaningful years together.',
     },
     {
       name: 'Private celebrations',
       category: 'custom',
       packageCategory: 'standard',
-      images: ['assets/images/hero/la-chef-hero.webp'],
+      images: [1, 2, 3, 4].map(
+        (index) => `assets/images/packages/custom/client-private-${String(index).padStart(2, '0')}.jpg`,
+      ),
       copy: 'Flexible catering for baptisms, graduations, reunions, and celebrations made your own.',
     },
   ];

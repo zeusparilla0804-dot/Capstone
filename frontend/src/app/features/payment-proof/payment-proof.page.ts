@@ -2,11 +2,11 @@ import { hasCashPaymentAction, hasOnlinePaymentAction } from '../../core/utils/c
 import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, OnDestroy, signal, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
-import { MAX_PAYMENT_PROOF_BYTES, PaymentProof, PaymentProofMethod, PaymentProofSubmission } from '../../core/models';
+import { MAX_PAYMENT_PROOF_BYTES, PaymentMethod, PaymentProof, PaymentProofMethod, PaymentProofSubmission } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingCalculationService } from '../../core/services/booking-calculation.service';
 import { BookingService } from '../../core/services/booking.service';
@@ -16,6 +16,7 @@ import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/compon
 import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 import { customerNavItems } from '../../shared/navigation/customer-navigation';
 import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
+import { PaymentDestination, PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 @Component({
   selector: 'app-payment-proof-page',
@@ -24,7 +25,7 @@ import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
   styleUrl: './payment-proof.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class PaymentProofPageComponent {
+export class PaymentProofPageComponent implements OnDestroy {
   @ViewChild('proofInput') private proofInput?: ElementRef<HTMLInputElement>;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -32,10 +33,15 @@ export class PaymentProofPageComponent {
   protected readonly bookingService = inject(BookingService);
   private readonly calculationService = inject(BookingCalculationService);
   private readonly proofService = inject(PaymentProofService);
+  private readonly destinationService = inject(PaymentDestinationService);
   private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly bookingId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly booking = computed(() => this.bookingService.bookings().find(item => item.id === this.bookingId));
   protected readonly cashPayment = computed(() => this.booking()?.paymentMethod === 'cash');
+  protected readonly itemStatusApproved = computed(() => this.booking()?.status === 'approved');
+  protected readonly paymentChoiceNeeded = computed(() => this.booking()?.status === 'awaiting_payment' && !this.booking()?.paymentMethod);
+  protected readonly choosingPayment = signal(false);
+  protected readonly paymentChoiceError = signal('');
   protected readonly cashDeadline = computed(() => {
     const item = this.booking();
     return item?.paymentMethod === 'cash' ? cashDepositDeadline(item.eventDate, item.guestCount) : null;
@@ -46,6 +52,7 @@ export class PaymentProofPageComponent {
   }
   protected readonly cashInstructionsAvailable = computed(() => !!this.booking() && hasCashPaymentAction(this.booking()!));
   protected readonly eligible = computed(() => !!this.booking() && hasOnlinePaymentAction(this.booking()!));
+  protected readonly waitingForQr = computed(() => this.eligible() && !this.destinationImage());
   private readonly totals = computed(() => {
     const item = this.booking();
     return item ? this.calculationService.calculateTotals(item) : null;
@@ -56,8 +63,19 @@ export class PaymentProofPageComponent {
   protected readonly outstandingBalance = computed(() => Math.max(this.estimatedTotal() - (this.booking()?.amountPaid ?? 0), 0));
   protected readonly paymentAmountChoice = signal<'deposit' | 'full' | 'custom'>('deposit');
   protected readonly proofs = signal<readonly PaymentProof[]>([]);
+  protected readonly destination = signal<PaymentDestination | null>(null);
+  protected readonly destinationLoading = signal(true);
+  protected readonly destinationError = signal('');
+  protected readonly destinationImage = signal('');
   protected readonly historyLoading = signal(true);
   protected readonly historyError = signal('');
+  protected readonly paymentChoiceAvailable = computed(() => {
+    const item = this.booking();
+    return !!item && item.status === 'awaiting_payment'
+      && item.amountPaid === 0 && this.proofs().length === 0;
+  });
+  protected readonly canChoosePayment = computed(() => this.paymentChoiceAvailable()
+    && !this.historyLoading() && !this.historyError() && !this.submitting() && !this.choosingPayment());
   protected readonly selectedFile = signal<File | null>(null);
   protected readonly fileError = signal('');
   protected readonly submitError = signal('');
@@ -72,21 +90,81 @@ export class PaymentProofPageComponent {
   });
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
   private initializedBookingKey: string | null = null;
+  private destinationRequest = 0;
+  private readonly qrRefreshTimer: ReturnType<typeof setInterval>;
 
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     effect(() => {
       const item = this.booking();
       if (!item) return;
+      if (item.status === 'awaiting_payment' && !item.paymentMethod) {
+        void this.router.navigate(['/book-event'], { queryParams: { paymentBooking: item.id, step: 4 }, replaceUrl: true });
+        return;
+      }
       const key = `${item.id}:${item.paymentMethod ?? ''}`;
       if (this.initializedBookingKey === key) return;
       this.initializedBookingKey = key;
       this.form.controls.method.setValue(item.paymentMethod === 'bank-transfer' ? 'BANK_TRANSFER' : item.paymentMethod === 'cash' ? 'CASH' : 'E_WALLET');
+      if (item.paymentMethod) this.form.controls.method.disable({ emitEvent: false });
       this.selectPaymentAmount(this.remainingDeposit() > 0 ? 'deposit' : 'full');
+      this.loadDestination();
     });
     if (!this.booking()) this.bookingService.loadMine();
     this.loadProofs();
     this.form.controls.method.valueChanges.subscribe(method => this.configureReference(method));
+    this.qrRefreshTimer = setInterval(() => {
+      if (this.eligible() && !this.destinationImage() && !this.destinationLoading()) this.loadDestination();
+    }, 15_000);
+  }
+
+  ngOnDestroy(): void { clearInterval(this.qrRefreshTimer); if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage()); }
+
+
+
+  protected loadDestination(): void {
+    const request = ++this.destinationRequest;
+    this.destinationLoading.set(true); this.destinationError.set(''); this.destination.set(null);
+    if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage());
+    this.destinationImage.set('');
+    this.destinationService.assigned(this.bookingId).subscribe({
+      next: item => {
+        if (request !== this.destinationRequest) return;
+        this.destination.set(item); this.destinationLoading.set(false);
+        if (item) this.destinationService.image(item.id).subscribe({
+          next: blob => { if (request === this.destinationRequest) this.destinationImage.set(URL.createObjectURL(blob)); },
+          error: () => { if (request === this.destinationRequest) this.destinationError.set('Unable to load the assigned QR image.'); },
+        });
+      },
+      error: () => { if (request === this.destinationRequest) { this.destinationLoading.set(false); this.destinationError.set('Unable to check payment instructions.'); } },
+    });
+  }
+
+  protected async choosePayment(method: PaymentMethod): Promise<void> {
+    if (!this.canChoosePayment() || this.booking()?.paymentMethod === method) return;
+    this.choosingPayment.set(true);
+    this.paymentChoiceError.set('');
+    try {
+      await this.bookingService.choosePaymentMethod(this.bookingId, method);
+    } catch (error) {
+      this.paymentChoiceError.set(error instanceof HttpErrorResponse && typeof error.error?.message === 'string'
+        ? error.error.message : 'Unable to save your payment method. Please try again.');
+    } finally {
+      this.choosingPayment.set(false);
+    }
+  }
+
+  protected async onPaymentMethodChange(event: Event): Promise<void> {
+    const select = event.target as HTMLSelectElement;
+    const previous = this.booking()?.paymentMethod ?? '';
+    const method = select.value;
+    if (!['gcash', 'bank-transfer', 'cash'].includes(method)) {
+      select.value = previous;
+      return;
+    }
+    await this.choosePayment(method as PaymentMethod);
+    this.loadDestination();
+    if (this.booking()?.paymentMethod !== method) select.value = previous;
   }
 
   protected selectPaymentAmount(choice: 'deposit' | 'full'): void {
@@ -134,7 +212,7 @@ export class PaymentProofPageComponent {
   }
 
   protected submit(): void {
-    if (this.submitting() || !this.eligible() || this.form.controls.method.value === 'CASH') return;
+    if (this.submitting() || this.choosingPayment() || !this.eligible() || this.form.controls.method.value === 'CASH' || !this.destination() || !this.destinationImage()) return;
     this.configureReference(this.form.controls.method.value);
     this.form.markAllAsTouched();
     const file = this.selectedFile();

@@ -66,7 +66,7 @@ async function api(base: string, path: string, init: RequestInit = {}, expected 
 
 async function proofForm(reference: string, amount: number, paymentDate: string): Promise<FormData> {
   const form = new FormData();
-  form.set('method', 'E_WALLET');
+  form.set('method', 'BANK_TRANSFER');
   form.set('claimedAmount', amount.toFixed(2));
   form.set('transactionReference', reference);
   form.set('paymentDate', paymentDate);
@@ -86,6 +86,7 @@ async function cleanup(): Promise<void> {
         .query(`
           DELETE FROM dbo.EMAIL_OUTBOX WHERE recipient IN(@emailA,@emailB)
             OR (related_entity_type='BOOKING' AND related_entity_id=@id);
+          DELETE FROM dbo.BOOKING_PAYMENT_DESTINATION WHERE reservation_id=@id;
           DELETE FROM dbo.PAYMENT_PROOF WHERE reservation_id=@id;
           DELETE FROM dbo.BOOKING_STATUS_HISTORY WHERE reservation_id=@id;
           DELETE FROM dbo.ADMIN_AUDIT_LOG WHERE admin_id=@adminId
@@ -187,11 +188,11 @@ try {
   }, 201);
   created.capacityPackage = Number(capacityPackageCreate.body.data.id);
 
-  const eventDate = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+  const eventDate = new Date(Date.now() + 8 * 86_400_000).toISOString().slice(0, 10);
   const bookingCreate = await api(base, '/bookings', {
     method: 'POST', headers: { cookie: customerACookie }, body: JSON.stringify({
       eventType: event.event_type, eventDate, eventTime: '14:00', venue: `${marker} Venue`, guestCount: 10,
-      packageId: created.package, addOnIds: [], paymentMethod: 'e-wallet'
+      packageId: created.package, addOnIds: []
     })
   }, 201);
   created.booking = Number(bookingCreate.body.data.id);
@@ -210,7 +211,6 @@ try {
     guestCount,
     packageId: created.capacityPackage,
     addOnIds: [],
-    paymentMethod: 'cash',
   });
   const capacityBooking = async (eventDate: string, guestCount: number, sessionCookie: string) => {
     const result = await api(base, '/bookings', {
@@ -241,13 +241,13 @@ try {
     method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED', capacityConfirmed: true })
   });
   capacityDetail = await api(base, `/admin/bookings/${mediumBookingId}`, { headers: { cookie: adminCookie } });
-  assert.equal(capacityDetail.body.data.status, 'APPROVED');
+  assert.equal(capacityDetail.body.data.status, 'AWAITING_PAYMENT');
   assert.ok(capacityDetail.body.data.statusHistory.some((entry: { nextStatus: string }) => entry.nextStatus === 'APPROVED'));
   const confirmationAudit = await pool.request()
     .input('adminId', sql.Int, created.admin)
     .input('bookingId', sql.Int, mediumBookingId)
     .query(`SELECT TOP 1 new_values newValues FROM dbo.ADMIN_AUDIT_LOG
-      WHERE admin_id=@adminId AND entity_type='BOOKING' AND entity_id=@bookingId AND action='BOOKING_STATUS_CHANGED'
+      WHERE admin_id=@adminId AND entity_type='BOOKING' AND entity_id=@bookingId AND action='BOOKING_STATUS_CHANGED' AND JSON_VALUE(new_values,'$.status')='APPROVED'
       ORDER BY audit_id DESC`);
   assert.equal(JSON.parse(String(confirmationAudit.recordset[0].newValues)).capacityConfirmed, true);
 
@@ -273,13 +273,17 @@ try {
   await api(base, `/admin/bookings/${created.booking}/status`, {
     method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' })
   });
+  await api(base, `/bookings/${created.booking}/payment-method`, { method: 'PATCH', headers: { cookie: customerACookie }, body: JSON.stringify({ method: 'bank-transfer' }) });
   const issued = await api(base, `/admin/bookings/${created.booking}/invoice`, {
     method: 'POST', headers: { cookie: adminCookie }, body: '{}'
   }, 201);
   created.invoice = Number(issued.body.data.invoiceId);
   await api(base, `/invoices/${created.invoice}`, { headers: { cookie: customerBCookie } }, 404);
-  await api(base, `/admin/bookings/${created.booking}/status`, {
-    method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'AWAITING_PAYMENT' })
+  const destinations = await api(base, '/admin/payment-destinations', { headers: { cookie: adminCookie } });
+  const destination = destinations.body.data.find((item: {method: string; isAvailable: boolean}) => item.method === 'BANK_TRANSFER' && item.isAvailable);
+  assert.ok(destination, 'An available bank QR is required.');
+  await api(base, `/admin/payment-destinations/bookings/${created.booking}/assignment`, {
+    method: 'PUT', headers: { cookie: adminCookie }, body: JSON.stringify({ destinationId: destination.id })
   });
 
   const firstSubmission = await api(base, `/bookings/${created.booking}/payment-proofs`, {
@@ -417,6 +421,11 @@ try {
     body: JSON.stringify({ status: 'ACTIVE' }),
   });
   assert.equal(reactivated.body.data.status, 'ACTIVE');
+  await api(base, '/auth/email/resend', {
+    method: 'POST',
+    body: JSON.stringify({ email: customerAUpdatedEmail }),
+  }, 202);
+  await verifyFixtureEmail(base, customerAUpdatedEmail);
   await api(base, '/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email: customerAUpdatedEmail, password }),

@@ -1,6 +1,6 @@
 <nav class="stepper" aria-label="Reservation progress">
   <ol>
-    @for (step of steps; track step; let stepIndex = $index) {
+    @for (step of steps(); track step; let stepIndex = $index) {
       <li [class.is-current]="currentStep() === stepIndex + 1" [class.is-complete]="currentStep() > stepIndex + 1" [attr.aria-current]="currentStep() === stepIndex + 1 ? 'step' : null">
         <button type="button" [disabled]="navigationDisabled() || stepIndex + 1 > furthestStep()" [attr.aria-current]="currentStep() === stepIndex + 1 ? 'step' : null" (click)="stepSelected.emit(stepIndex + 1)">
           <span>{{ stepIndex + 1 }}</span>

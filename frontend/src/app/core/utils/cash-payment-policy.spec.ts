@@ -1,4 +1,4 @@
-import { cashDepositDeadline, minimumCashEventDate } from './cash-payment-policy';
+import { cashDepositDeadline, minimumCashEventDate, minimumBookingEventDate } from './cash-payment-policy';
 
 describe('cash payment policy', () => {
   it('matches the small/big cutoffs, Philippine closing time, and calendar boundaries', () => {
@@ -14,9 +14,19 @@ describe('cash payment policy', () => {
     expect(minimumCashEventDate(500, new Date('2026-10-31T00:00:00Z'))).toBe('2026-11-05');
     expect(minimumCashEventDate(500, new Date('2026-12-30T01:00:00Z'))).toBe('2027-01-04');
   });
-  it('moves the minimum by one day at closing and uses the Manila date after midnight', () => {
-    expect(minimumCashEventDate(100, new Date('2026-10-31T10:00:00Z'))).toBe('2026-11-04');
-    expect(minimumCashEventDate(500, new Date('2026-10-31T10:00:00Z'))).toBe('2026-11-06');
+  it('adjusts the calendar at 11 PM Manila while preserving the 6 PM cash deadline', () => {
+    expect(minimumCashEventDate(100, new Date('2026-10-31T10:00:00Z'))).toBe('2026-11-03');
+    expect(minimumCashEventDate(500, new Date('2026-10-31T14:59:59Z'))).toBe('2026-11-05');
+    expect(minimumCashEventDate(100, new Date('2026-10-31T15:00:00Z'))).toBe('2026-11-04');
+    expect(minimumCashEventDate(500, new Date('2026-10-31T15:00:00Z'))).toBe('2026-11-06');
     expect(minimumCashEventDate(100, new Date('2026-10-31T16:00:00Z'))).toBe('2026-11-04');
+  });
+});
+
+describe('booking deposit allowance', () => {
+  it('adds one deposit day for both guest tiers and preserves the 11 PM rollover', () => {
+    expect(minimumBookingEventDate(499, new Date('2026-11-10T12:00:00Z'))).toBe('2026-11-14');
+    expect(minimumBookingEventDate(500, new Date('2026-11-10T12:00:00Z'))).toBe('2026-11-16');
+    expect(minimumBookingEventDate(499, new Date('2026-11-10T15:00:00Z'))).toBe('2026-11-15');
   });
 });

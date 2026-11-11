@@ -12,6 +12,18 @@ button[admin-actions] { font-family: var(--font-admin); font-size: 13px; font-we
 .admin-form label { font-size: 12px; font-weight: 500; }
 .admin-form input, .admin-form input::placeholder, .admin-form select { font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
 .admin-form .btn { font-size: 13px; font-weight: 500; }
+.admin-form { align-items: start; }
+.cash-booking-summary { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 16px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--color-border); }
+.cash-booking-summary h2 { font-family: var(--font-admin); font-size: 18px; font-weight: 600; }
+.cash-booking-summary p { margin: 6px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.cash-booking-summary > p strong { display: block; margin-top: 4px; font-size: 18px; font-variant-numeric: tabular-nums; }
+.cash-form-actions p { margin: 0 0 16px; font-size: 13px; line-height: 1.6; }
+.cash-form-actions > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.admin-form label > span { font-size: 12px; font-weight: 400; line-height: 1.5; }
+.cash-field-error { color: #8f332c; }
+.cash-recorded-reference { display: block; margin-top: 4px; overflow-wrap: anywhere; }
+.cash-list-help { margin: 0 0 18px; font-size: 13px; line-height: 1.6; }
+.cash-record-button { display: block; margin-top: 10px; font-size: 12px; white-space: normal; }
 .admin-table--payments th { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; }
 .admin-table--payments td { font-size: 13px; font-weight: 400; }
 .payment-records td[data-label='Booking'] strong { font-size: 13px; font-weight: 600; }

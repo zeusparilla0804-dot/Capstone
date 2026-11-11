@@ -19,7 +19,7 @@ describe('AuthPageComponent', () => {
       else Reflect.deleteProperty(HTMLDialogElement.prototype, name);
     }
   });
-  it('requires email verification before showing account confirmation and returning to sign-in', async () => {
+  it('requires email verification before navigating directly home', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
     component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
@@ -28,20 +28,19 @@ describe('AuthPageComponent', () => {
     expect(auth.register).toHaveBeenCalledTimes(1);
     expect(auth.login).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith('/verify-email?email=new%40example.test');
+    expect(navigate).not.toHaveBeenCalledWith('/');
     expect(component.verificationMode()).toBe(true);
     expect(fixture.nativeElement.querySelector('app-registration-success-dialog')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-email-verification-form')).not.toBeNull();
-    component.emailVerified(); fixture.detectChanges();
-    expect(component.registerMode()).toBe(false);
-    expect(fixture.nativeElement.querySelector('app-registration-success-dialog')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Account Created Successfully');
-    await component.continueToSignIn();
-    fixture.detectChanges();
-    expect(navigate).toHaveBeenCalledWith('/login', { replaceUrl: true });
-    expect(component.registerMode()).toBe(false);
-    expect(component.form.controls.email.value).toBe('');
-    expect(component.form.controls.password.value).toBe('');
+    component.emailVerified(true); fixture.detectChanges();
+    expect(navigate).toHaveBeenCalledWith('/', { replaceUrl: true });
     expect(fixture.nativeElement.querySelector('app-registration-success-dialog')).toBeNull();
+  });
+
+  it('returns to sign-in after verification when a refreshed page cannot restore the pending password', () => {
+    const component = fixture.componentInstance as any;
+    component.emailVerified(false);
+    expect(navigate).toHaveBeenCalledWith('/login', { replaceUrl: true });
   });
 
   it('keeps registration errors on the form without opening a success dialog', async () => {
@@ -83,6 +82,20 @@ describe('AuthPageComponent', () => {
       component.form.controls.phone.setValue(phone);
       expect(component.form.controls.phone.valid, phone).toBe(true);
     }
+  });
+
+  it('rejects short registration emails and obvious dummy mobile numbers before sending', async () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', email: 'q@gmail.com', phone: '09171234567', password: 'new-password-123' });
+    await component.submit();
+    expect(component.form.controls.email.invalid).toBe(true);
+    expect(auth.register).not.toHaveBeenCalled();
+    component.form.controls.email.setValue('klint@gmail.com');
+    component.form.controls.phone.setValue('09123456789');
+    await component.submit();
+    expect(component.form.controls.phone.invalid).toBe(true);
+    expect(auth.register).not.toHaveBeenCalled();
   });
 
   it('reserves registration feedback space while allowing multiline errors to grow', () => {
@@ -175,17 +188,17 @@ describe('AuthPageComponent', () => {
 
     expect(auth.login).toHaveBeenCalledWith('customer@example.test', 'short123');
     expect(auth.register).not.toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith('/dashboard');
+    expect(navigate).toHaveBeenCalledWith('/');
   });
 
-  it('opens the customer dashboard after sign-in even with a return URL', async () => {
+  it('opens the landing page after sign-in even with a return URL', async () => {
     Object.defineProperty(TestBed.inject(ActivatedRoute).snapshot, 'queryParamMap', {
       value: convertToParamMap({ returnUrl: '/book-event' }), configurable: true,
     });
     const component = fixture.componentInstance as any;
     component.form.patchValue({ email: 'customer@example.test', password: 'short123' });
     await component.submit();
-    expect(navigate).toHaveBeenCalledWith('/dashboard');
+    expect(navigate).toHaveBeenCalledWith('/');
     expect(navigate).toHaveBeenCalledTimes(1);
   });
 
@@ -291,7 +304,19 @@ describe('AuthPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.password-field__mask')).toBeNull();
   });
 
-  it('uses native password masking with one custom visibility toggle', () => {
+  it('accepts an eight-character registration password and rejects shorter values', () => {
+    (fixture.nativeElement.querySelector('.auth-switch__button') as HTMLButtonElement).click();
+    const component = fixture.componentInstance as any;
+    component.form.controls.password.setValue('seven77');
+    expect(component.form.controls.password.hasError('minlength')).toBe(true);
+    component.form.controls.password.setValue('Secret82');
+    fixture.detectChanges();
+    expect(component.form.controls.password.valid).toBe(true);
+    expect(fixture.nativeElement.querySelector('.password-field__mask')?.textContent).toBe('********');
+    expect(fixture.nativeElement.textContent).toContain('at least 8 characters');
+  });
+
+  it('uses asterisk masking for registration with one custom visibility toggle', () => {
     const component = fixture.componentInstance as unknown as {
       form: { controls: { password: { setValue(value: string): void } } };
     };
@@ -308,7 +333,7 @@ describe('AuthPageComponent', () => {
     expect(password.type).toBe('password');
     expect(password.value).toBe('Secret123456');
     expect(password.placeholder).toBe('Enter your password');
-    expect(fixture.nativeElement.querySelector('.password-field__mask')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.password-field__mask')?.textContent).toBe('************');
     expect(visibilityButtons).toHaveLength(1);
 
     password.setSelectionRange(2, 8);

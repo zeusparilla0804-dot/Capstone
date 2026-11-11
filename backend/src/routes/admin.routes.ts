@@ -1,6 +1,7 @@
 import {Router} from 'express';import {adminController as c} from '../controllers/admin.controller.js';import {adminInvoice,issueInvoice} from '../controllers/invoice.controller.js';import {customerAdminController} from '../controllers/customer-admin.controller.js';import {requireAdmin} from '../middleware/auth.middleware.js';
 import {adminReportController} from '../controllers/admin-report.controller.js';
 import {retiredCustomQuotation} from './custom-event.routes.js';
+import {completeEvent} from '../controllers/event-completion.controller.js';
 export default Router().use(requireAdmin)
  .get('/reports/reservations/export',adminReportController.reservationExport)
  .get('/reports/payments/export',adminReportController.paymentExport)
@@ -16,6 +17,7 @@ export default Router().use(requireAdmin)
  .post('/custom-events/:id/request-clarification',retiredCustomQuotation)
  .post('/custom-events/:id/reject',retiredCustomQuotation)
  .get('/bookings',c.bookings).get('/bookings/:id',c.booking).patch('/bookings/:id/status',c.status)
+ .post('/bookings/:id/complete',completeEvent)
  .get('/customers',c.customers).get('/customers/:id/bookings',c.customerBookings)
  .get('/customers/:id/payments',c.customerPayments)
  .patch('/customers/:id/status',customerAdminController.updateStatus)

@@ -1,5 +1,7 @@
 # LA Chef Production Readiness Audit
 
+Current working-tree evidence: [November 11 verification](READINESS_VERIFICATION_2026-11-11.md). This supersedes the historical test counts below; deployment gates remain subject to actual staging verification.
+
 Latest application-flow verification: [November 1 flow hardening results](SYSTEM_FLOW_FIXES_2026-11-01.md). The older audit and deployment gates below are retained for context; use the linked report for current application test/build evidence.
 
 Date: 2026-10-18

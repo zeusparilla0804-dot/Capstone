@@ -66,7 +66,7 @@ describe('AdminShellComponent session security', () => {
     const primaryLabels = Array.from(root.querySelectorAll<HTMLAnchorElement>('.dashboard-sidebar a .dashboard-sidebar__label'))
       .map(item => item.textContent?.trim());
     expect(primaryLabels).toEqual([
-      'Overview', 'Reservations', 'Customers', 'Billing & Payments', 'Reports', 'Packages & Menu'
+      'Overview', 'Reservations', 'Customers', 'Billing & Payments', 'Payment QR Codes', 'Reports', 'Packages & Menu'
     ]);
     expect(root.textContent).not.toContain('Email operations');
     expect(root.textContent).not.toContain('Audit log');

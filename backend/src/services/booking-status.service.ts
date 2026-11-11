@@ -82,7 +82,12 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
     let capacityWasConfirmed = false;
     const preparingForPayment = (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED')
       || (previousStatus === 'APPROVED' && input.nextStatus === 'AWAITING_PAYMENT');
-    const payment = preparingForPayment ? await lockedPayment(input.reservationId, request) : undefined;
+    const payment = preparingForPayment || input.nextStatus === 'COMPLETED'
+      ? await lockedPayment(input.reservationId, request) : undefined;
+    if (input.nextStatus === 'COMPLETED' && (!payment ||
+      Math.round(Number(payment.amountPaid) * 100) < Math.round(Number(payment.amountDue) * 100))) {
+      throw new AppError(409, 'Record and verify the remaining balance before marking this event completed.');
+    }
     if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED') {
       const snapshot = await readCapacitySnapshot(current.eventDate, { request, lock: true });
       const availability = assessDateAvailability({
@@ -99,7 +104,11 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       }
       capacityWasConfirmed = availability.requiresAdminConfirmation && input.capacityConfirmed === true;
     }
-    if (payment?.paymentMethod?.toUpperCase() === 'CASH') {
+    if (input.nextStatus === 'COMPLETED') {
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      if (current.eventDate > today) throw new AppError(409, 'This event can only be completed on its event date or later.', 'EVENT_NOT_FINISHED');
+    }
+    if (preparingForPayment && payment?.paymentMethod?.toUpperCase() === 'CASH') {
       // Read the clock after all locks, so a waiting review cannot use a stale cutoff.
       const now = new Date();
       const today = new Intl.DateTimeFormat('en-CA', {
@@ -129,6 +138,12 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
     if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED' && input.actor.type === 'ADMIN') {
       const invoiceId = await createInvoiceWithRequest(input.reservationId, input.actor.id, request);
       if (!invoiceId) throw new AppError(404, 'Booking not found.');
+      await transitionBooking({ reservationId: input.reservationId, expectedStatus: 'APPROVED', nextStatus: 'AWAITING_PAYMENT',
+        actor: input.actor, reason: 'Payment requested automatically after booking approval.', request });
+      return;
+    }
+    if (previousStatus === 'APPROVED' && input.nextStatus === 'AWAITING_PAYMENT' && input.actor.type === 'ADMIN') {
+      await queueBookingNotification(input.reservationId, 'PAYMENT_REQUESTED', request);
       return;
     }
     const notification = ({ APPROVED: 'BOOKING_APPROVED', REJECTED: 'BOOKING_REJECTED', CONFIRMED: 'BOOKING_CONFIRMED',

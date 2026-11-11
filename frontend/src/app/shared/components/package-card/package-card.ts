@@ -11,6 +11,9 @@ import { packagePricingSummary } from '../../../core/utils/package-pricing-displ
 export class PackageCardComponent {
   readonly cateringPackage = input.required<CateringPackage>();
   readonly viewDetails = output<string>();
+  protected readonly useDescriptionAsTitle = computed(
+    () => /^PHP\s*(?:480|580|680)\s*Per\s*Head$/i.test(this.cateringPackage().name.trim()),
+  );
   protected readonly priceLabel = computed(() => packagePricingSummary(this.cateringPackage()));
 
   protected openPackage(): void {

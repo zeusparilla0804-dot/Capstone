@@ -100,13 +100,20 @@ test('admin operations queries use UTC month boundaries and keep verified revenu
   assert.equal((call.params['periodEnd'] as Date).toISOString(), '2026-11-01T00:00:00.000Z');
 });
 
-test('admin operations queries order attention deterministically', async () => {
-  const recorder = new RequestRecorder(() => ({ recordsets: [[], []] }));
+test('admin attention uses activity timestamps before limiting results, with stable newest-first ordering', async () => {
+  const recorder = new RequestRecorder(() => ({ recordsets: [[], [{
+    type: 'BOOKING', id: '15', title: 'Review BK-15', detail: 'Customer',
+    eventDate: '2026-12-20', urgencyRank: 2, updatedAt: new Date('2026-11-09T02:30:00Z')
+  }]] }));
   const repository = repositoryWith(recorder);
-  await repository['dashboard']({ key: '2026-10', start: new Date('2026-10-01'), end: new Date('2026-11-01') });
+  const result = await repository['dashboard']({ key: '2026-10', start: new Date('2026-10-01'), end: new Date('2026-11-01') }) as { attention: { updatedAt: string }[] };
   assert.match(recorder.calls[0]!.command, /pp\.payment_proof_id/i);
   assert.doesNotMatch(recorder.calls[0]!.command, /pp\.proof_id\b/i);
-  assert.match(recorder.calls[0]!.command, /ORDER BY\s+urgencyRank\s*,\s*eventDate\s*,\s*stableId/i);
+  assert.match(recorder.calls[0]!.command, /ORDER BY\s+updatedAt DESC\s*,\s*type\s*,\s*stableId DESC/i);
+  assert.match(recorder.calls[0]!.command, /pp\.updated_at updatedAt/i);
+  assert.match(recorder.calls[0]!.command, /MAX\(h\.created_at\)/i);
+  assert.match(recorder.calls[0]!.command, /updated_at FROM dbo\.EMAIL_OUTBOX/i);
+  assert.equal(result.attention[0]!.updatedAt, '2026-11-09T02:30:00.000Z');
 });
 
 test('admin operations queries fetch customer history directly by customer_id with bounded pagination', async () => {

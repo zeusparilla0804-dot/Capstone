@@ -12,6 +12,14 @@
   background: var(--color-cream);
   padding: 78px 0 70px;
 }
+@media (min-width: 921px) {
+  .events-hero > .page-container {
+    // Match the public header logo's desktop gutter.
+    position: relative;
+    width: min(100% - 40px, var(--content-width));
+    left: min(0px, calc((var(--content-width) - 100vw) / 2 + clamp(24px, 6vw, 112px)));
+  }
+}
 .events-hero h1 {
   max-width: 820px;
   margin-top: 12px;

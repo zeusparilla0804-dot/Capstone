@@ -2,7 +2,7 @@ import { CurrencyPipe, DatePipe, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, combineLatest, debounceTime, filter, finalize, map, merge, of, startWith, Subject, switchMap, tap } from 'rxjs';
 import { Booking, BookingAvailability, CateringPackage, EventType, PaymentMethod } from '../../core/models';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
@@ -12,9 +12,18 @@ import { PublicHeaderComponent } from '../../shared/components/public-header/pub
 import { BookingSuccessComponent } from './components/booking-success/booking-success';
 import { BookingStepperComponent } from './components/booking-stepper/booking-stepper';
 import { bookingSubmissionMessage, isBookingCapacityConflict } from './booking-submission-error';
-import { cashDepositDeadline, minimumCashEventDate } from '../../core/utils/cash-payment-policy';
+import { cashDepositDeadline, cashPreparationDays, minimumBookingEventDate } from '../../core/utils/cash-payment-policy';
+import { bookingTotal } from '../../core/utils/customer-payment-status';
+import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
+import { PaymentChoiceDialogComponent } from './components/payment-choice-dialog/payment-choice-dialog';
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 type BookingStep = 1 | 2 | 3 | 4;
+const STANDARD_PACKAGE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  '480': 'Classic buffet catering tier',
+  '580': 'Expanded buffet catering tier',
+  '680': 'Full buffet catering tier',
+};
 type AvailabilityQuery = Readonly<{ date: string; guestCount: number; key: string }>;
 type AvailabilityState =
   | Readonly<{ phase: 'idle' }>
@@ -24,14 +33,16 @@ type AvailabilityState =
 
 @Component({
   selector: 'app-booking-page',
-  imports: [BookingStepperComponent, BookingSuccessComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
+  imports: [BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './booking.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './booking.page.scss',
 })
 export class BookingPageComponent {
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly bookingService = inject(BookingService);
+  private readonly paymentDestinations = inject(PaymentDestinationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly retryAvailabilityRequest = new Subject<void>();
   private readonly currentAvailabilityQuery = signal<AvailabilityQuery | null>(null);
@@ -51,6 +62,29 @@ export class BookingPageComponent {
   protected readonly availabilityConflictMessage = signal('');
   protected readonly availabilityState = signal<AvailabilityState>({ phase: 'idle' });
   protected readonly dateUnavailable = signal(false);
+  protected readonly calendarOpen = signal(false);
+  protected readonly calendarMonth = signal(this.minDate.slice(0, 7));
+  protected readonly calendarLoading = signal(false);
+  protected readonly calendarError = signal('');
+  protected readonly calendarAvailability = signal<Readonly<Record<string, BookingAvailability['status']>>>({});
+  private calendarRequestKey = '';
+  private calendarLoadedGuestCount = 0;
+  protected readonly calendarDays = computed(() => {
+    const month = this.calendarMonth();
+    const [year, monthNumber] = month.split('-').map(Number);
+    const offset = new Date(Date.UTC(year!, monthNumber! - 1, 1)).getUTCDay();
+    const count = new Date(Date.UTC(year!, monthNumber!, 0)).getUTCDate();
+    const statuses = this.calendarAvailability();
+    const ready = !this.calendarLoading() && !this.calendarError();
+    const minimum = this.minimumBookingDate;
+    return Array.from({ length: offset + count }, (_, index) => {
+      if (index < offset) return { date: '', day: 0, disabled: true, status: '' };
+      const day = index - offset + 1;
+      const date = `${month}-${String(day).padStart(2, '0')}`;
+      return { date, day, disabled: !ready || date < minimum || !statuses[date] || statuses[date] === 'FULL',
+        status: statuses[date] ?? '' };
+    });
+  });
   protected readonly canContinueToAddOns = computed(() => {
     const query = this.currentAvailabilityQuery();
     const state = this.availabilityState();
@@ -60,23 +94,50 @@ export class BookingPageComponent {
       && state.data.status !== 'FULL';
   });
   protected readonly bookingReference = signal('');
+  protected readonly paymentBookingId = this.route.snapshot.queryParamMap.get('paymentBooking');
+  protected readonly approvedPaymentBooking = signal<Booking | null>(null);
+  protected readonly approvedPackageDisplayName = computed(() => {
+    const name = this.approvedPaymentBooking()?.package.packageName ?? '';
+    const standard = /^PHP\s*(480|580|680)\s*Per\s*Head$/i.exec(name.trim());
+    return standard ? STANDARD_PACKAGE_DISPLAY_NAMES[standard[1]!] ?? name : name;
+  });
+  protected readonly approvedPaymentMethod = signal<PaymentMethod | null>(null);
+  protected readonly paymentMethodSubmitted = signal(false);
+  protected readonly paymentChoiceConfirmation = signal(false);
+  private readonly availableOnlineMethods = signal<readonly string[]>([]);
+  protected readonly paymentMethodsLoading = signal(false);
+  protected readonly paymentMethodsError = signal('');
+  protected readonly availablePaymentMethods = computed(() => this.paymentMethods.filter(method =>
+    method.value === 'cash' || this.availableOnlineMethods().includes(method.value === 'gcash' ? 'E-WALLET' : 'BANK_TRANSFER'),
+  ));
+  protected readonly approvedPaymentMethodLabel = computed(() => this.paymentMethods.find(method => method.value === this.approvedPaymentMethod())?.label ?? '');
+  protected readonly approvedPaymentTotal = computed(() => {
+    const booking = this.approvedPaymentBooking();
+    return booking ? bookingTotal(booking) : 0;
+  });
+  protected readonly approvedPaymentBalance = computed(() => Math.max(
+    this.approvedPaymentTotal() - (this.approvedPaymentBooking()?.amountPaid ?? 0), 0,
+  ));
+  protected readonly approvedPaymentDeposit = computed(() => Math.max(
+    Math.round(this.approvedPaymentTotal() * 50) / 100 - (this.approvedPaymentBooking()?.amountPaid ?? 0), 0,
+  ));
+  protected readonly approvedCashDeadline = computed(() => {
+    const booking = this.approvedPaymentBooking();
+    return booking && this.approvedPaymentMethod() === 'cash'
+      ? cashDepositDeadline(booking.eventDate, booking.guestCount) : null;
+  });
   protected get minDate(): string {
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
     }).format(new Date());
   }
-  private get minimumBookingDate(): string {
-    if (this.draftService.draft().paymentMethod === 'cash') {
-      return minimumCashEventDate(this.eventForm?.controls.guestCount.value ?? this.draftService.draft().guestCount);
-    }
-    const date = new Date(`${this.minDate}T00:00:00Z`);
-    date.setUTCDate(date.getUTCDate() + 3);
-    return date.toISOString().slice(0, 10);
+  protected get minimumBookingDate(): string {
+    return minimumBookingEventDate(this.eventForm?.controls.guestCount.value ?? this.draftService.draft().guestCount);
   }
   protected get dateValidationMessage(): string {
     return this.draftService.draft().paymentMethod === 'cash'
       ? `This event date is too soon for cash payment. Choose ${formatDate(this.minimumBookingDate + 'T00:00:00Z', 'MMMM d, y', 'en-US', 'UTC')} or later so the 50% deposit can be paid by 6:00 PM Philippine Time before preparation begins.`
-      : 'Unavailable Date. Please select a date at least 3 days in advance.';
+      : `Unavailable Date. Please select a date at least ${cashPreparationDays(this.eventForm?.controls.guestCount.value ?? this.draftService.draft().guestCount) + 1} days in advance.`;
   }
   protected get selectedCashDeadline() {
     const draft = this.draftService.draft();
@@ -113,6 +174,26 @@ export class BookingPageComponent {
   });
 
   constructor() {
+    if (this.paymentBookingId) {
+      this.currentStep.set(4);
+      this.loadPaymentMethods();
+      this.editingLoading.set(true);
+      this.bookingService.loadBookingById(this.paymentBookingId).pipe(
+        finalize(() => this.editingLoading.set(false)), takeUntilDestroyed(this.destroyRef),
+      ).subscribe({
+        next: booking => {
+          if (booking.status !== 'awaiting_payment' || booking.amountPaid > 0 || booking.latestProofStatus) {
+            this.editingError.set('This reservation is not ready for payment selection. Open My Reservations for its current payment status.');
+            return;
+          }
+          this.approvedPaymentBooking.set(booking);
+          // A method saved before leaving this page can be reviewed again without a new booking.
+          this.approvedPaymentMethod.set(booking.paymentMethod ?? null);
+        },
+        error: error => this.editingError.set(bookingSubmissionMessage(error)),
+      });
+      return;
+    }
     const explicitBooking = this.route.snapshot.queryParamMap.get('booking');
     if (!explicitBooking && this.route.snapshot.queryParamMap.get('new') === '1') this.draftService.reset();
     const savedEditingId = this.draftService.editingBookingId();
@@ -131,6 +212,7 @@ export class BookingPageComponent {
     });
     this.eventForm.controls.packageId.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(packageId => {
       this.draftService.selectPackage(packageId || null);
+      if (!packageId) this.eventForm.controls.eventType.enable({ emitEvent: false });
       if (!this.editingLoading()) this.applyPackageDefaults(packageId, true);
     });
     if (!requestedBooking) this.applyPackageDefaults(draft.packageId ?? '', !!requestedPackage);
@@ -140,7 +222,7 @@ export class BookingPageComponent {
       if (pending && !this.editingLoading()) this.applyPackageDefaults(pending.id, pending.alignEventType);
     });
     const requestedStep = Number(this.route.snapshot.queryParamMap.get('step'));
-    if (draft.packageId && requestedStep >= 2 && requestedStep <= this.furthestStep()) {
+    if (draft.packageId && requestedStep >= 2 && requestedStep <= 3 && requestedStep <= this.furthestStep()) {
       this.currentStep.set(requestedStep as BookingStep);
     }
     this.watchAvailability();
@@ -214,9 +296,47 @@ export class BookingPageComponent {
   }
 
   protected navigateFromStepper(step: number): void {
-    if (!Number.isInteger(step) || step < 1 || step > this.furthestStep()) return;
+    if (!Number.isInteger(step) || step < 1 || step > 3 || step > this.furthestStep()) return;
     this.goToStep(step as BookingStep);
   }
+
+  protected photoboothOptions() {
+    return this.draftService.availableAddOns().filter(item => /photobooth/i.test(item.name));
+  }
+
+  protected otherAddOns() {
+    return this.draftService.availableAddOns().filter(item => !/photobooth/i.test(item.name));
+  }
+
+  protected selectedPhotoboothId(): string {
+    return this.photoboothOptions().find(item => this.isAddOnSelected(item.id))?.id ?? '';
+  }
+
+  protected photoboothPrice(): number {
+    const selected = this.photoboothOptions().find(item => item.id === this.selectedPhotoboothId());
+    return selected?.price ?? Math.min(...this.photoboothOptions().map(item => item.price));
+  }
+
+  protected togglePhotobooth(event: Event): void {
+    if ((event.target as HTMLInputElement).checked) {
+      const first = this.photoboothOptions()[0];
+      if (first && !this.selectedPhotoboothId()) this.toggleAddOn(first.id);
+    } else {
+      for (const option of this.photoboothOptions()) {
+        if (this.isAddOnSelected(option.id)) this.toggleAddOn(option.id);
+      }
+    }
+  }
+
+  protected choosePhotobooth(event: Event): void {
+    const id = (event.target as HTMLSelectElement).value;
+    for (const option of this.photoboothOptions()) {
+      if (option.id !== id && this.isAddOnSelected(option.id)) this.draftService.toggleAddOn(option.id);
+    }
+    if (id && !this.isAddOnSelected(id)) this.draftService.toggleAddOn(id);
+  }
+
+  protected isCoffeeBar(name: string): boolean { return /^Coffee Bar for (50|100) Guests$/i.test(name); }
 
   protected toggleAddOn(addOnId: string): void {
     this.draftService.toggleAddOn(addOnId);
@@ -248,11 +368,112 @@ export class BookingPageComponent {
   protected retryAvailability(): void {
     if (this.currentAvailabilityQuery()) this.retryAvailabilityRequest.next();
   }
+  protected openCalendar(): void {
+    if (this.calendarOpen()) { this.calendarOpen.set(false); return; }
+    const selected = this.eventForm.controls.eventDate.value;
+    this.calendarMonth.set(selected && selected >= this.minimumBookingDate
+      ? selected.slice(0, 7) : this.minimumBookingDate.slice(0, 7));
+    this.calendarOpen.set(true);
+    this.loadCalendarMonth();
+  }
+  protected moveCalendarMonth(delta: number): void {
+    const [year, month] = this.calendarMonth().split('-').map(Number);
+    const shifted = new Date(Date.UTC(year!, month! - 1 + delta, 1)).toISOString().slice(0, 7);
+    if (shifted < this.minimumBookingDate.slice(0, 7) || shifted > '2100-12') return;
+    this.calendarMonth.set(shifted);
+    this.loadCalendarMonth();
+  }
+  protected retryCalendar(): void { this.loadCalendarMonth(); }
+  protected chooseCalendarDate(date: string): void {
+    if (!date || !this.calendarOpen() || date < this.minimumBookingDate
+      || !this.calendarAvailability()[date] || this.calendarAvailability()[date] === 'FULL') return;
+    this.eventForm.controls.eventDate.setValue(date);
+    this.calendarOpen.set(false);
+  }
+  private loadCalendarMonth(): void {
+    const guestCount = this.eventForm.controls.guestCount.value;
+    if (!Number.isSafeInteger(guestCount) || guestCount < 1 || guestCount > 1500) {
+      this.calendarError.set('Enter a valid guest count before choosing a date.');
+      return;
+    }
+    const month = this.calendarMonth();
+    const key = `${month}:${guestCount}:${this.editingBookingId() ?? ''}`;
+    this.calendarLoadedGuestCount = guestCount;
+    this.calendarRequestKey = key;
+    this.calendarLoading.set(true);
+    this.calendarError.set('');
+    this.calendarAvailability.set({});
+    this.bookingService.checkMonthAvailability(month, guestCount, this.editingBookingId() ?? undefined)
+      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+        next: days => {
+          if (this.calendarRequestKey !== key) return;
+          this.calendarAvailability.set(Object.fromEntries(days.map(day => [day.date, day.status])));
+          this.calendarLoading.set(false);
+        },
+        error: () => {
+          if (this.calendarRequestKey !== key) return;
+          this.calendarError.set('Unable to load calendar availability. Try again.');
+          this.calendarLoading.set(false);
+        },
+      });
+  }
   protected isAddOnSelected(addOnId: string): boolean { return this.draftService.draft().selectedAddOnIds.includes(addOnId); }
   protected selectPayment(method: PaymentMethod): void {
     this.draftService.update({ paymentMethod: method });
     this.revalidateDate();
   }
+  protected selectApprovedPayment(method: PaymentMethod): void {
+    const booking = this.approvedPaymentBooking();
+    if (!booking || this.isSubmitting() || this.paymentMethodSubmitted() || booking.status !== 'awaiting_payment'
+      || !this.availablePaymentMethods().some(choice => choice.value === method)) return;
+    this.approvedPaymentMethod.set(method);
+    this.submissionError.set('');
+    this.paymentChoiceConfirmation.set(true);
+  }
+
+  protected cancelApprovedPayment(): void {
+    if (this.isSubmitting()) return;
+    this.paymentChoiceConfirmation.set(false);
+    this.approvedPaymentMethod.set(this.approvedPaymentBooking()?.paymentMethod ?? null);
+  }
+
+  protected async confirmApprovedPayment(): Promise<void> {
+    const booking = this.approvedPaymentBooking();
+    const method = this.approvedPaymentMethod();
+    if (!this.paymentChoiceConfirmation() || !booking || !method || this.isSubmitting() || this.paymentMethodSubmitted() || booking.status !== 'awaiting_payment'
+      || !this.availablePaymentMethods().some(choice => choice.value === method)) return;
+    this.paymentChoiceConfirmation.set(false);
+    this.isSubmitting.set(true);
+    this.submissionError.set('');
+    try {
+      await this.bookingService.choosePaymentMethod(booking.id, method);
+      this.paymentMethodSubmitted.set(true);
+    } catch (error) {
+      this.approvedPaymentMethod.set(null);
+      this.submissionError.set(bookingSubmissionMessage(error));
+      this.loadPaymentMethods();
+    } finally {
+      this.isSubmitting.set(false);
+    }
+  }
+
+  protected closePaymentConfirmation(): void {
+    void this.router.navigate(['/my-bookings']);
+  }
+
+  protected loadPaymentMethods(): void {
+    if (this.paymentMethodsLoading()) return;
+    this.paymentMethodsLoading.set(true);
+    this.paymentMethodsError.set('');
+    this.availableOnlineMethods.set([]);
+    this.paymentDestinations.availableMethods().pipe(
+      finalize(() => this.paymentMethodsLoading.set(false)), takeUntilDestroyed(this.destroyRef),
+    ).subscribe({
+      next: methods => this.availableOnlineMethods.set(methods),
+      error: () => this.paymentMethodsError.set('Unable to check online payment availability. Cash is still available. Try again to check QR payment methods.'),
+    });
+  }
+
   protected eventTypeLabel(eventType: EventType | null): string {
     return this.eventTypes.find((item) => item.value === eventType)?.label ?? 'Not provided';
   }
@@ -271,7 +492,7 @@ export class BookingPageComponent {
     }
     const draft = this.draftService.draft();
     const selectedPackage = this.draftService.selectedPackage();
-    if (!draft.paymentMethod || !selectedPackage || this.isSubmitting()) return;
+    if (!selectedPackage || this.isSubmitting()) return;
     if (!draft.eventType || !this.packageMatchesEvent(selectedPackage, draft.eventType)) {
       const packageControl = this.eventForm.controls.packageId;
       packageControl.setErrors({ ...packageControl.errors, packageEvent: true });
@@ -284,10 +505,10 @@ export class BookingPageComponent {
     try {
       const editingId = this.editingBookingId();
       if (editingId) {
-        const updated = await this.bookingService.updatePendingBooking(editingId, draft, selectedPackage, this.draftService.selectedAddOns());
+        const updated = await this.bookingService.updatePendingBooking(editingId, { ...draft, paymentMethod: null }, selectedPackage, this.draftService.selectedAddOns());
         this.bookingReference.set(updated.reference);
       } else {
-        this.bookingReference.set(await this.bookingService.submitDraft(draft, selectedPackage, this.draftService.selectedAddOns(), this.draftService.submissionKey()));
+        this.bookingReference.set(await this.bookingService.submitDraft({ ...draft, paymentMethod: null }, selectedPackage, this.draftService.selectedAddOns(), this.draftService.submissionKey()));
       }
       this.draftService.reset();
     } catch (error) {
@@ -383,7 +604,7 @@ export class BookingPageComponent {
       (guests.value === 1 && this.furthestStep() === 1 && !this.editingBookingId())
       || (this.defaultGuestCount !== null && guests.value === this.defaultGuestCount)
     ));
-    if (alignEventType || !this.eventForm.controls.eventType.value) this.alignEventTypeWithPackage(packageId);
+    if (alignEventType || !this.eventForm.controls.eventType.value || pkg.category !== 'standard') this.alignEventTypeWithPackage(packageId);
     if (pkg.pricingType === 'BASE_PLUS_EXCESS' && included !== null && Number.isSafeInteger(included)
       && included >= Math.max(pkg.minGuests ?? 1, 1) && included <= Math.min(pkg.maxGuests ?? 1500, 1500)
       && canDefaultGuests) {
@@ -396,10 +617,14 @@ export class BookingPageComponent {
 
   private alignEventTypeWithPackage(packageId: string): void {
     const pkg = this.packageService.getPackageById(packageId);
-    if (!pkg || pkg.category === 'standard') return;
+    if (!pkg) return;
+    if (pkg.category === 'standard') {
+      this.eventForm.controls.eventType.enable({ emitEvent: false });
+      return;
+    }
     const eventType = pkg.category === 'custom' ? 'other' : pkg.category;
-    if (this.eventForm.controls.eventType.value === eventType) return;
-    this.eventForm.controls.eventType.setValue(eventType);
+    if (this.eventForm.controls.eventType.value !== eventType) this.eventForm.controls.eventType.setValue(eventType);
+    this.eventForm.controls.eventType.disable({ emitEvent: false });
     this.draftService.update({ eventType });
   }
 
@@ -491,7 +716,11 @@ export class BookingPageComponent {
       this.eventForm.controls.eventDate.valueChanges.pipe(startWith(this.eventForm.controls.eventDate.value)),
       this.eventForm.controls.guestCount.valueChanges.pipe(startWith(this.eventForm.controls.guestCount.value)),
     ]).pipe(
-      tap(([date]) => this.dateUnavailable.set(!!date && !this.isEventDateAvailable(date))),
+      tap(([date, guestCount]) => {
+        this.eventForm.controls.eventDate.updateValueAndValidity({ emitEvent: false });
+        this.dateUnavailable.set(!!date && !this.isEventDateAvailable(date));
+        if (this.calendarOpen() && guestCount !== this.calendarLoadedGuestCount) this.loadCalendarMonth();
+      }),
       map(([date, guestCount]) => this.toAvailabilityQuery(date, guestCount)),
       tap((query) => {
         const previousKey = this.currentAvailabilityQuery()?.key;

@@ -1,0 +1,57 @@
+<app-admin-shell title="Payment QR Codes" description="Manage receiving accounts and assign an available QR to each approved online booking.">
+  @if (error()) { <p class="qr-feedback qr-feedback--error" role="alert">{{ error() }}</p> }
+  @if (notice()) { <p class="qr-feedback" role="status">{{ notice() }}</p> }
+
+  <section class="qr-section" aria-labelledby="qr-accounts-title">
+    <h2 id="qr-accounts-title">Receiving accounts</h2>
+    <p>Mark an account unavailable when it reaches its receiving limit. Customers assigned to it will wait for a new available QR.</p>
+    <div class="qr-list">
+      @for (item of destinations(); track item.id) {
+        <article class="qr-card">
+          @if (images()[item.id]) { <img [src]="images()[item.id]" [alt]="item.label + ' payment QR'" /> }
+          <div><h3>{{ item.label }}</h3><p>{{ item.method === 'E-WALLET' ? 'GCash' : 'Bank transfer' }} · {{ item.accountName }} · {{ item.accountHint }}</p><p>{{ item.isAvailable ? 'Available' : 'Unavailable' }} · {{ item.assignmentCount ?? 0 }} booking assignments</p></div>
+          <div class="qr-card-actions"><button type="button" class="btn btn-secondary" (click)="edit(item)">Edit</button><button type="button" class="btn btn-secondary" [disabled]="busy()" (click)="requestToggle(item)">{{ item.isAvailable ? 'Mark unavailable' : 'Make available' }}</button></div>
+        </article>
+      } @empty { <p>No QR accounts have been uploaded yet.</p> }
+    </div>
+  </section>
+
+  <section class="qr-section" aria-labelledby="qr-upload-title">
+    <h2 id="qr-upload-title">{{ editingId() ? 'Edit QR account' : 'Add QR account' }}</h2>
+    <form (ngSubmit)="save()">
+      <label>Payment method<select name="method" [(ngModel)]="method"><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash</option></select></label>
+      <label>Bank or account label<input name="label" [(ngModel)]="label" maxlength="100" required /></label>
+      <label>Account name<input name="accountName" [(ngModel)]="accountName" maxlength="200" required /></label>
+      <label>Account hint (masked number)<input name="accountHint" [(ngModel)]="accountHint" maxlength="50" placeholder="Ending 1234" required /></label>
+      <label>QR image (JPEG, PNG, WebP; 1 MB max)<input type="file" name="qr" accept="image/jpeg,image/png,image/webp" (change)="chooseFile($event)" /></label>
+      <div class="form-actions"><button type="submit" class="btn btn-primary" [disabled]="busy()">{{ editingId() ? 'Save changes' : 'Add QR account' }}</button>@if (editingId()) { <button type="button" class="btn btn-secondary" (click)="reset()">Cancel</button> }</div>
+    </form>
+  </section>
+
+  <section class="qr-section" aria-labelledby="qr-assign-title">
+    <h2 id="qr-assign-title">Assign QR to a reservation</h2>
+    <p>Piliin ang customer na pumili na ng GCash o bank transfer, saka piliin ang QR na gusto mong ipadala.</p>
+    <div class="queue-heading"><h3>Bookings waiting for a QR <span>{{ waitingBookings().length }}</span></h3><button type="button" class="btn btn-secondary" [disabled]="busy()" (click)="load()">Refresh list</button></div>
+    <div class="qr-queue">
+      @for (item of waitingBookings(); track item.id) {
+        <article class="qr-queue-card" [class.qr-queue-card--selected]="selectedBooking()?.id === item.id">
+          <div class="qr-queue-info"><strong>{{ item.customerName }}</strong><span>{{ item.reference }} · {{ item.eventType }} · {{ item.eventDate }}</span><span>{{ item.paymentMethod === 'E-WALLET' ? 'GCash' : 'Bank transfer' }} · Balance ₱{{ item.amountDue - item.amountPaid }}</span>
+            @if (item.assignedQrLabel) { <small>Previous QR: {{ item.assignedQrLabel }} · {{ item.assignedQrHint }} (unavailable)</small> }
+          </div>
+          <button type="button" class="btn btn-secondary" [disabled]="busy()" (click)="selectBooking(item)">{{ selectedBooking()?.id === item.id ? 'Selected' : 'Choose customer' }}</button>
+        </article>
+      } @empty {
+        <p class="qr-empty">Walang booking na naghihintay ng QR ngayon. Lalabas dito ang booking kapag nakapili na ng GCash o bank transfer ang customer.</p>
+      }
+    </div>
+    @if (selectedBooking(); as selected) {
+      <div class="booking-result">
+        <strong>QR para kay {{ selected.customerName }} ({{ selected.reference }})</strong>
+        <label>Available {{ selected.paymentMethod === 'E-WALLET' ? 'GCash' : 'bank transfer' }} QR
+          <select [ngModel]="selectedId()" (ngModelChange)="selectedId.set($event === null ? null : +$event)" name="destination"><option [ngValue]="null">Piliin ang QR account</option>@for (destination of destinations(); track destination.id) { @if (compatible(destination)) { <option [ngValue]="destination.id">{{ destination.label }} · {{ destination.accountName }} · {{ destination.accountHint }}</option> } }</select>
+        </label>
+        @if (availableForSelected().length === 0) { <p class="qr-empty">Walang available na QR para sa napiling payment method.</p> }
+        <button type="button" class="btn btn-primary" [disabled]="busy() || !selectedId()" (click)="requestAssignment()">Send selected QR to customer</button>
+      </div>
+    }
+  </section></app-admin-shell>

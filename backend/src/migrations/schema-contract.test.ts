@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readdir } from 'node:fs/promises';
 
 import {
   EXPECTED_MIGRATIONS,
@@ -52,6 +53,15 @@ function validSnapshot(): SchemaSnapshot {
 
 test('complete migrated schema satisfies the contract', () => {
   assert.deepEqual(findSchemaContractViolations(validSnapshot(), { migrationHistory: 'fresh' }), []);
+});
+
+test('schema contract tracks every shipped migration and payment destination seed', async () => {
+  const files = (await readdir(new URL('../../migrations/', import.meta.url)))
+    .filter(name => /^\d+_.+\.sql$/.test(name) && name !== '007_starter_catalog.sql');
+  assert.deepEqual([...EXPECTED_MIGRATIONS].sort(), [...files, '022_payment_destinations_seed'].sort());
+  for (const table of ['PAYMENT_DESTINATION', 'BOOKING_PAYMENT_DESTINATION', 'PACKAGE_IMAGE', 'CUSTOMER_NOTIFICATION_READ']) {
+    assert.ok(EXPECTED_SCHEMA_CONTRACT.tables.includes(table), `${table} must be verified`);
+  }
 });
 
 test('missing or incompatible columns produce named violations', () => {

@@ -26,27 +26,25 @@
             <tbody>
               @for (item of result.items; track item.id) {
                 <tr>
-                  <td data-label="Reference" data-card-wide="true"><strong>{{ item.reference }}</strong></td>
+                  <td data-label="Reference" data-card-wide="true"><a class="booking-reference-link" [routerLink]="['/admin/bookings', item.id]" [attr.aria-label]="'Review booking ' + item.reference"><strong>{{ item.reference }}</strong></a></td>
                   <td data-label="Customer" data-card-wide="true">{{ item.customerName }}</td>
                   <td data-label="Event">{{ item.eventType }}</td>
                   <td data-label="Date">{{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</td>
                   <td data-label="Guests"><span>{{ item.guestCount }}</span><span class="capacity-meta">{{ item.capacity.activeBookingCount }} / {{ item.capacity.capacityLimit }} active &middot; {{ capacityStatusLabel(item) }}</span></td>
                   <td data-label="Package" data-card-wide="true">{{ item.packageName || 'Not assigned' }}</td>
                   <td data-label="Total" class="is-number">{{ item.total | currency:'PHP':'symbol-narrow':'1.0-0' }}</td>
-                  <td data-label="Status"><app-status-badge [status]="item.status" /></td>
+                  <td data-label="Status"><app-status-badge [status]="paymentBadgeStatus(item)" />@if (item.status === 'COMPLETED') { <app-status-badge status="completed" /> }</td>
                   <td data-label="Actions" data-card-wide="true">
                     <div class="booking-row-actions">
                       <div class="booking-row-actions__links">
-                        <a class="btn btn-tertiary" [routerLink]="['/admin/bookings', item.id]">View details</a>
-                        @if (item.invoiceId) { <a class="btn btn-tertiary" [routerLink]="['/admin/invoices', item.invoiceId]">Invoice</a> }
-                        @else { <button class="btn btn-tertiary" type="button" (click)="issue(item)">Issue invoice</button> }
+                        @if (item.invoiceId) { <a class="btn btn-tertiary" [routerLink]="['/admin/invoices', item.invoiceId]">{{ (item.amountPaid ?? 0) > 0 ? 'Receipt' : 'Invoice' }}</a> }
+                        @if (actionsFor(item.status).length) {
+                          <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
+                            <option value="">Choose action</option>
+                            @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ actionLabel(item, option) }}</option> }
+                          </select>
+                        }
                       </div>
-                      @if (actionsFor(item.status).length) {
-                        <select class="admin-status-select" value="" (change)="chooseAction(item, $event)" [disabled]="actionPending()" [attr.aria-label]="'Update ' + item.reference + ' status'">
-                          <option value="">Choose action</option>
-                          @for (option of actionsFor(item.status); track option) { <option [value]="option">{{ actionLabel(item, option) }}</option> }
-                        </select>
-                      } @else { <span class="admin-status-unavailable">No status actions</span> }
                     </div>
                   </td>
                 </tr>
@@ -86,7 +84,7 @@
     class="booking-approval-confirmation"
     [nativeModal]="true"
     title="Reservation approved"
-    message="The booking status has been updated successfully."
+    message="Payment has been requested automatically. The customer can now choose a payment method."
     detailLabel="Booking reference"
     [detailValue]="reference"
     primaryLabel="Done"

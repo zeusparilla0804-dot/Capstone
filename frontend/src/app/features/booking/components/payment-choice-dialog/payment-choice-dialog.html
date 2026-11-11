@@ -1,0 +1,33 @@
+<dialog #dialog class="payment-choice-dialog" aria-modal="true" aria-labelledby="payment-choice-title" aria-describedby="payment-choice-description"
+  (cancel)="cancel($event)" (keydown)="$event.stopPropagation()">
+  <div class="payment-choice-dialog__content">
+    <h2 #heading id="payment-choice-title" tabindex="-1">{{ cashTerms() ? 'Cash payment terms' : 'Confirm payment method' }}</h2>
+    <p id="payment-choice-description">{{ cashTerms() ? 'Review the Cash payment instructions and agree to the terms before confirming your choice.' : 'Your choice will be submitted to LA Chef after you confirm.' }}</p>
+    <dl><div><dt>Booking reference</dt><dd>{{ reference() }}</dd></div><div><dt>Payment method</dt><dd>{{ methodLabel() }}</dd></div></dl>
+    @if (cashTerms()) {
+      <section class="cash-terms" aria-label="Cash payment instructions">
+        <h3>Pay at the LA Chef office</h3>
+        <p>Panorama Ville, Dita, Santa Rosa, Laguna</p>
+        <p>Office hours: Daily, 8:00 AM–6:00 PM Philippine Time.</p>
+        <ol>
+          <li>Present your booking reference to the office staff.</li>
+          <li>Pay the required 50% deposit of <strong>{{ cashDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>, or settle the full outstanding balance.
+            @if (cashDeadline(); as deadline) {
+              <span class="cash-terms__deadline">Deposit deadline: <strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM Philippine Time</strong> ({{ deadline.preparationDays }} calendar days before your event).</span>
+            }
+          </li>
+          <li>No online payment proof is required. Collect your receipt after paying.</li>
+          <li>Selecting Cash does not count as a payment. Your balance and payment status update only after staff record the cash actually received.</li>
+        </ol>
+        <label class="cash-terms__agreement">
+          <input type="checkbox" [checked]="cashTermsAccepted()" (change)="cashTermsAccepted.set($any($event.target).checked)" />
+          <span>I have read and agree to the Cash payment terms.</span>
+        </label>
+      </section>
+    }
+    <div class="payment-choice-dialog__actions">
+      <button #cancelButton type="button" class="btn btn-secondary" (click)="decided.emit(false)">Cancel</button>
+      <button type="button" class="btn btn-primary" data-testid="confirm-approved-payment" [disabled]="cashTerms() && !cashTermsAccepted()" (click)="confirm()">{{ cashTerms() ? 'Confirm Cash Payment Method' : 'Confirm Payment Method' }}</button>
+    </div>
+  </div>
+</dialog>
