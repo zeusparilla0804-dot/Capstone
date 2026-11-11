@@ -20,6 +20,7 @@ export class AdminLoginPage {
   protected readonly challenge = signal<AdminMfaChallenge | null>(null);
   protected readonly recoveryCodes = signal<string[]>([]);
   protected readonly code = new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.pattern(/^(?:\d{6}|[0-9A-Fa-f]{20})$/)] });
+  protected readonly mfaForm = new FormGroup({ code: this.code });
   protected readonly form = new FormGroup({
     identity: new FormControl('', { nonNullable: true, validators: Validators.required }),
     password: new FormControl('', { nonNullable: true, validators: Validators.required }),

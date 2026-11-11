@@ -12,7 +12,7 @@ describe('AdminLoginPage', () => {
       imports: [AdminLoginPage],
       providers: [
         provideRouter([]),
-        { provide: AdminAuthService, useValue: { login: vi.fn() } },
+        { provide: AdminAuthService, useValue: { login: vi.fn(), completeMfa: vi.fn() } },
         { provide: ActivatedRoute, useValue: { snapshot: { queryParamMap: convertToParamMap({}) } } },
       ],
     }).compileComponents();
@@ -62,6 +62,94 @@ describe('AdminLoginPage', () => {
     expect(navigate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.textContent).toContain('SECRETKEY');
     expect(component.form.controls.password.value).toBe('');
+  });
+
+  it.each([undefined, 'SETUPKEY'])('submits an MFA code without native navigation (setup key: %s)', async (setupSecret) => {
+    const auth = TestBed.inject(AdminAuthService);
+    vi.mocked(auth.login).mockResolvedValueOnce({ requiresMfa: true, challenge: 'pending', setupSecret });
+    vi.mocked(auth.completeMfa).mockResolvedValueOnce(undefined);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector('#adminMfaCode') as HTMLInputElement;
+    input.value = '123456';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    fixture.nativeElement.querySelector('form').dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await fixture.whenStable();
+    expect(auth.completeMfa).toHaveBeenCalledExactlyOnceWith('pending', '123456');
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/admin/dashboard');
+  });
+
+  it('keeps the MFA challenge visible when verification fails without submitting a native form', async () => {
+    const auth = TestBed.inject(AdminAuthService);
+    vi.mocked(auth.login).mockResolvedValueOnce({ requiresMfa: true, challenge: 'pending' });
+    vi.mocked(auth.completeMfa).mockRejectedValueOnce(new Error('Invalid code'));
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('#adminMfaCode') as HTMLInputElement;
+    input.value = '123456';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    fixture.nativeElement.querySelector('form').dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role="alert"]').textContent).toContain('Invalid or expired code');
+    expect(fixture.nativeElement.querySelector('#adminMfaCode')).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('shows setup backup codes before allowing navigation to the dashboard', async () => {
+    const auth = TestBed.inject(AdminAuthService);
+    vi.mocked(auth.login).mockResolvedValueOnce({ requiresMfa: true, challenge: 'pending', setupSecret: 'SETUPKEY' });
+    vi.mocked(auth.completeMfa).mockResolvedValueOnce(['0123456789ABCDEF0123']);
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('#adminMfaCode') as HTMLInputElement;
+    input.value = '123456';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    fixture.nativeElement.querySelector('form').dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Save your backup codes');
+    expect(fixture.nativeElement.querySelector('.recovery-list').textContent).toContain('0123456789ABCDEF0123');
+    expect(navigate).not.toHaveBeenCalled();
+    fixture.nativeElement.querySelector('.mfa-panel button').click();
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/admin/dashboard');
+  });
+
+  it('prevents a native submission for an invalid MFA code without contacting the API', async () => {
+    const auth = TestBed.inject(AdminAuthService);
+    vi.mocked(auth.login).mockResolvedValueOnce({ requiresMfa: true, challenge: 'pending' });
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    fixture.detectChanges();
+    const event = new Event('submit', { bubbles: true, cancelable: true });
+    fixture.nativeElement.querySelector('form').dispatchEvent(event);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(auth.completeMfa).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain('Enter a 6-digit code or 20-character backup code.');
   });
 
   it('uses asterisks without changing the native password value or visibility toggle', () => {

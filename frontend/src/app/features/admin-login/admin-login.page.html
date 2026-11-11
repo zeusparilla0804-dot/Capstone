@@ -26,7 +26,7 @@
           <button class="admin-submit" type="button" (click)="finishSetup()">I saved these codes</button>
         </section>
       } @else if (challenge(); as pending) {
-        <form class="mfa-panel" (ngSubmit)="verifyCode()" autocomplete="off">
+        <form class="mfa-panel" [formGroup]="mfaForm" (ngSubmit)="verifyCode()" autocomplete="off">
           @if (pending.setupSecret) {
             <h2>Set up your authenticator</h2>
             <p>Add an account in your authenticator app using this setup key. Then enter the current 6-digit code.</p>
@@ -37,7 +37,7 @@
           }
           <div class="form-field">
             <label for="adminMfaCode">Authenticator or backup code</label>
-            <input id="adminMfaCode" name="admin-mfa-code" [formControl]="code" autocomplete="one-time-code" inputmode="numeric" maxlength="20" [attr.aria-invalid]="code.touched && code.invalid ? 'true' : null" />
+            <input id="adminMfaCode" name="admin-mfa-code" formControlName="code" autocomplete="one-time-code" inputmode="numeric" maxlength="20" [attr.aria-invalid]="code.touched && code.invalid ? 'true' : null" />
             @if (code.touched && code.invalid) { <p class="field-error">Enter a 6-digit code or 20-character backup code.</p> }
           </div>
           @if (error()) { <p class="admin-error" role="alert">{{ error() }}</p> }
