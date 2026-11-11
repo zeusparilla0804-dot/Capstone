@@ -128,6 +128,26 @@ test('email outbox configured delivery marks SENT and clears old retry/error met
   assert.ok(messages[0].text.includes('BK-5')); assert.ok(messages[0].html.includes('BK-5'));
 });
 
+test('Resend delivery retries throttling and reuses the outbox idempotency key before marking SENT', async () => {
+  const { createResendTransport } = await import('./resend-transport.js');
+  const db = new OutboxDb(); await db.seed();
+  const keys: (string | null)[] = [];
+  const transport = createResendTransport('re_test_only', (async (_url, options) => {
+    keys.push(new Headers(options?.headers).get('Idempotency-Key'));
+    return keys.length === 1 ? Response.json({}, { status: 429 }) : Response.json({ id: 'provider-id' });
+  }) as typeof fetch);
+  const worker = db.worker(transport);
+  const first = await worker.processEmailBatch(now);
+  assert.equal(first.sent, 0);
+  assert.equal(first.retried, 1);
+  assert.equal(db.rows[0].status, 'PENDING');
+  const second = await worker.processEmailBatch(new Date(+now + 60_000));
+  assert.equal(second.sent, 1);
+  assert.equal(db.rows[0].status, 'SENT');
+  assert.ok(keys[0]);
+  assert.equal(keys[0], keys[1]);
+});
+
 test('email code uses only its protected renderer and is never persisted in the outbox payload', async () => {
   for (const available of [true, false]) {
     const db = new OutboxDb();

@@ -37,8 +37,10 @@ export function readAdminMfaConfiguration(env: NodeJS.ProcessEnv, nodeEnv: NodeE
 }
 
 export function readEmailConfiguration(env: NodeJS.ProcessEnv) {
+  const transport = env.EMAIL_TRANSPORT ?? 'smtp';
+  if (!['smtp', 'resend'].includes(transport)) throw new Error('EMAIL_TRANSPORT must be smtp or resend.');
   const names = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_FROM_ADDRESS', 'SMTP_FROM_NAME'];
-  const configured = names.some(name => env[name] !== undefined);
+  const configured = transport === 'resend' || names.some(name => env[name] !== undefined);
   function integer(name: string, fallback: number, min: number, max: number): number {
     const text = env[name] ?? String(fallback);
     if (!/^\d+$/.test(text) || !Number.isSafeInteger(Number(text)) || Number(text) < min || Number(text) > max) throw new Error(`${name} is invalid.`);
@@ -60,7 +62,17 @@ export function readEmailConfiguration(env: NodeJS.ProcessEnv) {
     leaseMs: integer('EMAIL_WORKER_LEASE_MS', 300_000, 60_000, 3_600_000)
   };
   if (worker.retryBaseMs > worker.retryCapMs) throw new Error('Email retry base must not exceed its cap.');
-  if (!configured) return { smtp: undefined, worker: { ...worker, enabled: false } };
+  if (!configured) return { smtp: undefined, resend: undefined, worker: { ...worker, enabled: false } };
+  if (transport === 'resend') {
+    const apiKey = env.RESEND_API_KEY?.trim();
+    const address = env.RESEND_FROM_ADDRESS?.trim();
+    const name = env.RESEND_FROM_NAME?.trim() ?? 'LA Chef Event Catering Services';
+    if (!apiKey || /[\x00-\x20\x7f]/.test(apiKey)) throw new Error('RESEND_API_KEY is required and must not contain whitespace.');
+    if (!address || !validEmailAddress(address) || !name || name.length > 100 || /[\x00-\x1f\x7f]/.test(name)) {
+      throw new Error('Resend sender identity is invalid.');
+    }
+    return { smtp: undefined, resend: { apiKey, from: { name, address } }, worker };
+  }
   for (const name of names.slice(0, 6)) {
     if (!env[name]?.trim()) throw new Error(`Missing required SMTP configuration: ${name}`);
   }
@@ -71,7 +83,7 @@ export function readEmailConfiguration(env: NodeJS.ProcessEnv) {
     throw new Error('SMTP host or sender identity is invalid.');
   }
   return { smtp: { host, port: integer('SMTP_PORT', 587, 1, 65535), secure: boolean('SMTP_SECURE', false),
-    auth: { user: env.SMTP_USER!.trim(), pass: env.SMTP_PASSWORD! }, from: { name, address } }, worker };
+    auth: { user: env.SMTP_USER!.trim(), pass: env.SMTP_PASSWORD! }, from: { name, address } }, resend: undefined, worker };
 }
 
 function required(name: string): string {

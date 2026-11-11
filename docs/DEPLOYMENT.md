@@ -12,7 +12,7 @@ LA Chef uses an Angular 22 frontend, an Express API, and Microsoft SQL Server 20
 - HTTPS-capable reverse proxy or load balancer
 - Separate least-privilege SQL logins for application runtime, schema migration, and disposable verification
 - Durable private storage for payment-proof files
-- A secret manager for database, password-recovery, and optional SMTP credentials
+- A secret manager for database, password-recovery, and email provider credentials
 
 Tracked migrations provision an empty SQL Server database in this exact order: `000_initial_schema.sql`, `001` through `006`, then `008` through `015`. The missing `007` filename is intentional: an old local starter-catalog migration was never approved or tracked, and fresh migration history must not invent it. Migration `006` inserts the five system event types; later migrations add operational, recovery, pricing, custom-quotation, and customer-account-status structures without seeding accounts or business transactions. No administrator, customer, package, menu, reservation, payment, or other business record is seeded by migrations.
 
@@ -43,8 +43,11 @@ Use the hosting platform's secret store. Committed `.env*.example` files contain
 | `PAYMENT_PROOF_UPLOAD_ROOT` | Absolute path on durable private storage |
 | `PASSWORD_RESET_HMAC_SECRET` | Required in production; at least 32 random bytes, stored only in the secret manager |
 | `ADMIN_MFA_ENCRYPTION_KEY` | Required in production; base64 of 32 random bytes, shared across API instances and retained for existing authenticator enrollments |
-| `SMTP_*` | Optional SMTP transport values from the secret store |
-| `EMAIL_WORKER_ENABLED` | Enable only when all SMTP settings are valid |
+| `EMAIL_TRANSPORT` | `smtp` (default) or `resend` for HTTPS delivery |
+| `SMTP_*` | SMTP transport values when using SMTP |
+| `RESEND_API_KEY`, `RESEND_FROM_ADDRESS` | Required when `EMAIL_TRANSPORT=resend`; sender must use a domain verified in Resend |
+| `RESEND_FROM_NAME` | Optional sender display name |
+| `EMAIL_WORKER_ENABLED` | Enable only after the selected transport and sender are configured |
 | `EMAIL_WORKER_*` | Polling, batch, retry, and lease controls |
 
 `VERIFY_DB_*` values are verification-only credentials for a principal allowed to create and drop databases in CI or isolated staging. They must never be supplied to the application runtime. `VERIFY_DB_CONFIRM_DISPOSABLE` remains `false` by default and is set to `true` only for an intentional verifier run. A public domain routes HTTPS traffic to the frontend/API; it never receives SQL credentials.
@@ -75,9 +78,11 @@ Customer logout requires confirmation and ends the current session. The administ
 
 Generate `PASSWORD_RESET_HMAC_SECRET` with a cryptographically secure generator and place the result directly in the deployment secret manager. Do not paste the value into source files, tickets, screenshots, logs, or shell history. Every API and email-worker instance in one environment must receive the same value.
 
-Reset links expire after 15 minutes, work once, are scoped to either customer or administrator accounts, and revoke every existing session for that account when consumed. The database and email outbox store only a public selector; the HMAC proof and complete URL are reconstructed in worker memory immediately before SMTP delivery. Sensitive reset messages cannot be previewed through the administrator API.
+Reset links expire after 15 minutes, work once, are scoped to either customer or administrator accounts, and revoke every existing session for that account when consumed. The database and email outbox store only a public selector; the HMAC proof and complete URL are reconstructed in worker memory immediately before email delivery. Sensitive reset messages cannot be previewed through the administrator API.
 
-SMTP is operationally required for self-service recovery. With the worker or SMTP disabled, forgot-password requests intentionally retain the same generic success response, but the user will not receive a link and the outbox row remains `PENDING`. Before enabling production traffic, verify separate customer and administrator delivery in staging, expiration, one-time use, old-session rejection, and confirmation email delivery.
+An email transport is operationally required for self-service recovery. With the worker or transport disabled, forgot-password requests intentionally retain the same generic success response, but the user will not receive a link and the outbox row remains `PENDING`. Before enabling production traffic, verify separate customer and administrator delivery in staging, expiration, one-time use, old-session rejection, and confirmation email delivery.
+
+Render Free blocks the common SMTP ports. For this host, set `EMAIL_TRANSPORT=resend`, `RESEND_API_KEY`, `RESEND_FROM_ADDRESS=no-reply@la-chef.online`, and optionally `RESEND_FROM_NAME=LA Chef Event Catering Services` in Render's environment settings, then enable `EMAIL_WORKER_ENABLED=true` and redeploy. Keep the API key exclusively in the backend secret store. The Resend adapter uses HTTPS, a 15-second request timeout, and a stable idempotency key for each outbox message. Concurrent requests, rate limits, network failures, and provider server failures use the existing bounded retries; authentication or invalid-recipient errors fail without leaking provider response bodies. Enabling the worker processes existing pending mail too. Confirm an actual registration code reaches a mailbox and completes verification; a healthy API alone does not establish email delivery.
 
 Secret rotation invalidates every outstanding reset link. Rotate by deploying the new secret to all API and worker instances together, restart them, then tell affected users to request a new link. Do not retain an old secret for fallback verification. Periodically delete expired or consumed reset rows according to the approved retention policy; do not delete active rows during normal operation.
 
@@ -133,16 +138,16 @@ The restore script never drops its verification database. After application smok
 
 ## Email Outbox
 
-Business transactions write notification intent to `dbo.EMAIL_OUTBOX`. When SMTP is absent or `EMAIL_WORKER_ENABLED=false`, transactions still succeed and messages remain truthfully `PENDING`; administrators can inspect previews in Email Operations. Do not mark these messages as sent manually.
+Business transactions write notification intent to `dbo.EMAIL_OUTBOX`. When no email transport is configured or `EMAIL_WORKER_ENABLED=false`, transactions still succeed and messages remain truthfully `PENDING`; administrators can inspect previews in Email Operations. Do not mark these messages as sent manually.
 
-Customer registration commits its `ACCOUNT_REGISTERED` intent atomically with the new account. An hourly scheduler uses the `Asia/Manila` calendar to queue one `UPCOMING_EVENT_REMINDER` intent for each active customer's confirmed booking from three days before the event through event day. Existing intent rows prevent duplicate reminders. Immediately before SMTP delivery, the worker rechecks that the customer remains active and the booking remains confirmed, on the same date, and not in the past; stale reminders fail closed.
+Customer registration commits its `ACCOUNT_REGISTERED` intent atomically with the new account. An hourly scheduler uses the `Asia/Manila` calendar to queue one `UPCOMING_EVENT_REMINDER` intent for each active customer's confirmed booking from three days before the event through event day. Existing intent rows prevent duplicate reminders. Immediately before email delivery, the worker rechecks that the customer remains active and the booking remains confirmed, on the same date, and not in the past; stale reminders fail closed.
 
-When SMTP is enabled, monitor:
+When email delivery is enabled, monitor:
 
 - age and count of `PENDING` rows;
 - `FAILED` rows and last error category;
 - rows left `PROCESSING` beyond the configured lease;
-- worker batch results, retry exhaustion, and SMTP authentication failures.
+- worker batch results, retry exhaustion, and email provider authentication failures.
 
 Retry failed rows through the administrator workflow after correcting the transport issue. Password-reset rows are intentionally excluded from preview and may become undeliverable after expiry or supersession; ask the user to submit a fresh request instead of retrying an old reset message. Never put passwords, complete reset tokens, proof images, or database credentials in templates or logs.
 

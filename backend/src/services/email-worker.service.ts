@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { renderPasswordResetEmail } from './password-reset-email.service.js';
 import { renderUpcomingEventReminder } from './event-reminder.service.js';
 import { emailVerificationService } from './email-verification.service.js';
+import { createResendTransport } from './resend-transport.js';
 
 interface MailTransport {
   sendMail(message: Record<string, unknown>): Promise<{ rejected?: unknown[] } | unknown>;
@@ -88,6 +89,7 @@ export function createEmailWorker(deps: WorkerDependencies) {
           continue;
         }
         const response = await transport.sendMail({
+          idempotencyKey: `la-chef-outbox-${item.id}`,
           from: deps.from,
           to: item.recipient,
           subject: rendered.subject,
@@ -147,7 +149,8 @@ export function createEmailWorker(deps: WorkerDependencies) {
 }
 
 const smtp = environment.email.smtp;
-const transport = smtp ? nodemailer.createTransport({
+const resend = environment.email.resend;
+const transport = resend ? createResendTransport(resend.apiKey) : smtp ? nodemailer.createTransport({
   host: smtp.host,
   port: smtp.port,
   secure: smtp.secure,
@@ -161,7 +164,7 @@ export const emailWorker = createEmailWorker({
   repository: emailOutboxRepository,
   transport,
   settings: environment.email.worker,
-  from: smtp?.from ?? { name: 'LA Chef Event Catering Services', address: 'disabled@invalid.local' },
+  from: resend?.from ?? smtp?.from ?? { name: 'LA Chef Event Catering Services', address: 'disabled@invalid.local' },
   renderPasswordResetEmail,
   renderUpcomingEventReminder,
 });

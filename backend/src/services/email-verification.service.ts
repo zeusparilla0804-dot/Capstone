@@ -39,5 +39,5 @@ export function createEmailVerificationService(deps: {
   };
 }
 export const emailVerificationService = createEmailVerificationService({ repository: emailVerificationRepository,
-  secret: environment.emailVerificationSecret, smtpConfigured: Boolean(environment.email.smtp) && environment.email.worker.enabled,
+  secret: environment.emailVerificationSecret, smtpConfigured: Boolean(environment.email.smtp || environment.email.resend) && environment.email.worker.enabled,
   queue: queueNotification, now: () => new Date() });
