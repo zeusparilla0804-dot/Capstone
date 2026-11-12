@@ -41,4 +41,17 @@ describe('HomePageComponent', () => {
     expect(accent.textContent?.trim()).toBe('LA');
     expect(getComputedStyle(accent).color).toBe('rgb(209, 164, 77)');
   });
+
+  it('publishes the client-confirmed contact directory instead of a placeholder email', () => {
+    const footer = fixture.nativeElement.querySelector('.site-footer') as HTMLElement;
+    expect(footer.textContent).toContain('Panorama Ville, Dita, Santa Rosa, Laguna');
+    expect([...footer.querySelectorAll('a[href^="tel:"]')].map(link => link.getAttribute('href'))).toEqual([
+      'tel:+639392987324', 'tel:+639260894301', 'tel:+639479662352',
+    ]);
+    expect(footer.querySelector('a[href^="mailto:"]')).toBeNull();
+    expect([...footer.querySelectorAll('nav a')].map(link => link.getAttribute('href'))).toEqual([
+      '/', '/packages', '/events', '/about', '/contact', '/login',
+    ]);
+    expect(footer.querySelector('a[href="#"], a[href=""]')).toBeNull();
+  });
 });

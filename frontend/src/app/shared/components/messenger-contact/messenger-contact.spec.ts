@@ -71,6 +71,34 @@ describe('MessengerContactComponent', () => {
     expect(root.querySelector('a')).not.toBeNull();
   });
 
+  it('keeps page controls clickable when the floating shortcut would cover them', async () => {
+    const root = await renderAt('/dashboard');
+    const link = root.querySelector<HTMLAnchorElement>('a')!;
+    const main = document.createElement('main');
+    const button = document.createElement('button');
+    button.textContent = 'Save booking changes';
+    main.append(button);
+    document.body.append(main);
+    vi.spyOn(link, 'getBoundingClientRect').mockReturnValue(new DOMRect(900, 700, 112, 42));
+    const buttonRect = vi.spyOn(button, 'getBoundingClientRect').mockReturnValue(new DOMRect(800, 700, 212, 44));
+    try {
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      fixture.detectChanges();
+      expect(getComputedStyle(link).visibility).toBe('hidden');
+      expect(getComputedStyle(link).pointerEvents).toBe('none');
+      expect(root.querySelector('a')).toBe(link);
+
+      buttonRect.mockReturnValue(new DOMRect(800, 500, 212, 44));
+      window.dispatchEvent(new Event('scroll'));
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      fixture.detectChanges();
+      expect(getComputedStyle(link).visibility).toBe('visible');
+    } finally {
+      main.remove();
+    }
+  });
+
   it.each(['', 'http://www.facebook.com/messages/t/1', 'javascript:alert(1)', 'not-a-url'])(
     'renders nothing for invalid configuration %s',
     async value => {

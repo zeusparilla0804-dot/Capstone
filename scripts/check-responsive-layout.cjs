@@ -10,6 +10,8 @@ const { chromium } = requireFrontend('@playwright/test');
 const output = path.join(root, '.codex-temp/responsive');
 const widths = (process.argv.find(x => x.startsWith('--widths='))?.split('=')[1] || '320,390,430,768,1024,1440,1920').split(',').map(Number);
 const auditOnly = process.argv.includes('--audit-only');
+const reportName = process.argv.find(x => x.startsWith('--report='))?.slice(9) || 'audit.json';
+if (!/^[\w.-]+\.json$/.test(reportName)) throw new Error('Report must be a JSON filename');
 const publicRoot = path.join(root, 'frontend/dist/frontend/browser');
 const mime = { '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ttf': 'font/ttf' };
 async function fixture(feature, name) {
@@ -57,7 +59,12 @@ const server = http.createServer(async (req, res) => {
   pages.push('/book-event?paymentBooking=42&step=4&layout=payment-confirm', '/admin/payment-qrs?layout=assignment');
   pages.push('/admin/payments?layout=legacy-cash', '/admin/payments?layout=legacy-bank', '/admin/payments/proofs/1?layout=legacy-proof',
     '/my-bookings/42/payment?layout=legacy-proof', '/my-bookings?layout=legacy-choice', '/billing?layout=legacy-choice');
-  const selectedPages = process.argv.includes('--payments-only') ? pages.filter(route => /payment|billing|legacy-choice/.test(route))
+  pages.push('/admin/reports?layout=no-upcoming');
+  pages.push('/admin/payments?layout=installment-cash', '/admin/payments?layout=installment-bank');
+  const selectedPages = process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
+    : process.argv.includes('--installments-only') ? pages.filter(route => route.includes('layout=installment-'))
+    : process.argv.includes('--details-only') ? ['/admin/bookings/42', '/admin/invoices/8', '/invoice/8', '/admin/reports?layout=payments']
+    : process.argv.includes('--payments-only') ? pages.filter(route => /payment|billing|legacy-choice/.test(route))
     : process.argv.includes('--states-only') ? pages.filter(route => route.includes('?')) : pages;
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
@@ -100,9 +107,11 @@ const server = http.createServer(async (req, res) => {
       else if (p.endsWith('/event-types')) data = [{ id: 1, name: 'Wedding' }, { id: 2, name: 'Birthday' }];
       else if (p === '/packages') data = packages;
       else if (p === '/notifications') data = [];
-      else if (p.endsWith('/reports/reservations')) data = reservationReport;
+      else if (p.endsWith('/reports/reservations')) data = currentLayout === 'no-upcoming'
+        ? { ...reservationReport, upcomingItems: [], items: Array.from({ length: 5 }, (_, index) => ({ ...reservationReport.items[0], reference: `LC-REPORT-${index + 1}`, guestCount: [120, 50, 100, 100, 100][index] })) } : reservationReport;
       else if (p.endsWith('/reports/payments')) data = paymentReport;
-      else if (p === '/admin/payments') data = paginate([{ ...payment, ...(currentLayout.startsWith('legacy-') ? { paymentMethod: 'E-WALLET' } : {}) }]);
+      else if (p === '/admin/payments') data = paginate([{ ...payment, ...(currentLayout.startsWith('legacy-') ? { paymentMethod: 'E-WALLET' }
+        : currentLayout.startsWith('installment-') ? { paymentMethod: currentLayout === 'installment-cash' ? 'BANK_TRANSFER' : 'CASH', bookingStatus: 'PAYMENT_VERIFIED', amountPaid: 42500 } : {}) }]);
       else if (p === '/admin/payment-proofs') data = paginate([review.proof]);
       else if (/^\/admin\/payment-proofs\/\d+$/.test(p)) data = currentLayout === 'legacy-proof' ? { ...review, proof: { ...review.proof, method: 'E_WALLET' } } : review;
       else if (p === '/admin/email-outbox') data = paginate([{ id: '1', recipient: profile.email, templateKey: 'BOOKING_APPROVED', payload: {}, relatedEntityType: 'BOOKING', relatedEntityId: '42', status: 'FAILED', attemptCount: 3, lastError: 'Mailbox unavailable', createdAt: '2026-10-01', updatedAt: '2026-10-02' }]);
@@ -147,6 +156,15 @@ const server = http.createServer(async (req, res) => {
           if (JSON.stringify(await method.locator('option').evaluateAll(options => options.map(option => option.value))) !== JSON.stringify(['', 'CASH', 'BANK_TRANSFER'])) throw Error('Unsupported recovery payment choices');
           await method.selectOption(layout === 'legacy-cash' ? 'CASH' : 'BANK_TRANSFER');
         }
+        if (layout?.startsWith('installment-')) {
+          await page.locator('[data-record-bank],[data-record-cash]').click();
+          await page.locator('select[formControlName="method"]').selectOption(layout === 'installment-cash' ? 'CASH' : 'BANK_TRANSFER');
+          await page.locator('input[formControlName="amount"]').fill('42500');
+          await page.locator('input[formControlName="paymentDate"]').fill('2026-11-01');
+          if (layout === 'installment-bank') await page.locator('input[maxlength="150"]').fill('BANK-INSTALLMENT-QA');
+          else if (await page.locator('input[maxlength="150"]').count()) throw Error('Cash installment must not require a bank reference');
+          if (!await page.locator('.admin-form button[type="submit"]').isEnabled()) throw Error('Valid installment must be recordable');
+        }
         if (layout === 'legacy-choice') await page.getByRole('link', { name: 'Change payment method', exact: true }).waitFor();
         if (layout === 'legacy-proof' && await page.locator('#proof-file,[data-testid="verify-proof"]').count()) throw Error('Legacy GCash must not accept new proof or credit');
         if (layout === 'assignment') await page.getByRole('button', { name: 'Choose customer', exact: true }).click();
@@ -156,10 +174,29 @@ const server = http.createServer(async (req, res) => {
           await page.locator('img.mfa-qr').waitFor();
         }
         if (layout) await page.waitForTimeout(100);
-        await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
+        const blockedActions = await page.evaluate(async () => {
+          const blocked = [];
+          const settle = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+          for (const top of [...new Set([0, Math.round(max / 2), max])]) {
+            scrollTo({ top, behavior: 'instant' });
+            await settle();
+            const launcher = document.querySelector('app-messenger-contact:not(.is-inline) a');
+            if (!launcher || !launcher.checkVisibility({ visibilityProperty: true })) continue;
+            const rect = launcher.getBoundingClientRect();
+            for (const control of document.querySelectorAll('main a,main button,main input,main select,main textarea,.site-footer a')) {
+              if (!control.checkVisibility({ visibilityProperty: true })) continue;
+              const box = control.getBoundingClientRect();
+              if (Math.min(rect.right, box.right) - Math.max(rect.left, box.left) > 2 && Math.min(rect.bottom, box.bottom) - Math.max(rect.top, box.top) > 2) blocked.push({ top, text: control.textContent.trim().slice(0, 50) });
+            }
+          }
+          scrollTo({ top: 0, behavior: 'instant' });
+          await settle();
+          return blocked;
+        });
         const measurement = await page.evaluate(() => {
           const viewport = innerWidth;
-          const overflowing = [...document.querySelectorAll('main *')].filter(el => {
+          const overflowing = [...document.querySelectorAll('main *, .site-footer *, app-public-header *')].filter(el => {
             const r = el.getBoundingClientRect(); if (!el.checkVisibility() || !r.width || !r.height || r.left >= viewport || r.right <= 0) return false;
             let parent = el.parentElement;
             while (parent && parent !== document.body && parent !== document.documentElement) { const s = getComputedStyle(parent); if (['auto', 'scroll', 'hidden', 'clip'].includes(s.overflowX)) return false; parent = parent.parentElement; }
@@ -169,7 +206,7 @@ const server = http.createServer(async (req, res) => {
             const control = cell.querySelector('select, button, a');
             return control ? Math.round(control.getBoundingClientRect().left - cell.getBoundingClientRect().left) : 0;
           }).filter(x => x > 3) : [];
-          const textOverflow = [...document.querySelectorAll('h1,h2,h3,p,dd,dt,label,.btn')].filter(el => el.checkVisibility() && !el.children.length && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2 && getComputedStyle(el).overflowX === 'visible').slice(0, 8).map(el => ({ cls: el.className, text: el.textContent.trim().slice(0, 60) }));
+          const textOverflow = [...document.querySelectorAll('h1,h2,h3,p,dd,dt,label,address,nav a,.btn')].filter(el => el.checkVisibility() && !el.children.length && el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 2 && getComputedStyle(el).overflowX === 'visible').slice(0, 8).map(el => ({ cls: el.className, text: el.textContent.trim().slice(0, 60) }));
           const dialogOverflow = [...document.querySelectorAll('dialog[open],[role="dialog"][aria-modal="true"]')].filter(el => {
             if (!el.checkVisibility()) return false;
             const rect = el.getBoundingClientRect();
@@ -179,17 +216,56 @@ const server = http.createServer(async (req, res) => {
           const headerCopy = header?.querySelector('p');
           const headerAction = header?.querySelector('.btn');
           const headerGap = viewport < 768 && headerCopy && headerAction ? Math.round(headerAction.getBoundingClientRect().top - headerCopy.getBoundingClientRect().bottom) : 0;
-          return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
+          const numericHeaderAlignment = [...document.querySelectorAll('table')].flatMap(table => {
+            if (getComputedStyle(table).display !== 'table') return [];
+            const headers = [...table.querySelectorAll('thead tr:first-child th')];
+            return [...table.querySelectorAll('tbody tr:first-child td')].flatMap((cell, index) => {
+              const header = headers[index];
+              if (!header || !header.checkVisibility() || !cell.classList.contains('is-number')) return [];
+              return getComputedStyle(header).textAlign === getComputedStyle(cell).textAlign ? [] : [{ column: header.textContent.trim(), header: getComputedStyle(header).textAlign, body: getComputedStyle(cell).textAlign }];
+            });
+          });
+          const overlappingControls = [...document.querySelectorAll('main form, .site-footer__inner')].flatMap(form => {
+            const controls = (form.classList.contains('site-footer__inner') ? [...form.children] : [...form.querySelectorAll('input:not([type="hidden"]),select,textarea,button')]).filter(el => el.checkVisibility() && el.getBoundingClientRect().width > 0);
+            return controls.flatMap((a, i) => controls.slice(i + 1).flatMap(b => {
+              const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+              // A calendar/dialog intentionally overlays the form behind it.
+              if (a.closest('[role="dialog"],dialog') !== b.closest('[role="dialog"],dialog')) return [];
+              // Password toggles sit inside the input border; require padding to protect typed text.
+              const input = a.matches('input') ? a : b.matches('input') ? b : null;
+              const toggle = a.matches('button') ? a : b.matches('button') ? b : null;
+              if (input && toggle && input.parentElement === toggle.parentElement
+                && input.parentElement.matches('.password-field,.password-control')
+                && /^(Show|Hide).*password/i.test(toggle.getAttribute('aria-label') || '')) {
+                const textRight = input.getBoundingClientRect().right - parseFloat(getComputedStyle(input).paddingRight);
+                if (textRight <= toggle.getBoundingClientRect().left - 2) return [];
+              }
+              return Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left) > 2 && Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top) > 2
+                ? [{ first: a.getAttribute('aria-label') || a.name || a.textContent.trim().slice(0, 30), second: b.getAttribute('aria-label') || b.name || b.textContent.trim().slice(0, 30) }] : [];
+            }));
+          });
+          // Overflow-wrap can conceal cramped columns by splitting amounts or short labels.
+          const splitTokens = [...document.querySelectorAll('.financial-strip dd,.report-summary dd,.invoice-parties dt,.invoice-table th,.invoice-table td')].flatMap(el => {
+            if (!el.checkVisibility() || el.children.length) return [];
+            const node = [...el.childNodes].find(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+            if (!node) return [];
+            return [...node.textContent.matchAll(/[₱\d][\d,.]+|[A-Za-z]{4,}/g)].flatMap(match => {
+              const range = document.createRange();
+              range.setStart(node, match.index); range.setEnd(node, match.index + match[0].length);
+              return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1 ? [{ text: match[0], cls: el.className }] : [];
+            });
+          });
+          return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, numericHeaderAlignment, overlappingControls, splitTokens, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
         });
-        const result = { width, route, ...measurement, errors: [...errors] }; results.push(result);
-        if (measurement.scrollWidth > width + 1 || measurement.overflowing.length || measurement.actionOffsets.length || measurement.textOverflow.length || measurement.dialogOverflow.length || measurement.headerGap > 48 || errors.length || width === 390 || (width === 768 && ['/my-bookings', '/admin/payment-qrs'].includes(route))) {
+        const result = { width, route, ...measurement, blockedActions, errors: [...errors] }; results.push(result);
+        if (measurement.scrollWidth > width + 1 || measurement.overflowing.length || measurement.actionOffsets.length || measurement.textOverflow.length || measurement.dialogOverflow.length || measurement.numericHeaderAlignment.length || measurement.overlappingControls.length || measurement.splitTokens.length || blockedActions.length || measurement.headerGap > 48 || errors.length || width === 390 || process.argv.includes('--screenshots') || (width === 768 && ['/my-bookings', '/admin/payment-qrs'].includes(route))) {
           await page.screenshot({ path: path.join(output, `${width}-${route.replace(/\W+/g, '-') || 'home'}.png`), fullPage: true });
         }
       }
       console.log(`Audited ${width}px: ${selectedPages.length} routes/states`);
     }
-    await fs.writeFile(path.join(output, 'audit.json'), JSON.stringify(results, null, 2));
-    const issues = results.filter(r => r.scrollWidth > r.width + 1 || r.overflowing.length || r.actionOffsets.length || r.textOverflow.length || r.dialogOverflow.length || r.headerGap > 48 || r.errors.length);
+    await fs.writeFile(path.join(output, reportName), JSON.stringify(results, null, 2));
+    const issues = results.filter(r => r.scrollWidth > r.width + 1 || r.overflowing.length || r.actionOffsets.length || r.textOverflow.length || r.dialogOverflow.length || r.numericHeaderAlignment.length || r.overlappingControls.length || r.splitTokens.length || r.blockedActions.length || r.headerGap > 48 || r.errors.length);
     console.log(JSON.stringify({ total: results.length, unhandledEndpoints: [...unhandledEndpoints], issues }, null, 2));
     if (unhandledEndpoints.size) process.exitCode = 1;
     if (issues.length && !auditOnly) process.exitCode = 1;

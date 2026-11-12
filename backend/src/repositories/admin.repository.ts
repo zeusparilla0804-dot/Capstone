@@ -83,7 +83,8 @@ export async function recordPayment(adminId:number,v:PaymentInput,options:{compl
   if(!['AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED'].includes(String(booking.status).toUpperCase()))throw new Error('PAYMENT_BOOKING_STATUS');
   const previousMethod=String(row.payment_method??'').toUpperCase();
   const retiredMethodRecovery=previousMethod==='E-WALLET'&&['CASH','BANK_TRANSFER'].includes(v.method);
-  if(!options.completeEvent&&previousMethod!==v.method&&!retiredMethodRecovery)throw new Error('PAYMENT_METHOD_NOT_SELECTED');
+  const additionalInstallment=Number(row.amount_paid)>0&&['CASH','BANK_TRANSFER'].includes(previousMethod);
+  if(!options.completeEvent&&previousMethod!==v.method&&!retiredMethodRecovery&&!additionalInstallment)throw new Error('PAYMENT_METHOD_NOT_SELECTED');
   if(options.completeEvent&&Math.round(v.amount*100)!==Math.max(0,Math.round(Number(row.amount_due)*100)-Math.round(Number(row.amount_paid)*100)))throw new Error('FINAL_BALANCE_CHANGED');
   if(options.completeEvent&&v.amount===0){await completeEvent();await tx.commit();return true;}
   const cumulativeCents=Math.round(Number(row.amount_paid)*100)+Math.round(v.amount*100);

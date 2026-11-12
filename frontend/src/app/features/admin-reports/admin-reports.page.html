@@ -49,7 +49,7 @@
           </section>
 
           @if (report.items.length) {
-            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date & time</th><th>Guests</th><th>Venue</th><th>Package</th><th>Status</th></tr></thead><tbody>
+            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date & time</th><th class="is-number">Guests</th><th>Venue</th><th>Package</th><th>Status</th></tr></thead><tbody>
               @for (item of report.items; track item.reference) { <tr><td data-label="Reference"><strong>{{ item.reference }}</strong></td><td data-label="Customer">{{ item.customer }}</td><td data-label="Event">{{ item.eventType }}</td><td data-label="Date & time">{{ item.eventDate | date:'mediumDate':'UTC' }}<small>{{ item.eventTime }}</small></td><td data-label="Guests" class="is-number">{{ item.guestCount }}</td><td data-label="Venue">{{ item.venue }}</td><td data-label="Package">{{ item.packageName }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
             </tbody></table></div>
           } @else { <p class="report-state report-state--empty">No reservation records match these filters.</p> }
@@ -78,7 +78,7 @@
           </dl>
 
           @if (report.items.length) {
-            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Invoice</th><th>Reservation</th><th>Customer</th><th>Issued</th><th>Method</th><th>Amount due</th><th>Paid</th><th>Outstanding</th><th>Status</th></tr></thead><tbody>
+            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Invoice</th><th>Reservation</th><th>Customer</th><th>Issued</th><th>Method</th><th class="is-number">Amount due</th><th class="is-number">Paid</th><th class="is-number">Outstanding</th><th>Status</th></tr></thead><tbody>
               @for (item of report.items; track item.invoiceNumber) { <tr><td data-label="Invoice"><strong>{{ item.invoiceNumber }}</strong></td><td data-label="Reservation">{{ item.bookingReference }}</td><td data-label="Customer">{{ item.customer }}</td><td data-label="Issued">{{ item.issuedDate | date:'mediumDate':'UTC' }}@if (item.latestPaymentDate) { <small>Last paid {{ item.latestPaymentDate | date:'mediumDate':'UTC' }}</small> }</td><td data-label="Method">{{ item.method | paymentMethodLabel }}</td><td data-label="Amount due" class="is-number">{{ item.amountDue | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Paid" class="is-number">{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Outstanding" class="is-number">{{ item.outstandingBalance | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
             </tbody></table></div>
           } @else { <p class="report-state report-state--empty">No payment records match these filters.</p> }

@@ -148,21 +148,31 @@
 </main>
 <footer class="site-footer">
   <div class="page-container site-footer__inner">
-    <div>
+    <div class="site-footer__about">
       <a class="site-footer__brand" routerLink="/"><span class="site-footer__brand-accent">LA</span> Chef</a>
-      <p>Modern Filipino catering for meaningful celebrations.</p>
+      <p>Event catering services for weddings, birthdays, and gatherings.</p>
+      <address>{{ contact.address }}</address>
+      <a routerLink="/contact">Contact &amp; location</a>
     </div>
     <nav aria-label="Footer navigation">
-      <a routerLink="/packages">Packages</a><a routerLink="/about">About</a
-      ><a routerLink="/contact">Contact</a><a routerLink="/login">Customer login</a>
+      <h2>Explore</h2>
+      <a routerLink="/">Home</a>
+      <a routerLink="/packages">Packages</a>
+      <a routerLink="/events">Events</a>
+      <a routerLink="/about">About</a>
+      <a routerLink="/contact">Contact</a>
+      <a routerLink="/login">Customer login</a>
     </nav>
     <div class="site-footer__contact">
-      <strong>Plan with us</strong><a href="mailto:hello@lachef.ph">hello@lachef.ph</a
-      ><span>Philippines</span>
+      <h2>Call or message</h2>
+      <ul aria-label="LA Chef contact numbers">
+        @for (number of contact.numbers; track number.href) {
+          <li><span>{{ number.label }}</span><a [href]="number.href" [attr.aria-label]="number.label + ': ' + number.display">{{ number.display }}</a></li>
+        }
+      </ul>
     </div>
   </div>
   <div class="page-container site-footer__bottom">
-    <span>&copy; 2026 LA Chef Catering Services</span
-    ><span>Made for celebrations worth remembering.</span>
+    <span>&copy; {{ currentYear }} LA Chef Catering Services</span>
   </div>
 </footer>

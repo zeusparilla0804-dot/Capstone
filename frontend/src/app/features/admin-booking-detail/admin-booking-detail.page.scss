@@ -192,3 +192,12 @@
 .completion-summary h2 { margin: 0 0 .5rem; }
 .completion-summary p { margin: 0; }
 @media (max-width: 600px) { .completion-summary { align-items: flex-start; flex-direction: column; } }
+
+// A tablet sidebar leaves less room than the viewport width suggests.
+.financial-strip { container-type: inline-size; }
+@container (max-width: 640px) {
+  .financial-strip dl { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .financial-strip dl div,
+  .financial-strip dl div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; border: 0; padding: 0; }
+  .financial-strip dd { margin: 0; font-size: 18px; white-space: nowrap; }
+}

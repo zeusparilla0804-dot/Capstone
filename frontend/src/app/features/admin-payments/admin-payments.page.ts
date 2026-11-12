@@ -9,7 +9,7 @@ import { AdminService } from '../../core/services/admin.service';
 import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
-import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
+import { PaymentMethodLabelPipe, paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
 import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
 
 @Component({
@@ -131,7 +131,7 @@ export class AdminPaymentsPage {
     const cash = method === 'CASH';
     const formattedAmount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
     this.feedback.confirm({ title: cash ? 'Record cash payment?' : 'Record verified bank payment?', confirmLabel: cash ? 'Confirm cash received' : 'Confirm payment received',
-      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment date: ${date}\n${cash ? '' : `Account: ${booking.paymentMethod === 'E-WALLET' ? 'Bank transfer (verified by staff)' : booking.paymentDestinationLabel || method}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
+      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment method: ${paymentMethodLabel(method)}\nPayment date: ${date}\n${cash ? '' : `Account: ${booking.paymentMethod === 'BANK_TRANSFER' && booking.paymentDestinationLabel ? booking.paymentDestinationLabel : 'Bank transfer (verified by staff)'}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
     }, () => {
       if (this.selectedCashBooking() !== booking || this.form.controls.method.value !== method || this.form.controls.amount.value !== amount || this.form.controls.paymentDate.value !== date || (!cash && this.transactionReference.value.trim() !== reference)) return;
       this.save();
@@ -146,7 +146,7 @@ export class AdminPaymentsPage {
     if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && this.transactionReference.invalid)) return;
     const value = { ...this.form.getRawValue(), requestId: this.cashRequestId,
       ...(this.form.controls.method.value !== 'CASH' ? { reference: this.transactionReference.value.trim() } : {}) };
-    if (value.reservationId !== selected.reservationId || (value.method !== selected.paymentMethod && selected.paymentMethod !== 'E-WALLET')) return;
+    if (value.reservationId !== selected.reservationId || (value.method !== selected.paymentMethod && selected.paymentMethod !== 'E-WALLET' && selected.amountPaid <= 0)) return;
     this.saving.set(true);
     this.error.set('');
     this.message.set('');

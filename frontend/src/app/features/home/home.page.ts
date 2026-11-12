@@ -4,6 +4,7 @@ import { CateringPackage, PackageCategory } from '../../core/models';
 import { PackageService } from '../../core/services/package.service';
 import { PackageCardComponent } from '../../shared/components/package-card/package-card';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
+import { businessContact } from '../../core/content/business-contact';
 
 interface CateringService {
   readonly title: string;
@@ -20,6 +21,8 @@ interface CateringService {
   styleUrl: './home.page.scss',
 })
 export class HomePageComponent {
+  protected readonly contact = businessContact;
+  protected readonly currentYear = new Date().getFullYear();
   private readonly packageService = inject(PackageService);
   private readonly router = inject(Router);
 

@@ -12,6 +12,27 @@ process.env.DB_PASSWORD ??= 'test';
 const { recordPayment } = await import('./admin.repository.js');
 const { closeDatabase } = await import('../config/database.js');
 
+for (const [previousMethod, method] of [['BANK_TRANSFER', 'CASH'], ['CASH', 'BANK_TRANSFER']] as const) {
+  test(`the first ${method} payment cannot bypass the selected ${previousMethod} method`, async t => {
+    const db = installDatabase(t, 'AWAITING_PAYMENT', { amountPaid: 0, paymentMethod: previousMethod });
+    try {
+      await assert.rejects(recordPayment(2, { reservationId: 5, amount: 50, method, reference: `FIRST-${method}`, paymentDate: '2026-10-02' }), /PAYMENT_METHOD_NOT_SELECTED/);
+      assert.equal(db.credits.length, 0);
+      assert.deepEqual(db.events, ['begin', 'rollback']);
+    } finally { await closeDatabase(); }
+  });
+  test(`an additional ${method} installment preserves earlier ${previousMethod} transactions`, async t => {
+    const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountPaid: 50, paymentMethod: previousMethod });
+    try {
+      assert.equal(await recordPayment(2, { reservationId: 5, amount: 50, method, reference: `BALANCE-${method}`, paymentDate: '2026-10-02' }), true);
+      assert.equal(db.credits.length, 1);
+      assert.equal(db.credits[0]!['method'], method);
+      assert.equal(db.status(), 'PAYMENT_VERIFIED');
+      assert.equal(db.queries.some(query => /UPDATE dbo\.PAYMENT_TRANSACTION/i.test(query)), false);
+    } finally { await closeDatabase(); }
+  });
+}
+
 for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
   test(`a retired GCash booking can receive only a new ${method} payment without rewriting earlier transactions`, async t => {
     const db = installDatabase(t, 'PAYMENT_SUBMITTED', { amountDue: 100, amountPaid: 10, paymentMethod: 'E-WALLET' });

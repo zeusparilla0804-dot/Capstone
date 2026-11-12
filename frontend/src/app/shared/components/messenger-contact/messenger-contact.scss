@@ -38,6 +38,7 @@
 }
 
 .messenger-contact__glyph { width: 15px; height: 15px; fill: currentColor; }
+.messenger-contact--obscured { visibility: hidden; pointer-events: none; }
 .messenger-contact:active { transform: scale(0.97); }
 .messenger-contact:focus-visible { outline: 3px solid rgba(166, 124, 46, 0.45); outline-offset: 3px; }
 

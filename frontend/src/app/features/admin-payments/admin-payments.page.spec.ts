@@ -14,6 +14,36 @@ class ShellStub {
 }
 
 describe('AdminPaymentsPage payment-proof queue', () => {
+  it.each(['CASH', 'BANK_TRANSFER'])('records a %s balance after a deposit by the other method using the actual received date', async method => {
+    const bank = { id: 8, reservationId: 43, bookingReference: 'BK-BANK-43', customerName: 'Bank Customer', amountDue: 10000, amountPaid: 5000,
+      paymentMethod: method === 'CASH' ? 'BANK_TRANSFER' : 'CASH', paymentDestinationLabel: 'BPI LA Chef', status: 'PARTIALLY_PAID', bookingStatus: 'PAYMENT_VERIFIED' };
+    const recordPayment = vi.fn((_input: unknown) => of({ success: true, data: { reference: 'CASH-FINAL' } }));
+    await TestBed.configureTestingModule({ imports: [AdminPaymentsPage], providers: [provideRouter([]), { provide: AdminService,
+      useValue: { payments: () => of({ data: { items: [bank], page: 1, totalPages: 1 } }), recordPayment,
+        paymentProofs: () => of({ data: { items: [], page: 1, totalPages: 0 } }) } }] })
+      .overrideComponent(AdminPaymentsPage, { remove: { imports: [AdminShellComponent] }, add: { imports: [ShellStub] } }).compileComponents();
+    const fixture = TestBed.createComponent(AdminPaymentsPage); const component = fixture.componentInstance as any;
+    component.recordCash(bank); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('select[formControlName="method"]')).not.toBeNull();
+    component.form.controls.method.setValue(method);
+    component.form.controls.amount.setValue(5000);
+    component.form.controls.paymentDate.setValue('2026-10-31');
+    fixture.detectChanges();
+    if (method === 'CASH') expect(fixture.nativeElement.querySelector('input[maxlength="150"]')).toBeNull();
+    else {
+      component.requestSave();
+      expect(recordPayment).not.toHaveBeenCalled();
+      component.transactionReference.setValue('BANK-INSTALLMENT');
+    }
+    component.requestSave();
+    const feedback = TestBed.inject(ActionFeedbackService);
+    expect(feedback.confirmation()?.message).toContain(method === 'CASH' ? 'Cash' : 'Bank transfer');
+    expect(feedback.confirmation()?.message).not.toContain('BPI LA Chef');
+    feedback.decide(true);
+    expect(recordPayment.mock.calls[0]?.[0]).toMatchObject({ reservationId: 43, method, amount: 5000, paymentDate: '2026-10-31',
+      ...(method === 'BANK_TRANSFER' ? { reference: 'BANK-INSTALLMENT' } : {}) });
+    expect(bank.paymentMethod).toBe(method === 'CASH' ? 'BANK_TRANSFER' : 'CASH');
+  });
   it.each(['CASH', 'BANK_TRANSFER'])('records a new %s payment on a legacy booking while keeping the original row intact', async method => {
     const old = { id: 7, reservationId: 42, bookingReference: 'BK-OLD', customerName: 'Customer', amountDue: 10000, amountPaid: 1000,
       paymentMethod: 'E-WALLET', status: 'PARTIALLY_PAID', bookingStatus: 'AWAITING_PAYMENT' };

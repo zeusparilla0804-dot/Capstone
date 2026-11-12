@@ -12,6 +12,7 @@
 }
 
 .invoice-document {
+  container: invoice / inline-size;
   width: min(100%, 1100px);
   margin: auto;
   padding: clamp(24px, 4vw, 56px);
@@ -301,6 +302,20 @@
   }
 }
 
+@media screen {
+  @container invoice (max-width: 640px) {
+    .invoice-header,
+    .invoice-parties,
+    .invoice-signatures { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .invoice-heading { text-align: left; }
+    .invoice-heading dt,
+    .invoice-parties dt { flex: 0 0 auto; overflow-wrap: normal; }
+    .invoice-parties dd { min-width: 0; }
+    .invoice-table { min-width: 600px; }
+    .invoice-signatures { gap: 46px; }
+  }
+}
+
 @media print {
   @page {
     size: Letter;
@@ -333,6 +348,7 @@
   }
 
   .invoice-document {
+    container-type: normal;
     width: 100%;
     max-width: none;
     padding: 0;

@@ -1,6 +1,7 @@
 @if (visible()) {
   <a
     class="messenger-contact"
+    [class.messenger-contact--obscured]="obscured()"
     [href]="messengerUrl"
     target="_blank"
     rel="noopener noreferrer"
