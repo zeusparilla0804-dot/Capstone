@@ -50,8 +50,22 @@
 .report-table td small { display: block; margin-top: 3px; color: var(--portal-text-secondary); }
 .report-table .is-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-@media (min-width: 768px) {
-  .report-table .report-table__venue { padding-left: 24px; }
+@media screen and (min-width: 768px) {
+  .report-table--reservations { table-layout: fixed; min-width: 1000px; }
+  .report-table--reservations th { padding: 0 12px 14px; }
+  .report-table--reservations td { padding: 18px 12px; overflow-wrap: break-word; }
+  .report-table--reservations :is(th, td):first-child { padding-left: 0; }
+  .report-table--reservations :is(th, td):last-child { padding-right: 0; }
+  .report-table--reservations .is-number { text-align: center; }
+  .report-table--reservations th:nth-child(1) { width: 17%; }
+  .report-table--reservations th:nth-child(2) { width: 16%; }
+  .report-table--reservations th:nth-child(3) { width: 10%; }
+  .report-table--reservations td[data-label='Event'] { white-space: nowrap; }
+  .report-table--reservations th:nth-child(4) { width: 12%; }
+  .report-table--reservations th:nth-child(5) { width: 7%; }
+  .report-table--reservations th:nth-child(6) { width: 10%; }
+  .report-table--reservations th:nth-child(7) { width: 13%; }
+  .report-table--reservations th:nth-child(8) { width: 15%; }
 }
 
 .report-state { margin: 0; padding: 42px 0; color: var(--portal-text-secondary); text-align: center; }
