@@ -10,6 +10,8 @@ vi.mock('qrcode', () => ({ default: { toString: renderQr } }));
 describe('AdminLoginPage', () => {
   let fixture: ComponentFixture<AdminLoginPage>;
 
+  afterEach(() => vi.unstubAllGlobals());
+
   beforeEach(async () => {
     vi.mocked(renderQr).mockReset();
     vi.mocked(renderQr).mockResolvedValue('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><path d="M0 0h1v1H0z"/></svg>');
@@ -35,6 +37,28 @@ describe('AdminLoginPage', () => {
     await component.submit();
     expect(navigate).toHaveBeenCalledWith('/admin/dashboard');
     expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['password', 'mfa', 'setup'])('opens a fresh dashboard document when %s sign-in cannot load the dashboard chunk', async (step) => {
+    const reload = vi.fn();
+    vi.stubGlobal('location', { assign: reload });
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockRejectedValueOnce(
+      new TypeError('Failed to fetch dynamically imported module: https://la-chef.online/old-dashboard.js'),
+    );
+    const component = fixture.componentInstance as any;
+    if (step === 'password') {
+      component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+      await component.submit();
+    } else if (step === 'mfa') {
+      component.challenge.set({ requiresMfa: true, challenge: 'pending' });
+      component.code.setValue('123456');
+      await component.verifyCode();
+    } else {
+      component.recoveryCodes.set(['recovery-code']);
+      await component.finishSetup();
+    }
+    expect(component.error()).toBe('');
+    expect(reload).toHaveBeenCalledExactlyOnceWith('/admin/dashboard');
   });
 
   it('does not navigate when administrator authentication fails', async () => {

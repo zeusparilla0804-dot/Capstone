@@ -52,7 +52,7 @@ export class AdminLoginPage {
         }
         return;
       }
-      await this.router.navigateByUrl('/admin/dashboard');
+      await this.openDashboard();
     } catch (error) {
       this.error.set(error instanceof HttpErrorResponse && error.status === 0
         ? 'Cannot connect to the server. Please try again shortly.'
@@ -71,14 +71,23 @@ export class AdminLoginPage {
       this.challenge.set(null);
       this.setupQrCode.set('');
       if (codes?.length) this.recoveryCodes.set(codes);
-      else await this.router.navigateByUrl('/admin/dashboard');
+      else await this.openDashboard();
     } catch {
       this.error.set('Invalid or expired code. Sign in again if the challenge has expired.');
     } finally { this.busy.set(false); }
   }
   protected async finishSetup(): Promise<void> {
     this.recoveryCodes.set([]);
-    await this.router.navigateByUrl('/admin/dashboard');
+    await this.openDashboard();
+  }
+  private async openDashboard(): Promise<void> {
+    try {
+      if (await this.router.navigateByUrl('/admin/dashboard')) return;
+    } catch {
+      // A deployment can remove a lazy chunk referenced by the open login page.
+      // Authentication has already succeeded; load the current app and let its guard check the session.
+    }
+    globalThis.location.assign('/admin/dashboard');
   }
   protected restart(): void {
     this.challenge.set(null);
