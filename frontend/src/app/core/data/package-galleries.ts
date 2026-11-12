@@ -47,7 +47,7 @@ export function categoryFor(value: string): EventCategory {
 
 export function defaultPackageGallery(name: string, category: EventCategory): readonly string[] {
   if (category === 'standard' && /^PHP\s*480(?:\s+per\s+head)?$/i.test(name.trim())) {
-    return [1, 2, 3, 4].map(index => `${PACKAGE_IMAGE_ROOT}/standard/classic-buffet-${String(index).padStart(2, '0')}.jpg`);
+    return [1, 2, 3, 4].map(index => `${PACKAGE_IMAGE_ROOT}/standard/classic-ballroom-${String(index).padStart(2, '0')}.jpg`);
   }
   if (category === 'standard' && /^PHP\s*580(?:\s+per\s+head)?$/i.test(name.trim())) {
     return [1, 2, 3, 4].map(index => `${PACKAGE_IMAGE_ROOT}/standard/expanded-buffet-${String(index).padStart(2, '0')}.jpg`);
