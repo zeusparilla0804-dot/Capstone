@@ -17,7 +17,7 @@
     @if (booking().status === 'completed') { <app-status-badge status="completed" /> }
     <div class="booking-card__actions">
       @if (booking().invoiceId) { <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', booking().invoiceId]">{{ booking().amountPaid > 0 ? 'View Receipt' : 'View Invoice' }}</a> }
-      @if (booking().status === 'awaiting_payment' && !booking().paymentMethod) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: booking().id, step: 4 }">Choose Payment Method</a> }
+      @if (needsPaymentChoice()) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: booking().id, step: 4 }">{{ booking().paymentMethod === 'gcash' ? 'Change payment method' : 'Choose Payment Method' }}</a> }
       @if (cashPaymentAction()) { <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', booking().id, 'payment']">View Cash Instructions</a> }
       @else if (onlinePaymentAction() && booking().amountPaid === 0) {
         @if (waitingForPaymentQr()) {

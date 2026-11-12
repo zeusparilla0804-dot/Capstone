@@ -34,7 +34,7 @@ const standardPackage: CateringPackage = {
 
 const initialDraft: BookingDraft = {
   eventType: 'wedding', eventDate: '2027-01-10', eventTime: '2:00 PM', venue: 'Venue',
-  guestCount: 30, packageId: pkg.id, selectedAddOnIds: [], paymentMethod: 'gcash',
+  guestCount: 30, packageId: pkg.id, selectedAddOnIds: [], paymentMethod: 'bank-transfer',
 };
 
 describe('BookingPageComponent submission validation', () => {
@@ -59,7 +59,7 @@ describe('BookingPageComponent submission validation', () => {
     package: { packageId: pkg.id, packageName: pkg.name, pricingType: 'PER_HEAD', pricePerGuest: 720,
       basePrice: null, includedGuests: null, excessGuestPrice: null, packageTotal: 54_000 },
     addOns: [{ id: '5', name: 'Coffee Bar', price: 15_000 }], discount: 0, status: 'pending',
-    paymentMethod: 'gcash', amountPaid: 0, createdAt: '2026-10-10T00:00:00Z', thumbnailUrl: 'test.png',
+    paymentMethod: 'bank-transfer', amountPaid: 0, createdAt: '2026-10-10T00:00:00Z', thumbnailUrl: 'test.png',
   };
 
   const availability = (status: BookingAvailability['status'], date = initialDraft.eventDate): BookingAvailability => ({
@@ -82,7 +82,7 @@ describe('BookingPageComponent submission validation', () => {
     resetDraft = vi.fn();
     bookingService = {
       submitDraft: vi.fn(async () => 'BK-TEST'),
-      choosePaymentMethod: vi.fn(async () => ({ ...editableBooking, status: 'awaiting_payment', paymentMethod: 'gcash' })),
+      choosePaymentMethod: vi.fn(async () => ({ ...editableBooking, status: 'awaiting_payment', paymentMethod: 'bank-transfer' })),
       updatePendingBooking: vi.fn(async () => editableBooking),
       loadBookingById: vi.fn(() => of(editableBooking)),
       checkAvailability: vi.fn(() => of(availability('AVAILABLE'))),
@@ -200,6 +200,17 @@ describe('BookingPageComponent submission validation', () => {
     expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
   });
 
+  it('never offers GCash even if an older API response still advertises e-wallet QR support', () => {
+    routeParams['paymentBooking'] = '27';
+    availableMethods.mockReturnValue(of(['BANK_TRANSFER', 'E-WALLET']));
+    bookingService.loadBookingById.mockReturnValue(of({ ...editableBooking, status: 'awaiting_payment', paymentMethod: null }));
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    fixture.detectChanges();
+    expect([...fixture.nativeElement.querySelectorAll('input[name="approvedPaymentMethod"]')].map((input: any) => input.value)).toEqual(['cash', 'bank-transfer']);
+    (fixture.componentInstance as any).selectApprovedPayment('gcash');
+    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')).toBeNull();
+  });
+
   it('keeps Cash available if QR availability cannot load and allows retrying', () => {
     routeParams['paymentBooking'] = '27';
     availableMethods.mockReturnValue(throwError(() => new Error('Offline')));
@@ -210,7 +221,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(fixture.nativeElement.textContent).toContain('Unable to check online payment availability');
     availableMethods.mockReturnValue(of(['E-WALLET']));
     (fixture.componentInstance as any).loadPaymentMethods(); fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('input[value="gcash"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('input[value="gcash"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('input[value="bank-transfer"]')).toBeNull();
   });
 
@@ -260,13 +271,13 @@ describe('BookingPageComponent submission validation', () => {
     expect(fixture.nativeElement.textContent).toContain('Payment Method');
     expect(fixture.nativeElement.textContent).toContain('BK-EDIT');
     expect(component.approvedPaymentTotal()).toBe(69_000);
-    await component.selectApprovedPayment('gcash');
+    await component.selectApprovedPayment('bank-transfer');
     fixture.detectChanges();
     expect(bookingService.choosePaymentMethod).not.toHaveBeenCalled();
-    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')?.textContent).toContain('GCash');
+    expect(fixture.nativeElement.querySelector('app-payment-choice-dialog')?.textContent).toContain('Bank Transfer');
     expect(fixture.nativeElement.querySelector('app-success-dialog')).toBeNull();
     await component.confirmApprovedPayment();
-    expect(bookingService.choosePaymentMethod).toHaveBeenCalledWith('27', 'gcash');
+    expect(bookingService.choosePaymentMethod).toHaveBeenCalledWith('27', 'bank-transfer');
     fixture.detectChanges();
     expect(navigate).not.toHaveBeenCalled();
     expect(fixture.nativeElement.querySelector('app-success-dialog')?.textContent).toContain('Payment method submitted');
@@ -464,7 +475,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(bookingService.submitDraft).not.toHaveBeenCalled();
     expect(draftState().eventDate).toBe('2026-11-02');
     expect(draftState().paymentMethod).toBe('cash');
-    component.selectPayment('gcash');
+    component.selectPayment('bank-transfer');
     expect(component.eventForm.controls.eventDate.valid).toBe(false);
   });
 
@@ -652,7 +663,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.currentStep()).toBe(2);
     expect(component.furthestStep()).toBe(2);
     expect(draftState().venue).toBe('New venue');
-    expect(draftState().paymentMethod).toBe('gcash');
+    expect(draftState().paymentMethod).toBe('bank-transfer');
   });
 
   it('ignores the active step and blocks progress navigation during submission', () => {
@@ -700,7 +711,7 @@ describe('BookingPageComponent submission validation', () => {
     const content = fixture.nativeElement.textContent as string;
     expect(content).toContain('Down Payment (50%)');
     expect(component.paymentMethods.map((method: { label: string }) => method.label)).toEqual([
-      'Cash', 'Bank Transfer', 'GCash'
+      'Cash', 'Bank Transfer'
     ]);
     expect(content).not.toMatch(/credit|debit card/i);
   });
@@ -879,7 +890,7 @@ describe('BookingPageComponent submission validation', () => {
       guestCount: 75, packageId: pkg.id, specialRequest: 'No shellfish.',
     });
     expect(draftState().selectedAddOnIds).toEqual(['5']);
-    expect(draftState().paymentMethod).toBe('gcash');
+    expect(draftState().paymentMethod).toBe('bank-transfer');
   });
 
   it('saves pending changes once while an update is in progress', async () => {

@@ -12,6 +12,23 @@ process.env.DB_PASSWORD ??= 'test';
 const { recordPayment } = await import('./admin.repository.js');
 const { closeDatabase } = await import('../config/database.js');
 
+for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
+  test(`a retired GCash booking can receive only a new ${method} payment without rewriting earlier transactions`, async t => {
+    const db = installDatabase(t, 'PAYMENT_SUBMITTED', { amountDue: 100, amountPaid: 10, paymentMethod: 'E-WALLET' });
+    try {
+      const input = { reservationId: 5, amount: 20, method, reference: `RECOVERY-${method}`, paymentDate: '2026-11-08' };
+      assert.equal(await recordPayment(2, input), true);
+      assert.equal(db.amountPaid(), 30);
+      assert.equal(db.credits.length, 1);
+      assert.equal(db.credits[0]!['method'], method);
+      assert.ok(db.queries.some(query => /status='SUPERSEDED'.*archived_transaction_reference/s.test(query)));
+      assert.ok(db.queries.every(query => !/DELETE\s+|UPDATE dbo\.PAYMENT_TRANSACTION/i.test(query)));
+      await recordPayment(2, input);
+      assert.equal(db.credits.length, 1);
+    } finally { await closeDatabase(); }
+  });
+}
+
 test('an additional verified bank transfer pays the balance without completing an unfinished event or duplicating retries', async t => {
   const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER' });
   try {
@@ -240,7 +257,7 @@ test('exact committed payment retry succeeds without repeating any side effects 
   } finally { await closeDatabase(); }
 });
 
-for (const method of ['CASH', 'BANK_TRANSFER', 'E-WALLET'] as const) {
+for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
   test(`lost-response ${method} retry records one credit and one set of side effects`, async t => {
     const db = installDatabase(t, 'AWAITING_PAYMENT', { paymentMethod: method });
     const input = { reservationId: 5, amount: 90, method, reference: 'RETRY-1', paymentDate: '2026-10-02' };

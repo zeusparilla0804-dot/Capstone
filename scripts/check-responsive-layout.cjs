@@ -39,14 +39,14 @@ const server = http.createServer(async (req, res) => {
   const reservationReport = await fixture('admin-reports', 'reservationReport');
   const paymentReport = await fixture('admin-reports', 'paymentReport');
   const booking = await fixture('customer-billing', 'booking');
-  booking.id = '42'; booking.paymentMethod = 'gcash';
+  booking.id = '42'; booking.paymentMethod = 'bank-transfer';
   const packages = await fixture('packages', 'packages');
   const paginate = items => ({ items, page: 1, pageSize: 10, totalItems: items.length, totalPages: 1 });
   const profile = { id: 7, firstName: 'Alexandra', lastName: 'Dela Cruz Santos', fullName: 'Alexandra Dela Cruz Santos', email: 'alexandra.delacruz.santos@example.test', phone: '09171234567', status: 'ACTIVE', totalBookings: 3, outstandingBalance: 75000, createdAt: '2026-01-01', upcomingEvent: '2026-12-10' };
   const adminBookings = [detail, { ...detail, id: 43, reference: 'BK-2026-12345678', status: 'AWAITING_PAYMENT', invoiceId: 8, packageName: 'Wedding Silver Package for 100 Guests' }];
   const addon = { id: 5, name: 'Coffee Bar for 100 Guests', description: 'Coffee service, cookies, and light snacks for 100 guests.', price: 22000, isActive: true };
   const payment = { id: 5, reservationId: 42, bookingId: 42, bookingStatus: 'AWAITING_PAYMENT', bookingReference: 'BK-2026-12345678', customerName: profile.fullName, amountDue: 85000, amountPaid: 10000, amount: 10000, paymentMethod: 'CASH', method: 'CASH', paymentDate: '2026-10-01', status: 'PARTIALLY_PAID' };
-  const destination = { id: 1, method: 'E-WALLET', label: 'GCash receiving account for catering reservations', accountName: profile.fullName, accountHint: 'Ending 4567', isAvailable: true, assignmentCount: 3 };
+  const destination = { id: 1, method: 'BANK_TRANSFER', label: 'Bank transfer receiving account for catering reservations', accountName: profile.fullName, accountHint: 'Ending 4567', isAvailable: true, assignmentCount: 3 };
   let role = 'customer';
   let currentLayout = '';
   const unhandledEndpoints = new Set();
@@ -55,7 +55,10 @@ const server = http.createServer(async (req, res) => {
   pages.push('/login?layout=register', '/admin/packages?layout=create', '/admin/add-ons?layout=create', '/admin/customers/7?layout=deactivate', '/admin/reports?layout=payments', '/book-event?layout=calendar', '/reset-password?token=local-layout-test', '/admin/reset-password?token=local-layout-test', '/admin/login?layout=mfa');
   pages.push('/book-event?booking=42&layout=addons', '/book-event?booking=42&layout=review', '/my-bookings?layout=cancel', '/book-event?paymentBooking=42&step=4&layout=payment');
   pages.push('/book-event?paymentBooking=42&step=4&layout=payment-confirm', '/admin/payment-qrs?layout=assignment');
-  const selectedPages = process.argv.includes('--states-only') ? pages.filter(route => route.includes('?')) : pages;
+  pages.push('/admin/payments?layout=legacy-cash', '/admin/payments?layout=legacy-bank', '/admin/payments/proofs/1?layout=legacy-proof',
+    '/my-bookings/42/payment?layout=legacy-proof', '/my-bookings?layout=legacy-choice', '/billing?layout=legacy-choice');
+  const selectedPages = process.argv.includes('--payments-only') ? pages.filter(route => /payment|billing|legacy-choice/.test(route))
+    : process.argv.includes('--states-only') ? pages.filter(route => route.includes('?')) : pages;
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
   try {
@@ -99,18 +102,19 @@ const server = http.createServer(async (req, res) => {
       else if (p === '/notifications') data = [];
       else if (p.endsWith('/reports/reservations')) data = reservationReport;
       else if (p.endsWith('/reports/payments')) data = paymentReport;
-      else if (p === '/admin/payments') data = paginate([payment]);
+      else if (p === '/admin/payments') data = paginate([{ ...payment, ...(currentLayout.startsWith('legacy-') ? { paymentMethod: 'E-WALLET' } : {}) }]);
       else if (p === '/admin/payment-proofs') data = paginate([review.proof]);
-      else if (/^\/admin\/payment-proofs\/\d+$/.test(p)) data = review;
+      else if (/^\/admin\/payment-proofs\/\d+$/.test(p)) data = currentLayout === 'legacy-proof' ? { ...review, proof: { ...review.proof, method: 'E_WALLET' } } : review;
       else if (p === '/admin/email-outbox') data = paginate([{ id: '1', recipient: profile.email, templateKey: 'BOOKING_APPROVED', payload: {}, relatedEntityType: 'BOOKING', relatedEntityId: '42', status: 'FAILED', attemptCount: 3, lastError: 'Mailbox unavailable', createdAt: '2026-10-01', updatedAt: '2026-10-02' }]);
       else if (p === '/admin/audit-log') data = paginate([{ id: '1', adminId: 1, adminName: profile.fullName, action: 'CUSTOMER_UPDATED', entityType: 'CUSTOMER', entityId: 7, createdAt: '2026-10-01', oldValues: { status: 'ACTIVE' }, newValues: { status: 'INACTIVE' } }]);
-      else if (p === '/bookings/my') data = [{ ...booking, ...(currentLayout === 'cancel' ? { status: 'pending', amountPaid: 0 } : {}) }];
+      else if (p === '/bookings/my') data = [{ ...booking, ...(currentLayout === 'cancel' ? { status: 'pending', amountPaid: 0 }
+        : currentLayout.startsWith('legacy-') ? { paymentMethod: 'gcash', status: 'awaiting_payment', amountPaid: currentLayout === 'legacy-choice' ? 0 : 10000, latestProofStatus: undefined } : {}) }];
       else if (/^\/bookings\/\d+$/.test(p)) data = { ...booking, id: '42', amountPaid: currentLayout.startsWith('payment') ? 0 : booking.amountPaid, package: { ...booking.package, packageId: '1' }, paymentMethod: null, status: ['addons', 'review'].includes(currentLayout) ? 'pending' : 'awaiting_payment' };
       else if (p.includes('/invoices/')) data = invoice;
       else if (p.endsWith('/payment-proofs')) data = [];
-      else if (p.endsWith('/methods')) data = ['BANK_TRANSFER', 'E-WALLET'];
+      else if (p.endsWith('/methods')) data = ['BANK_TRANSFER'];
       else if (p === '/admin/payment-destinations') data = [destination];
-      else if (p.endsWith('/waiting-bookings')) data = [{ ...detail, customerName: profile.fullName, paymentMethod: 'E-WALLET', amountDue: 85000, amountPaid: 0 }];
+      else if (p.endsWith('/waiting-bookings')) data = [{ ...detail, customerName: profile.fullName, paymentMethod: 'BANK_TRANSFER', amountDue: 85000, amountPaid: 0 }];
       else if (p.includes('/payment-destinations/bookings/')) data = destination;
       else if (p.includes('/availability')) data = p.includes('month') ? [] : { ...detail.capacity, date: url.searchParams.get('date') || '2027-02-12', guestCount: Number(url.searchParams.get('guestCount') || 100) };
       else if (!p.endsWith('/images')) unhandledEndpoints.add(p);
@@ -136,7 +140,15 @@ const server = http.createServer(async (req, res) => {
           if (layout === 'review') { await page.getByRole('button', { name: 'Review Booking', exact: true }).click(); await page.getByRole('button', { name: 'Save Booking Changes', exact: true }).waitFor(); }
         }
         if (layout === 'cancel') await page.getByRole('button', { name: 'Cancel Booking', exact: true }).click();
-        if (layout === 'payment-confirm') { await page.locator('input[name="approvedPaymentMethod"][value="gcash"]').check(); await page.getByRole('dialog').waitFor(); }
+        if (layout === 'payment-confirm') { await page.locator('input[name="approvedPaymentMethod"][value="bank-transfer"]').check(); await page.getByRole('dialog').waitFor(); }
+        if (layout === 'legacy-cash' || layout === 'legacy-bank') {
+          await page.locator('[data-record-bank]').click();
+          const method = page.locator('select[formControlName="method"]');
+          if (JSON.stringify(await method.locator('option').evaluateAll(options => options.map(option => option.value))) !== JSON.stringify(['', 'CASH', 'BANK_TRANSFER'])) throw Error('Unsupported recovery payment choices');
+          await method.selectOption(layout === 'legacy-cash' ? 'CASH' : 'BANK_TRANSFER');
+        }
+        if (layout === 'legacy-choice') await page.getByRole('link', { name: 'Change payment method', exact: true }).waitFor();
+        if (layout === 'legacy-proof' && await page.locator('#proof-file,[data-testid="verify-proof"]').count()) throw Error('Legacy GCash must not accept new proof or credit');
         if (layout === 'assignment') await page.getByRole('button', { name: 'Choose customer', exact: true }).click();
         if (layout === 'mfa') {
           await page.locator('#identity').fill('local@example.test'); await page.locator('#adminPassword').fill('LocalTestPassword!');

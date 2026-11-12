@@ -17,29 +17,41 @@ describe('PaymentProofService', () => {
 
   afterEach(() => http.verify());
 
+  it('blocks GCash uploads while retaining the method on old proof history', async () => {
+    let error = '';
+    service.submitProof('42', { method: 'E_WALLET', claimedAmount: 100, paymentDate: '2026-10-02' },
+      new File(['old'], 'old.png', { type: 'image/png' })).subscribe({ error: value => { error = value.message; } });
+    expect(error).toMatch(/cash.*bank transfer/i);
+    http.expectNone(`${environment.apiBaseUrl}/bookings/42/payment-proofs`);
+    let recorded: unknown;
+    service.listProofs('42').subscribe(value => { recorded = value[0]; });
+    http.expectOne(`${environment.apiBaseUrl}/bookings/42/payment-proofs`).flush({ data: [{ id: 1, method: 'E_WALLET', claimedAmount: 100, status: 'VERIFIED' }] });
+    expect(recorded).toMatchObject({ method: 'E_WALLET', claimedAmount: 100, status: 'verified' });
+  });
+
   it('sends the exact multipart fields and enables upload progress', () => {
-    const file = new File(['proof'], 'gcash.png', { type: 'image/png' });
+    const file = new File(['proof'], 'bank.png', { type: 'image/png' });
     const events: number[] = [];
     service.submitProof('42', {
-      method: 'E_WALLET', claimedAmount: 1250.5, transactionReference: 'GCASH-42', paymentDate: '2026-10-02'
+      method: 'BANK_TRANSFER', claimedAmount: 1250.5, transactionReference: 'BANK-42', paymentDate: '2026-10-02'
     }, file).subscribe(event => events.push(event.type));
 
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings/42/payment-proofs`);
     expect(request.request.method).toBe('POST');
     expect(request.request.reportProgress).toBe(true);
     const body = request.request.body as FormData;
-    expect(body.get('method')).toBe('E_WALLET');
+    expect(body.get('method')).toBe('BANK_TRANSFER');
     expect(body.get('claimedAmount')).toBe('1250.5');
-    expect(body.get('transactionReference')).toBe('GCASH-42');
+    expect(body.get('transactionReference')).toBe('BANK-42');
     expect(body.get('paymentDate')).toBe('2026-10-02');
     const uploaded = body.get('proof') as File;
     expect(uploaded).toBeInstanceOf(File);
-    expect(uploaded.name).toBe('gcash.png');
+    expect(uploaded.name).toBe('bank.png');
     expect(uploaded.type).toBe('image/png');
     expect(uploaded.size).toBe(file.size);
     request.event({ type: HttpEventType.UploadProgress, loaded: 3, total: 5 });
-    request.flush({ success: true, data: { id: 1, reservationId: 42, customerId: 7, method: 'E_WALLET',
-      claimedAmount: 1250.5, transactionReference: 'GCASH-42', paymentDate: '2026-10-02', originalFilename: 'gcash.png',
+    request.flush({ success: true, data: { id: 1, reservationId: 42, customerId: 7, method: 'BANK_TRANSFER',
+      claimedAmount: 1250.5, transactionReference: 'BANK-42', paymentDate: '2026-10-02', originalFilename: 'bank.png',
       mimeType: 'image/png', byteSize: 5, status: 'SUBMITTED', createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z' } });
     expect(events).toContain(HttpEventType.UploadProgress);
     expect(events).toContain(HttpEventType.Response);

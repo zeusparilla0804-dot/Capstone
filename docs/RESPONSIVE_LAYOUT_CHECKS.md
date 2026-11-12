@@ -19,6 +19,7 @@ For a focused repeat:
 
 ```powershell
 node scripts/check-responsive-layout.cjs --widths=320,768 --states-only
+node scripts/check-responsive-layout.cjs --payments-only
 ```
 
 `--audit-only` records findings without failing for layout violations. Normal runs fail when layout violations or unhandled API endpoints remain.

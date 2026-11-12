@@ -10,8 +10,8 @@ import { ActionFeedbackService } from '../../core/services/action-feedback.servi
 import { AdminPaymentReviewPage } from './admin-payment-review.page';
 
 const review: AdminPaymentProofDetail = {
-  proof: { id: '9007199254740993', reservationId: 42, customerId: 7, paymentId: 5, method: 'E_WALLET', claimedAmount: 5000,
-    transactionReference: 'GCASH-42', paymentDate: '2026-10-02', originalFilename: 'receipt.png', mimeType: 'image/png', byteSize: 1200,
+  proof: { id: '9007199254740993', reservationId: 42, customerId: 7, paymentId: 5, method: 'BANK_TRANSFER', claimedAmount: 5000,
+    transactionReference: 'BANK-42', paymentDate: '2026-10-02', originalFilename: 'receipt.png', mimeType: 'image/png', byteSize: 1200,
     status: 'SUBMITTED', createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z', fileUrl: 'http://localhost:3000/api/payment-proofs/1/file' },
   booking: { id: 42, reference: 'LC-0042', status: 'PAYMENT_SUBMITTED', eventDate: '2026-12-10' },
   customer: { id: 7, name: 'Klint Charles', email: 'klint@example.test' },
@@ -23,6 +23,16 @@ const review: AdminPaymentProofDetail = {
 };
 
 describe('AdminPaymentReviewPage', () => {
+  it('keeps a legacy GCash proof readable without allowing a new ledger credit', () => {
+    const component = fixture.componentInstance as any;
+    component.detail.set({ ...review, proof: { ...review.proof, method: 'E_WALLET' } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('GCash is no longer accepted');
+    expect(fixture.nativeElement.querySelector('[data-testid="verify-proof"]')).toBeNull();
+    component.verify(); component.requestReview('verify');
+    expect(api.verifyPaymentProof).not.toHaveBeenCalled();
+    expect(component.canReview()).toBe(true);
+  });
   let fixture: ComponentFixture<AdminPaymentReviewPage>;
   let verifyResult: Subject<unknown>;
   let api: { paymentProof: ReturnType<typeof vi.fn>; verifyPaymentProof: ReturnType<typeof vi.fn>; rejectPaymentProof: ReturnType<typeof vi.fn> };
@@ -70,7 +80,7 @@ describe('AdminPaymentReviewPage', () => {
     expect(image.src).toContain('/api/payment-proofs/1/file?view=inline');
     expect(original.href).toContain('/api/payment-proofs/1/file');
     expect(original.href).not.toContain('view=inline');
-    expect(fixture.nativeElement.textContent).toContain('GCASH-42');
+    expect(fixture.nativeElement.textContent).toContain('BANK-42');
     expect(fixture.nativeElement.textContent).toContain('Verify payment');
     expect(fixture.nativeElement.textContent).toContain('Reject proof');
     expect(fixture.nativeElement.querySelector('[aria-label="Zoom in"]')).toBeTruthy();

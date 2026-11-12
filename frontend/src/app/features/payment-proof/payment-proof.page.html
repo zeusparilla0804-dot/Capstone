@@ -17,7 +17,7 @@
       } @else if (paymentChoiceNeeded()) {
         <section class="payment-choice-panel" aria-labelledby="payment-choice-title">
           <h2 id="payment-choice-title">Choose payment method</h2>
-          <p>Select GCash, bank transfer, or cash at the LA Chef office to continue.</p>
+          <p>Select bank transfer or cash at the LA Chef office to continue.</p>
           <a class="btn btn-primary" routerLink="/book-event" [queryParams]="{ paymentBooking: item.id, step: 4 }">Continue to Step 4</a>
         </section>
       } @else if (cashInstructionsAvailable()) {
@@ -50,7 +50,7 @@
       } @else if (waitingForQr()) {
         <section class="payment-choice-panel qr-waiting" aria-labelledby="qr-waiting-title">
           <h2 id="qr-waiting-title">Payment instructions</h2>
-          <p>LA Chef will select an available {{ item.paymentMethod === 'gcash' ? 'GCash' : 'bank transfer' }} account for booking {{ item.reference }}. Please wait for the QR before sending money.</p>
+          <p>LA Chef will select an available bank transfer account for booking {{ item.reference }}. Please wait for the QR before sending money.</p>
           <p class="form-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
           @if (destinationLoading()) { <p role="status">Checking payment instructions...</p> }
           @else if (destinationError()) { <p class="field-error" role="alert">{{ destinationError() }}</p> }
@@ -123,6 +123,11 @@
             @else { <p class="history-state">No payment proofs submitted yet.</p> }
           </section>
         </div>
+      } @else if (item.paymentMethod === 'gcash') {
+        <section class="proof-unavailable"><h2>Choose a supported payment method</h2><p>GCash is no longer accepted. Your recorded payments remain unchanged. Contact LA Chef to arrange cash or bank transfer.</p>
+          @if (canChoosePayment()) { <a class="btn btn-primary" routerLink="/book-event" [queryParams]="{ paymentBooking: item.id, step: 4 }">Change payment method</a> }
+          <a class="btn btn-secondary" routerLink="/billing">View Billing &amp; Payments</a>
+        </section>
       } @else { <section class="proof-unavailable"><p class="page-kicker">Current status</p><h2>Payment proof is not available</h2><p>This booking is not awaiting a payment proof. Return to your bookings to review its current status.</p><a class="btn btn-secondary" routerLink="/my-bookings">Return to my bookings</a></section> }
     }
   </div></section>

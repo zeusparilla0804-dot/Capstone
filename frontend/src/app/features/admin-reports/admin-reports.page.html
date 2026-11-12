@@ -61,7 +61,7 @@
           <label>From<input type="date" formControlName="dateFrom" /></label>
           <label>To<input type="date" formControlName="dateTo" /></label>
           <label>Status<select formControlName="status"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option></select></label>
-          <label>Method<select formControlName="method"><option value="">All methods</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash</option></select></label>
+          <label>Method<select formControlName="method"><option value="">All methods</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash (historical)</option></select></label>
           <button class="btn btn-secondary" type="submit" [disabled]="paymentLoading()">{{ paymentLoading() ? 'Loading...' : 'Apply filters' }}</button>
         </form>
 

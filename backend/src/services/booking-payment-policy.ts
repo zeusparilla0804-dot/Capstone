@@ -1,4 +1,5 @@
 import { AppError } from '../utils/app-error.js';
+import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 
 export function assertPaymentDeferred(method?: string): void {
   if (method) throw new AppError(400, 'Choose a payment method after LA Chef requests payment.');
@@ -12,6 +13,7 @@ export function assertPaymentSelection(
     : method === 'bank-transfer' ? 'BANK_TRANSFER'
     : method === 'e-wallet' ? 'E-WALLET' : null;
   if (!normalized) throw new AppError(400, 'Payment method is invalid.');
+  assertSupportedPaymentMethod(normalized);
   if (booking.status !== 'AWAITING_PAYMENT') throw new AppError(409, 'Choose a payment method only after LA Chef requests payment.');
   if (booking.amountPaid > 0 || booking.hasProof) throw new AppError(409, 'Payment method can no longer be changed after a proof or payment.');
   return normalized;

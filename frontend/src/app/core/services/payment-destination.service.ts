@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { map } from 'rxjs';
+import { map, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import type { ApiResponse } from '../models';
 
@@ -37,17 +37,18 @@ export class PaymentDestinationService {
 
   availableMethods() {
     return this.http.get<ApiResponse<('E-WALLET' | 'BANK_TRANSFER')[]>>(`${this.base}/methods`, this.options)
-      .pipe(map(response => response.data));
+      .pipe(map(response => response.data.filter(method => method === 'BANK_TRANSFER')));
   }
 
   assigned(bookingId: string) {
     return this.http.get<ApiResponse<PaymentDestination | null>>(`${this.base}/bookings/${bookingId}`, this.options)
-      .pipe(map(response => response.data));
+      .pipe(map(response => response.data?.method === 'BANK_TRANSFER' ? response.data : null));
   }
   image(id: number) { return this.http.get(`${this.base}/${id}/image`, { ...this.options, responseType: 'blob' }); }
-  list() { return this.http.get<ApiResponse<PaymentDestination[]>>(this.adminBase, this.options).pipe(map(response => response.data)); }
-  waitingBookings() { return this.http.get<ApiResponse<PaymentQrWaitingBooking[]>>(`${this.adminBase}/waiting-bookings`, this.options).pipe(map(response => response.data)); }
+  list() { return this.http.get<ApiResponse<PaymentDestination[]>>(this.adminBase, this.options).pipe(map(response => response.data.filter(item => item.method === 'BANK_TRANSFER'))); }
+  waitingBookings() { return this.http.get<ApiResponse<PaymentQrWaitingBooking[]>>(`${this.adminBase}/waiting-bookings`, this.options).pipe(map(response => response.data.filter(item => item.paymentMethod === 'BANK_TRANSFER'))); }
   save(data: { method: string; label: string; accountName: string; accountHint: string; file?: File }, id?: number) {
+    if (data.method !== 'BANK_TRANSFER') return throwError(() => new Error('Online payment must use bank transfer.'));
     const body = new FormData();
     body.set('method', data.method); body.set('label', data.label); body.set('accountName', data.accountName); body.set('accountHint', data.accountHint);
     if (data.file) body.set('qr', data.file, data.file.name);
@@ -61,6 +62,6 @@ export class PaymentDestinationService {
   }
   bookingAssignment(bookingId: number) {
     return this.http.get<ApiResponse<PaymentDestination | null>>(`${this.adminBase}/bookings/${bookingId}/assignment`, this.options)
-      .pipe(map(response => response.data));
+      .pipe(map(response => response.data?.method === 'BANK_TRANSFER' ? response.data : null));
   }
 }

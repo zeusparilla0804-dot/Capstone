@@ -2,6 +2,7 @@ import type { PaymentInput } from '../types/admin.types.js';
 import { recordPayment } from '../repositories/admin.repository.js';
 import { findInvoiceIdByBooking } from '../repositories/invoice.repository.js';
 import { AppError } from '../utils/app-error.js';
+import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 import { finiteMoney, identifier, isoDate, text } from '../utils/validation.js';
 
 export function completionPaymentInput(reservationId: number, body: unknown): PaymentInput {
@@ -13,6 +14,7 @@ export function completionPaymentInput(reservationId: number, body: unknown): Pa
   const amount = finiteMoney(value['amount'], 'Final payment amount', true);
   if (amount > 0 && value['fundsReceived'] !== true) throw new AppError(400, 'Confirm that the final payment was actually received and verified.');
   if (!['CASH', 'BANK_TRANSFER', 'E-WALLET'].includes(String(value['method']))) throw new AppError(400, 'Final payment method is invalid.');
+  assertSupportedPaymentMethod(value['method']);
   const requestId = value['requestId'];
   if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
     throw new AppError(400, 'A valid completion request ID is required. Refresh and try again.');

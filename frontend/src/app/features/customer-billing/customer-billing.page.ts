@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inj
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr } from '../../core/utils/customer-payment-status';
+import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -23,6 +23,7 @@ interface BillingRecord {
   readonly acceptsPayment: boolean;
   readonly cashPayment: boolean;
   readonly needsPaymentChoice: boolean;
+  readonly retiredPaymentMethod: boolean;
   readonly waitingForPaymentQr: boolean;
 }
 
@@ -62,7 +63,8 @@ export class CustomerBillingPageComponent implements OnDestroy {
         acceptsPayment: hasCashPaymentAction(booking)
           || (hasOnlinePaymentAction(booking) && (booking.amountPaid === 0 || booking.status === 'payment_submitted')),
         cashPayment: booking.paymentMethod === 'cash',
-        needsPaymentChoice: booking.status === 'awaiting_payment' && !booking.paymentMethod,
+        needsPaymentChoice: needsPaymentMethodChoice(booking),
+        retiredPaymentMethod: booking.paymentMethod === 'gcash',
         waitingForPaymentQr: isWaitingForPaymentQr(booking),
       };
     }));

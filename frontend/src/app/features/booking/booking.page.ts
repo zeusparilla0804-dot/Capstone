@@ -108,7 +108,7 @@ export class BookingPageComponent {
   protected readonly paymentMethodsLoading = signal(false);
   protected readonly paymentMethodsError = signal('');
   protected readonly availablePaymentMethods = computed(() => this.paymentMethods.filter(method =>
-    method.value === 'cash' || this.availableOnlineMethods().includes(method.value === 'gcash' ? 'E-WALLET' : 'BANK_TRANSFER'),
+    method.value === 'cash' || this.availableOnlineMethods().includes('BANK_TRANSFER'),
   ));
   protected readonly approvedPaymentMethodLabel = computed(() => this.paymentMethods.find(method => method.value === this.approvedPaymentMethod())?.label ?? '');
   protected readonly approvedPaymentTotal = computed(() => {
@@ -156,7 +156,6 @@ export class BookingPageComponent {
   protected readonly paymentMethods: readonly { value: PaymentMethod; label: string; description: string }[] = [
     { value: 'cash', label: 'Cash', description: 'Pay in person at the LA Chef office after approval. Staff will record the cash received; no online payment proof is required.' },
     { value: 'bank-transfer', label: 'Bank Transfer', description: 'Transfer details will be provided after approval.' },
-    { value: 'gcash', label: 'GCash', description: 'Payment instructions will follow after approval.' },
   ];
 
   protected readonly eventForm = new FormGroup({
@@ -425,6 +424,7 @@ export class BookingPageComponent {
   }
   protected isAddOnSelected(addOnId: string): boolean { return this.draftService.draft().selectedAddOnIds.includes(addOnId); }
   protected selectPayment(method: PaymentMethod): void {
+    if (method === 'gcash') return;
     this.draftService.update({ paymentMethod: method });
     this.revalidateDate();
   }

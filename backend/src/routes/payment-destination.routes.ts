@@ -7,6 +7,7 @@ import { requireAdmin, requireCustomer, requireProofActor } from '../middleware/
 import { AppError } from '../utils/app-error.js';
 import { identifier, text } from '../utils/validation.js';
 import { availableOnlinePaymentMethods } from '../repositories/payment-methods.repository.js';
+import { assertSupportedOnlineMethod } from '../services/payment-method-policy.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1_048_576, files: 1, fields: 5, parts: 6 } }).single('qr');
 const allowedMime = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -31,7 +32,7 @@ async function checkedImage(req: Request): Promise<{ bytes: Buffer; mime: string
   return { bytes: req.file.buffer, mime: detected.mime };
 }
 function method(value: unknown): string {
-  if (value !== 'E-WALLET' && value !== 'BANK_TRANSFER') throw new AppError(400, 'Payment method must be GCash or bank transfer.');
+  assertSupportedOnlineMethod(value);
   return value;
 }
 function metadata(req: Request) {
@@ -48,7 +49,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
     const rows = await (await getDbPool()).request().query(`SELECT d.destination_id id,d.method,d.label,d.account_name accountName,
       d.account_hint accountHint,d.is_available isAvailable,d.updated_at updatedAt,
       (SELECT COUNT(*) FROM dbo.BOOKING_PAYMENT_DESTINATION a WHERE a.destination_id=d.destination_id) assignmentCount
-      FROM dbo.PAYMENT_DESTINATION d ORDER BY d.method,d.label`);
+      FROM dbo.PAYMENT_DESTINATION d WHERE d.method='BANK_TRANSFER' ORDER BY d.method,d.label`);
     res.json({ success: true, data: rows.recordset });
   }))
   .get('/waiting-bookings', run(async (_req, res) => {
@@ -60,7 +61,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
       JOIN dbo.EVENT e ON e.event_id=r.event_id JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id
       LEFT JOIN dbo.BOOKING_PAYMENT_DESTINATION a ON a.reservation_id=r.reservation_id
       LEFT JOIN dbo.PAYMENT_DESTINATION assigned ON assigned.destination_id=a.destination_id
-      WHERE r.status='AWAITING_PAYMENT' AND p.amount_paid<p.amount_due AND p.payment_method IN('E-WALLET','BANK_TRANSFER')
+      WHERE r.status='AWAITING_PAYMENT' AND p.amount_paid<p.amount_due AND p.payment_method='BANK_TRANSFER'
         AND (assigned.destination_id IS NULL OR assigned.is_available=0 OR assigned.method<>p.payment_method)
       ORDER BY r.created_at DESC,r.reservation_id DESC`);
     res.setHeader('Cache-Control', 'no-store');
@@ -85,8 +86,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
       .input('mime', sql.NVarChar(30), image?.mime ?? null).input('image', sql.VarBinary(sql.MAX), image?.bytes ?? null)
       .query(`UPDATE dbo.PAYMENT_DESTINATION SET method=@method,label=@label,account_name=@name,account_hint=@hint,
         image_mime=COALESCE(@mime,image_mime),image_bytes=COALESCE(@image,image_bytes),updated_at=sysdatetime()
-        WHERE destination_id=@id AND (method=@method OR NOT EXISTS(
-          SELECT 1 FROM dbo.BOOKING_PAYMENT_DESTINATION WHERE destination_id=@id))`);
+        WHERE destination_id=@id AND method='BANK_TRANSFER'`);
     if (!result.rowsAffected[0]) throw new AppError(404, 'QR account not found or its assigned payment method cannot be changed.');
     res.json({ success: true });
   }))
@@ -95,7 +95,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
     if (typeof req.body?.isAvailable !== 'boolean') throw new AppError(400, 'Availability must be true or false.');
     const result = await (await getDbPool()).request().input('id', sql.Int, id)
       .input('available', sql.Bit, req.body.isAvailable)
-      .query('UPDATE dbo.PAYMENT_DESTINATION SET is_available=@available,updated_at=sysdatetime() WHERE destination_id=@id');
+      .query("UPDATE dbo.PAYMENT_DESTINATION SET is_available=@available,updated_at=sysdatetime() WHERE destination_id=@id AND method='BANK_TRANSFER'");
     if (!result.rowsAffected[0]) throw new AppError(404, 'QR account not found.');
     res.json({ success: true });
   }))
@@ -104,7 +104,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
     const result = await (await getDbPool()).request().input('id', sql.Int, id).query(`SELECT d.destination_id id,d.method,d.label,d.account_name accountName,
       d.account_hint accountHint,d.is_available isAvailable
       FROM dbo.BOOKING_PAYMENT_DESTINATION a JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id
-      WHERE a.reservation_id=@id`);
+      WHERE a.reservation_id=@id AND d.method='BANK_TRANSFER'`);
     res.json({ success: true, data: result.recordset[0] ?? null });
   }))
   .put('/bookings/:id/assignment', run(async (req, res) => {
@@ -116,6 +116,7 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
         WHERE r.reservation_id=@id`);
       const row = booking.recordset[0];
       if (!row) throw new AppError(404, 'Booking not found.');
+      assertSupportedOnlineMethod(row.method);
       if (!activeStatuses.includes(row.status) || Number(row.amountPaid) >= Number(row.amountDue)) throw new AppError(409, 'Booking is not awaiting payment.');
       const destination = await new sql.Request(transaction).input('id', sql.Int, destinationId)
         .query('SELECT method,is_available available FROM dbo.PAYMENT_DESTINATION WITH(UPDLOCK,HOLDLOCK) WHERE destination_id=@id');
@@ -146,7 +147,7 @@ export const paymentDestinationRoutes = Router()
         LEFT JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id
         WHERE r.reservation_id=@id AND r.customer_id=@customerId`);
     const row = result.recordset[0]; if (!row) throw new AppError(404, 'Booking not found.');
-    const assigned = !!row.id && row.isAvailable && row.method === row.destinationMethod && activeStatuses.includes(row.status);
+    const assigned = !!row.id && row.isAvailable && row.method === 'BANK_TRANSFER' && row.method === row.destinationMethod && activeStatuses.includes(row.status);
     res.setHeader('Cache-Control', 'no-store');
     res.json({ success: true, data: assigned ? { id: row.id, method: row.method, label: row.label,
       accountName: row.accountName, accountHint: row.accountHint } : null });
@@ -156,7 +157,7 @@ export const paymentDestinationRoutes = Router()
     const request = (await getDbPool()).request().input('id', sql.Int, id);
     if (req.customer) request.input('customerId', sql.Int, req.customer.id);
     const result = await request.query(`SELECT d.image_mime mime,d.image_bytes image FROM dbo.PAYMENT_DESTINATION d
-      WHERE d.destination_id=@id AND (${req.admin ? '1=1' : `d.is_available=1 AND EXISTS(
+      WHERE d.destination_id=@id AND d.method='BANK_TRANSFER' AND (${req.admin ? '1=1' : `d.is_available=1 AND EXISTS(
         SELECT 1 FROM dbo.BOOKING_PAYMENT_DESTINATION a JOIN dbo.RESERVATION r ON r.reservation_id=a.reservation_id
         JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id
         WHERE a.destination_id=d.destination_id AND r.customer_id=@customerId AND p.payment_method=d.method

@@ -3,6 +3,7 @@ import {writeAdminAudit} from '../repositories/audit.repository.js';
 import {transitionBooking} from './booking-status.service.js';
 import {renderEmailPreview} from './notification.service.js';
 import { normalizePackageInput } from './package-admin-input.service.js';
+import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 
 interface AdminOperationsDependencies {
  dashboard(period:ReportingPeriod):Promise<AdminDashboard>;
@@ -86,6 +87,7 @@ export const adminService={dashboard:adminOperationsService.dashboard,bookings:r
  async createPackage(adminId:number,v:PackageInput){const value=normalizePackageInput(v);const id=await repo.createPackage(value);await writeAdminAudit({adminId,action:'PACKAGE_CREATED',entityType:'PACKAGE',entityId:id,newValues:auditPackage(value)});return id;},async updatePackage(adminId:number,id:number,v:PackageInput){const value=normalizePackageInput(v);if(!(await repo.updatePackage(id,value)))throw new AppError(404,'Package not found.');await writeAdminAudit({adminId,action:'PACKAGE_UPDATED',entityType:'PACKAGE',entityId:id,newValues:auditPackage(value)});},
  async createAddOn(adminId:number,v:AddOnInput){validateAddOn(v);const id=await repo.createAddOn(v);await writeAdminAudit({adminId,action:'ADD_ON_CREATED',entityType:'ADD_ON',entityId:id,newValues:auditAddOn(v)});return id;},async updateAddOn(adminId:number,id:number,v:AddOnInput){validateAddOn(v);if(!(await repo.updateAddOn(id,v)))throw new AppError(404,'Add-on not found.');await writeAdminAudit({adminId,action:'ADD_ON_UPDATED',entityType:'ADD_ON',entityId:id,newValues:auditAddOn(v)});},
  async recordPayment(adminId:number,v:PaymentInput){
+  assertSupportedPaymentMethod(v.method);
   if(!Number.isSafeInteger(v.reservationId)||v.reservationId<1||!['CASH','BANK_TRANSFER','E-WALLET'].includes(v.method))throw new AppError(400,'Payment details are invalid.');
   if(v.method==='CASH'){
    if(typeof v.requestId!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v.requestId))throw new AppError(400,'A valid cash payment request ID is required. Refresh the page and try again.');

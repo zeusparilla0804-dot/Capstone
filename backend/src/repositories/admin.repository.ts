@@ -5,6 +5,7 @@ import {writeAdminAudit} from './audit.repository.js';
 import {bookingStatusHistory} from './booking-status.repository.js';
 import {transitionBooking} from '../services/booking-status.service.js';
 import {queueBookingNotification} from '../services/notification.service.js';
+import { assertSupportedPaymentMethod } from '../services/payment-method-policy.js';
 import {assessDateAvailability} from '../services/booking-availability.service.js';
 import {hasRequiredReservationDeposit} from '../services/reservation-billing-policy.js';
 
@@ -41,6 +42,7 @@ export async function createAddOn(v:AddOnInput){const pool=await getDbPool();con
 export async function updateAddOn(id:number,v:AddOnInput){const pool=await getDbPool();const r=await pool.request().input('id',sql.Int,id).input('name',sql.NVarChar(150),v.name).input('description',sql.NVarChar(1000),v.description).input('price',sql.Decimal(12,2),v.price).input('active',sql.Bit,v.isActive).query('UPDATE dbo.ADD_ON SET add_on_name=@name,description=@description,price=@price,is_active=@active WHERE add_on_id=@id');return(r.rowsAffected[0]??0)>0;}
 export async function payments(q:PageQuery){const request=(await pageRequest(q)).input('paymentMethod',sql.NVarChar(50),q.paymentMethod??'');const result=await request.query(`SELECT pay.payment_id id,r.reservation_id reservationId,r.status bookingStatus,r.booking_reference bookingReference,CONCAT(c.first_name,' ',c.last_name) customerName,pay.amount_due amountDue,pay.amount_paid amountPaid,proof.latestProofStatus,pay.payment_method paymentMethod,destination.label paymentDestinationLabel,pay.payment_date paymentDate,pay.transaction_ref reference,pay.status,COUNT(*) OVER() total_count FROM dbo.PAYMENT pay JOIN dbo.RESERVATION r ON r.reservation_id=pay.reservation_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id LEFT JOIN dbo.BOOKING_PAYMENT_DESTINATION destinationAssignment ON destinationAssignment.reservation_id=r.reservation_id LEFT JOIN dbo.PAYMENT_DESTINATION destination ON destination.destination_id=destinationAssignment.destination_id AND destination.method=pay.payment_method OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof WHERE(@search='' OR r.booking_reference LIKE '%'+@search+'%' OR c.first_name+' '+c.last_name LIKE '%'+@search+'%') AND(@status='' OR pay.status=@status) AND(@paymentMethod='' OR pay.payment_method=@paymentMethod) ORDER BY pay.payment_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);return pageMeta(result.recordset,q);}
 export async function recordPayment(adminId:number,v:PaymentInput,options:{completeEvent?:boolean}={}){
+ assertSupportedPaymentMethod(v.method);
  const pool=await getDbPool();const tx=new sql.Transaction(pool);await tx.begin();
  try{
   // Shared lock order with proof submission and verification: reservation, payment, then receipt.
@@ -79,7 +81,9 @@ export async function recordPayment(adminId:number,v:PaymentInput,options:{compl
    }
   }
   if(!['AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED'].includes(String(booking.status).toUpperCase()))throw new Error('PAYMENT_BOOKING_STATUS');
-  if(!options.completeEvent&&String(row.payment_method??'').toUpperCase()!==v.method)throw new Error('PAYMENT_METHOD_NOT_SELECTED');
+  const previousMethod=String(row.payment_method??'').toUpperCase();
+  const retiredMethodRecovery=previousMethod==='E-WALLET'&&['CASH','BANK_TRANSFER'].includes(v.method);
+  if(!options.completeEvent&&previousMethod!==v.method&&!retiredMethodRecovery)throw new Error('PAYMENT_METHOD_NOT_SELECTED');
   if(options.completeEvent&&Math.round(v.amount*100)!==Math.max(0,Math.round(Number(row.amount_due)*100)-Math.round(Number(row.amount_paid)*100)))throw new Error('FINAL_BALANCE_CHANGED');
   if(options.completeEvent&&v.amount===0){await completeEvent();await tx.commit();return true;}
   const cumulativeCents=Math.round(Number(row.amount_paid)*100)+Math.round(v.amount*100);
@@ -95,7 +99,7 @@ export async function recordPayment(adminId:number,v:PaymentInput,options:{compl
   }else if(booking.status==='PAYMENT_SUBMITTED'&&!depositSatisfied){
    await transitionBooking({reservationId:v.reservationId,expectedStatus:'PAYMENT_SUBMITTED',nextStatus:'AWAITING_PAYMENT',actor:{type:'ADMIN',id:adminId},reason:'Partial payment recorded below the required reservation deposit.',request});
   }
-  await writeAdminAudit({adminId,action:'PAYMENT_RECORDED',entityType:'PAYMENT',entityId:Number(row.payment_id),oldValues:{amountPaid:Number(row.amount_paid)},newValues:{amountPaid:cumulativePaid,amount:v.amount,method:v.method,reference:v.reference??null}},request);
+  await writeAdminAudit({adminId,action:'PAYMENT_RECORDED',entityType:'PAYMENT',entityId:Number(row.payment_id),oldValues:{amountPaid:Number(row.amount_paid),method:previousMethod},newValues:{amountPaid:cumulativePaid,amount:v.amount,method:v.method,reference:v.reference??null}},request);
   await queueBookingNotification(v.reservationId,'PAYMENT_RECORDED',request,{amount:v.amount.toFixed(2)});
   await completeEvent();
   await tx.commit();return true;

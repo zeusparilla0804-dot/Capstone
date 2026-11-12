@@ -1,6 +1,6 @@
 import { HttpClient, HttpEvent, HttpEventType, HttpResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { map, Observable } from 'rxjs';
+import { map, Observable, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import type { ApiResponse, PaymentProof, PaymentProofSubmission, PaymentProofStatus } from '../models';
 
@@ -18,6 +18,7 @@ export class PaymentProofService {
   }
 
   submitProof(bookingId: string, input: PaymentProofSubmission, file: File): Observable<HttpEvent<ApiResponse<PaymentProof>>> {
+    if (input.method === 'E_WALLET') return throwError(() => new Error('LA Chef accepts cash and bank transfer only.'));
     const body = new FormData();
     body.set('method', input.method);
     body.set('claimedAmount', String(input.claimedAmount));

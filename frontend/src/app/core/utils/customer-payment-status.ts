@@ -25,11 +25,16 @@ export function hasCashPaymentAction(booking: Booking): boolean {
 }
 
 export function hasOnlinePaymentAction(booking: Booking): boolean {
-  return !!booking.paymentMethod && booking.paymentMethod !== 'cash'
+  return booking.paymentMethod === 'bank-transfer'
     && ['awaiting_payment', 'payment_submitted', 'payment_verified', 'confirmed', 'completed'].includes(booking.status)
     && Math.round(booking.amountPaid * 100) < Math.round(bookingTotal(booking) * 100);
 }
 
 export function isWaitingForPaymentQr(booking: Booking): boolean {
   return hasOnlinePaymentAction(booking) && booking.status !== 'payment_submitted' && !booking.paymentQrReady;
+}
+
+export function needsPaymentMethodChoice(booking: Booking): boolean {
+  return booking.status === 'awaiting_payment' && (!booking.paymentMethod
+    || (booking.paymentMethod === 'gcash' && booking.amountPaid === 0 && !booking.latestProofStatus));
 }

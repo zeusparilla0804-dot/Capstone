@@ -27,7 +27,7 @@ test('payment request email waits for admin request and the assigned QR', () => 
   const approved = renderEmail('BOOKING_APPROVED', context);
   const requested = renderEmail('PAYMENT_REQUESTED', context);
   assert.match(approved.text, /notify you when payment is requested/i);
-  assert.match(requested.text, /choose GCash, bank transfer, or cash/i);
+  assert.match(requested.text, /choose bank transfer or cash/i);
   assert.match(requested.text, /wait for your assigned QR/i);
 });
 
@@ -66,7 +66,7 @@ for (const [method, label] of [['E_WALLET', 'GCash'], ['BANK_TRANSFER', 'Bank tr
     const { cashDepositDueDate, cashPreparationDays, ...online } = invoice;
     const message = renderEmail('INVOICE_ISSUED', { ...online, paymentMethod: method, bookingStatus: 'AWAITING_PAYMENT' });
     assert.ok(message.text.includes(`Payment method: ${label}`));
-    assert.match(message.text, /Review your invoice and follow the payment instructions in your account/);
+    assert.match(message.text, method === 'E_WALLET' ? /GCash is no longer accepted/ : /Review your invoice and follow the payment instructions in your account/);
     assert.doesNotMatch(message.text, /has been approved|Cash payment|Panorama|submit.*proof|payment.*verified|account number/i);
   });
 }

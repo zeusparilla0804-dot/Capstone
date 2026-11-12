@@ -75,10 +75,11 @@ export class BookingService {
   getBookingById(id: string) { return this.state().find(item => item.id === id); }
 
   async choosePaymentMethod(id: string, method: PaymentMethod): Promise<Booking> {
+    if (method === 'gcash') throw new Error('LA Chef accepts cash and bank transfer only.');
     const generation = this.accountScope.generation;
     const response = await firstValueFrom(this.scoped(this.http.patch<ApiResponse<ApiBooking>>(
       `${environment.apiBaseUrl}/bookings/${id}/payment-method`,
-      { method: method === 'gcash' ? 'e-wallet' : method }, { withCredentials: true },
+      { method }, { withCredentials: true },
     )));
     this.assertCurrentGeneration(generation);
     const booking = this.map(response.data);
@@ -178,6 +179,7 @@ export class BookingService {
   }
 
   private payload(draft: BookingDraft, pkg: CateringPackage, addOns: Booking['addOns']) {
+    if (draft.paymentMethod === 'gcash') throw new Error('LA Chef accepts cash and bank transfer only.');
     if (draft.selectedAddOnIds.length !== addOns.length || draft.selectedAddOnIds.some(id => !addOns.some(item => item.id === id))) {
       throw new Error('Selected add-ons are unavailable. Review them before saving.');
     }
@@ -185,7 +187,7 @@ export class BookingService {
       eventType: draft.eventType, eventDate: draft.eventDate, eventTime: this.time(draft.eventTime), venue: draft.venue,
       guestCount: draft.guestCount, packageId: Number(pkg.id), addOnIds: addOns.map(item => Number(item.id)),
       addOnQuantities: Object.fromEntries(addOns.map(item => [item.id, item.quantity ?? 1])),
-      ...(draft.paymentMethod ? { paymentMethod: draft.paymentMethod === 'gcash' ? 'e-wallet' : draft.paymentMethod } : {}),
+      ...(draft.paymentMethod ? { paymentMethod: draft.paymentMethod } : {}),
       specialRequest: draft.specialRequest,
     };
   }

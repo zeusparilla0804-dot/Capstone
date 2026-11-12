@@ -14,6 +14,31 @@ class ShellStub {
 }
 
 describe('AdminPaymentsPage payment-proof queue', () => {
+  it.each(['CASH', 'BANK_TRANSFER'])('records a new %s payment on a legacy booking while keeping the original row intact', async method => {
+    const old = { id: 7, reservationId: 42, bookingReference: 'BK-OLD', customerName: 'Customer', amountDue: 10000, amountPaid: 1000,
+      paymentMethod: 'E-WALLET', status: 'PARTIALLY_PAID', bookingStatus: 'AWAITING_PAYMENT' };
+    const recordPayment = vi.fn((_input: unknown) => of({ success: true }));
+    await TestBed.configureTestingModule({ imports: [AdminPaymentsPage], providers: [provideRouter([]), { provide: AdminService,
+      useValue: { payments: () => of({ data: { items: [old], page: 1, totalPages: 1 } }), recordPayment,
+        paymentProofs: () => of({ data: { items: [], page: 1, totalPages: 0 } }) } }] })
+      .overrideComponent(AdminPaymentsPage, { remove: { imports: [AdminShellComponent] }, add: { imports: [ShellStub] } }).compileComponents();
+    const fixture = TestBed.createComponent(AdminPaymentsPage); const component = fixture.componentInstance as any;
+    component.recordCash(old); fixture.detectChanges();
+    const choices = [...fixture.nativeElement.querySelectorAll('select[formControlName="method"] option')].map((option: any) => option.value);
+    expect(choices).toEqual(['', 'CASH', 'BANK_TRANSFER']);
+    component.form.controls.amount.setValue(2000);
+    component.form.controls.method.setValue('E-WALLET'); component.save();
+    expect(recordPayment).not.toHaveBeenCalled();
+    component.form.controls.method.setValue(method);
+    if (method === 'BANK_TRANSFER') component.transactionReference.setValue('BANK-RECOVERY');
+    component.requestSave();
+    const feedback = TestBed.inject(ActionFeedbackService);
+    expect(feedback.confirmation()?.message).toContain('2,000.00');
+    feedback.decide(true);
+    expect(recordPayment).toHaveBeenCalledOnce();
+    expect(recordPayment.mock.calls[0]?.[0]).toMatchObject({ reservationId: 42, method, amount: 2000 });
+    expect(old.paymentMethod).toBe('E-WALLET'); expect(old.amountPaid).toBe(1000);
+  });
   it('records an additional bank payment with the detected method and a verified transaction reference', async () => {
     const bank = { id: 8, reservationId: 43, bookingReference: 'BK-BANK-43', customerName: 'Bank Customer', amountDue: 10000, amountPaid: 5000,
       paymentMethod: 'BANK_TRANSFER', paymentDestinationLabel: 'BPI LA Chef', status: 'PARTIALLY_PAID', bookingStatus: 'PAYMENT_VERIFIED' };
@@ -117,7 +142,7 @@ describe('AdminPaymentsPage payment-proof queue', () => {
     expect(fixture.nativeElement.querySelector('button[admin-actions]')).toBeNull();
     expect(fixture.nativeElement.querySelector('.admin-form button[type="submit"]')).not.toBeNull();
     component.form.setValue({ reservationId: 42, amount: 5000, method: 'CASH', paymentDate: '2026-10-31' });
-    for (const method of ['BANK_TRANSFER', 'E-WALLET']) {
+    for (const method of ['BANK_TRANSFER']) {
       component.form.controls.method.setValue(method);
       component.save();
       expect(recordPayment).not.toHaveBeenCalled();

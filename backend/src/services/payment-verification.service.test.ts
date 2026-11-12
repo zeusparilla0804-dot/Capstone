@@ -23,7 +23,7 @@ const implementation = await import(modulePath).catch(error => {
 
 const proof: PaymentProofRecord = {
   id: 4_000_000_001, reservationId: 5, customerId: 7, paymentId: 3,
-  method: 'E_WALLET', claimedAmount: 90, transactionReference: 'TX-1', paymentDate: '2026-10-02',
+  method: 'BANK_TRANSFER', claimedAmount: 90, transactionReference: 'TX-1', paymentDate: '2026-10-02',
   storageKey: 'payment-proofs/private.png', originalFilename: 'receipt.png', mimeType: 'image/png', byteSize: 10,
   status: 'SUBMITTED', createdAt: '2026-10-02T00:00:00.000Z', updatedAt: '2026-10-02T00:00:00.000Z'
 };
@@ -210,13 +210,20 @@ function lockOrder(db: ReviewDb) {
   assert.ok(locks.every(query => query.transactional));
 }
 
+test('retired GCash proofs remain readable but cannot create a new ledger credit', async () => {
+  const db = new ReviewDb(); db.proofs[0]!.method = 'E_WALLET';
+  assert.equal((await db.service().getProofForReview(proof.id)).proof.method, 'E_WALLET');
+  await assert.rejects(db.service().verifyProof(2, proof.id, 90), /cash.*bank transfer/i);
+  unchanged(db);
+});
+
 for (const [amount, wantPaid, wantStatus] of [[90, 100, 'PAID'], [40.25, 50.25, 'PARTIALLY_PAID']] as const) {
   test(`verification credits ${amount} atomically and sets payment/invoice ${wantStatus}`, async () => {
     const db = new ReviewDb(); db.proofs[0]!.claimedAmount = amount;
     const reviewed = await db.service().verifyProof(2, proof.id, amount, '  checked  ');
     assert.equal(db.payment!.amountPaid, wantPaid); assert.equal(db.payment!.status, wantStatus);
     assert.equal(db.invoice!.status, wantStatus); assert.equal(db.booking!.status, 'PAYMENT_VERIFIED');
-    assert.equal(db.credits.length, 1); assert.equal(db.credits[0]!['method'], 'E-WALLET');
+    assert.equal(db.credits.length, 1); assert.equal(db.credits[0]!['method'], 'BANK_TRANSFER');
     assert.equal(db.credits[0]!['reference'], 'TX-1'); assert.equal((db.credits[0]!['paymentDate'] as Date).toISOString(), '2026-10-02T00:00:00.000Z');
     assert.equal(db.proofs[0]!.paymentTransactionId, '6000000001'); assert.equal(db.proofs[0]!.invoiceId, 8);
     assert.equal(db.proofs[0]!.reviewedBy, 2); assert.ok(db.proofs[0]!.reviewedAt); assert.equal(db.proofs[0]!.verifiedAmount, amount);
@@ -528,7 +535,7 @@ test('queue defaults to submitted oldest-first with stable tie-breaker and accur
 });
 
 test('queue filters and pagination are bound SQL values; malformed inputs fail before SQL', async () => {
-  const db = new ReviewDb(); db.proofs.push({ ...proof, id: 99, status: 'REJECTED', transactionReference: 'OTHER' });
+  const db = new ReviewDb(); db.proofs.push({ ...proof, id: 99, method: 'E_WALLET', status: 'REJECTED', transactionReference: 'OTHER' });
   const service = db.service(); const page = await service.listPendingProofs({ status: 'rejected', method: 'e_wallet', search: ' OTHER ',
     date: '2026-10-02', dateFrom: '2026-10-01', dateTo: '2026-10-03', page: '1', pageSize: '100' });
   assert.equal(page.items.length, 1); assert.equal(page.items[0].id, 99);

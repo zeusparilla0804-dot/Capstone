@@ -22,10 +22,10 @@ export class CheckoutPageComponent {
   protected readonly errorMessage = signal('');
   protected readonly methods: readonly { value: PaymentMethod; label: string }[] = [
     { value: 'cash', label: 'Cash' }, { value: 'bank-transfer', label: 'Bank Transfer' },
-    { value: 'gcash', label: 'GCash' },
   ];
 
   protected selectPayment(paymentMethod: PaymentMethod): void {
+    if (paymentMethod === 'gcash') return;
     this.draftService.update({ paymentMethod });
   }
 

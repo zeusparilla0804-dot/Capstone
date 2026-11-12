@@ -36,10 +36,10 @@ export class AdminPaymentQrsPage implements OnDestroy {
   protected async load(): Promise<void> {
     try {
       const [items, waiting] = await Promise.all([firstValueFrom(this.api.list()), firstValueFrom(this.api.waitingBookings())]);
-      this.destinations.set(items);
-      this.waitingBookings.set(waiting);
-      if (this.selectedBooking() && !waiting.some(item => item.id === this.selectedBooking()?.id)) this.selectedBooking.set(null);
-      for (const item of items) {
+      this.destinations.set(items.filter(item => item.method === 'BANK_TRANSFER'));
+      this.waitingBookings.set(waiting.filter(item => item.paymentMethod === 'BANK_TRANSFER'));
+      if (this.selectedBooking() && !this.waitingBookings().some(item => item.id === this.selectedBooking()?.id)) this.selectedBooking.set(null);
+      for (const item of this.destinations()) {
         if (this.images()[item.id]) continue;
         try {
           const blob = await firstValueFrom(this.api.image(item.id));
@@ -50,6 +50,7 @@ export class AdminPaymentQrsPage implements OnDestroy {
     } catch { this.error.set('Unable to load payment QR accounts.'); }
   }
   protected edit(item: PaymentDestination): void {
+    if (item.method !== 'BANK_TRANSFER') return;
     this.editingId.set(item.id); this.method = item.method; this.label = item.label;
     this.accountName = item.accountName; this.accountHint = item.accountHint; this.file = null;
   }
@@ -95,7 +96,7 @@ export class AdminPaymentQrsPage implements OnDestroy {
     this.notice.set('');
   }
   protected compatible(item: PaymentDestination): boolean {
-    return !!item.isAvailable && item.method === this.selectedBooking()?.paymentMethod;
+    return !!item.isAvailable && item.method === 'BANK_TRANSFER' && item.method === this.selectedBooking()?.paymentMethod;
   }
   protected availableForSelected(): PaymentDestination[] {
     return this.destinations().filter(item => this.compatible(item));

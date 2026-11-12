@@ -26,14 +26,14 @@ describe('BookingCardComponent pending actions', () => {
   it('disables online payment until a QR is assigned, then enables submission after refresh', async () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);
-    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'gcash', paymentQrReady: false });
+    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'bank-transfer', paymentQrReady: false });
     fixture.detectChanges();
     const waiting = fixture.nativeElement.querySelector('button[data-testid="waiting-payment-qr"]') as HTMLButtonElement;
     expect(waiting?.disabled).toBe(true);
     expect(waiting?.textContent).toContain('Waiting for Payment QR');
     expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
     expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
-    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'gcash', paymentQrReady: true });
+    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'bank-transfer', paymentQrReady: true });
     fixture.detectChanges();
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('[data-testid="waiting-payment-qr"]')).toBeNull();
@@ -71,11 +71,11 @@ describe('BookingCardComponent pending actions', () => {
   it('removes Submit Payment after a verified payment is recorded', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);
-    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'gcash', status: 'awaiting_payment', paymentQrReady: true });
+    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'bank-transfer', status: 'awaiting_payment', paymentQrReady: true });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Submit Payment');
     expect(fixture.nativeElement.textContent).toContain('View Invoice');
-    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'gcash', status: 'payment_verified', amountPaid: 27000 });
+    fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'bank-transfer', status: 'payment_verified', amountPaid: 27000 });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
     expect(fixture.nativeElement.textContent).toContain('View Receipt');

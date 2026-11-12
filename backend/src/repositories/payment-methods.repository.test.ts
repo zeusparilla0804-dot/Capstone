@@ -16,7 +16,7 @@ test('online choices expose only distinct methods with an available nonempty QR 
     assert.match(command, /is_available\s*=\s*1/);
     assert.match(command, /DATALENGTH\(image_bytes\)\s*>\s*0/);
     assert.match(command, /BANK_TRANSFER/);
-    assert.match(command, /E-WALLET/);
+    assert.doesNotMatch(command, /E-WALLET/);
     return { recordset: [{ method: 'BANK_TRANSFER' }], rowsAffected: [1] };
   });
   try { assert.deepEqual(await availableOnlinePaymentMethods(), ['BANK_TRANSFER']); }
@@ -26,12 +26,12 @@ test('online choices expose only distinct methods with an available nonempty QR 
 test('QR availability checks bind the chosen method and reject an empty result', async t => {
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => ({ connected: true, close: async () => {}, request: () => new sql.Request() }));
   t.mock.method(sql.Request.prototype, 'query', async function (command: string) {
-    assert.equal(this.parameters['method']?.value, 'E-WALLET');
+    assert.equal(this.parameters['method']?.value, 'BANK_TRANSFER');
     assert.match(command, /is_available\s*=\s*1/);
     assert.match(command, /DATALENGTH\(image_bytes\)\s*>\s*0/);
     return { recordset: [], rowsAffected: [0] };
   });
-  try { assert.equal(await hasAvailablePaymentQr('E-WALLET'), false); }
+  try { assert.equal(await hasAvailablePaymentQr('BANK_TRANSFER'), false); }
   finally { await closeDatabase(); }
 });
 
@@ -46,7 +46,7 @@ test('a QR deactivated after the page loaded cannot be saved as a payment choice
     throw Error('An unavailable QR method must not be saved');
   });
   try {
-    await assert.rejects(chooseBookingPayment(7, 42, 'e-wallet'), /no available QR/i);
+    await assert.rejects(chooseBookingPayment(7, 42, 'bank-transfer'), /no available QR/i);
     assert.equal(rolledBack, true);
   } finally { await closeDatabase(); }
 });

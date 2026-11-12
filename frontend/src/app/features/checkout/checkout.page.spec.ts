@@ -16,7 +16,7 @@ describe('Checkout editing and selection integrity', () => {
       { provide: PackageService, useValue: { getPackageById: () => pkg } },
     ] });
     const draft = TestBed.inject(BookingDraftService) as any;
-    draft.update({ eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Updated', guestCount: 50, packageId: '1', paymentMethod: 'gcash' });
+    draft.update({ eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Updated', guestCount: 50, packageId: '1', paymentMethod: 'bank-transfer' });
     draft.addOnsLoaded?.set(true);
     return { draft, bookings, component: TestBed.createComponent(CheckoutPageComponent).componentInstance as any };
   }

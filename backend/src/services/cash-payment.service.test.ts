@@ -21,10 +21,10 @@ test('office cash requires a valid request ID before generating a receipt refere
   }
 });
 
-test('manual bank and e-wallet payments require a reference before reaching SQL', async t => {
+test('manual bank payments require a reference before reaching SQL', async t => {
   const { adminService } = await import('./admin.service.js');
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => { throw new Error('Invalid noncash input reached SQL.'); });
-  for (const method of ['BANK_TRANSFER', 'E-WALLET'] as const) {
+  for (const method of ['BANK_TRANSFER'] as const) {
     for (const reference of [undefined, '', '   ']) {
       await assert.rejects(adminService.recordPayment(2, { reservationId: 5, amount: 25, method, paymentDate: '2026-10-31', reference }),
         (error: unknown) => error instanceof AppError && error.statusCode === 400 && /reference/.test(error.message));
@@ -56,7 +56,7 @@ test('a duplicate cash receipt rolls back before crediting the balance', async t
   } finally { await closeDatabase(); }
 });
 
-test('cash recording generates durable references, returns them, and replays without a second credit', async t => {
+for (const initialMethod of ['CASH', 'E-WALLET']) test(`cash recording from ${initialMethod} generates durable references and replays without a second credit`, async t => {
   const { adminService } = await import('./admin.service.js');
   const { adminController } = await import('../controllers/admin.controller.js');
   const { closeDatabase } = await import('../config/database.js');
@@ -70,7 +70,7 @@ test('cash recording generates durable references, returns them, and replays wit
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, input]) => [key, input.value]));
     const result = (recordset: Record<string, unknown>[] = []) => ({ recordset, rowsAffected: [recordset.length] });
     if (/SELECT status,customer_id/.test(command)) return result([{ status: 'AWAITING_PAYMENT', customerId: 7 }]);
-    if (/SELECT payment_id,amount_due,amount_paid/.test(command)) return result([{ payment_id: 3, amount_due: 1000, amount_paid: paid, payment_method: 'CASH' }]);
+    if (/SELECT payment_id,amount_due,amount_paid/.test(command)) return result([{ payment_id: 3, amount_due: 1000, amount_paid: paid, payment_method: initialMethod }]);
     if (/FROM dbo\.PAYMENT_TRANSACTION WITH\(UPDLOCK,HOLDLOCK\)/.test(command)) return result(credits.filter(row => row.reference === values['reference']));
     if (/INSERT dbo\.PAYMENT_TRANSACTION/.test(command)) {
       credits.push({ payment_id: 3, amount: Number(values['amount']), payment_date: (values['date'] as Date).toISOString().slice(0, 10), reference: String(values['reference']) });

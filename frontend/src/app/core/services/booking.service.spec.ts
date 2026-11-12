@@ -20,6 +20,11 @@ describe('BookingService cancellation', () => {
   });
   afterEach(() => http.verify());
 
+  it('rejects a cached GCash choice before making an API request', async () => {
+    await expect(service.choosePaymentMethod('27', 'gcash')).rejects.toThrow(/cash.*bank transfer/i);
+    http.expectNone(`${environment.apiBaseUrl}/bookings/27/payment-method`);
+  });
+
   it('shows the latest created reservation first even when its event is later', () => {
     (service as any).state.set([
       { id: '1', status: 'confirmed', eventDate: '2026-11-09', createdAt: '2026-11-01T09:00:00.000Z' },
@@ -29,17 +34,17 @@ describe('BookingService cancellation', () => {
   });
 
   it('chooses payment for an approved booking through its owner-scoped endpoint', async () => {
-    const selected = service.choosePaymentMethod('27', 'gcash').catch(error => error);
+    const selected = service.choosePaymentMethod('27', 'bank-transfer').catch(error => error);
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings/27/payment-method`);
     expect(request.request.method).toBe('PATCH');
-    expect(request.request.body).toEqual({ method: 'e-wallet' });
+    expect(request.request.body).toEqual({ method: 'bank-transfer' });
     request.flush({ success: true, data: { id: 27, reference: 'BK-27', eventType: 'wedding', package: { packageId: 1 }, addOns: [] } });
     expect((await selected).id).toBe('27');
   });
 
   it('retries an uncertain create with the same submission key and canonical request details', async () => {
     const draft = { eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Venue',
-      guestCount: 50, selectedAddOnIds: [], paymentMethod: 'gcash' } as any;
+      guestCount: 50, selectedAddOnIds: [], paymentMethod: 'bank-transfer' } as any;
     const first = (service.submitDraft as any)(draft, { id: '1' }, [], submissionKey).catch((error: unknown) => error);
     const initial = http.expectOne(`${environment.apiBaseUrl}/bookings`);
     expect(initial.request.headers.get('Idempotency-Key')).toBe(submissionKey);
@@ -182,10 +187,10 @@ describe('BookingService cancellation', () => {
     expect(service.bookings()[0]?.thumbnailUrl).toBe(`assets/images/packages/${image}`);
   });
 
-  it('submits GCash as the backend e-wallet payment method', async () => {
+  it('submits bank transfer with the backend payment vocabulary', async () => {
     const draft: BookingDraft = {
       eventType: 'wedding', eventDate: '2026-12-10', eventTime: '2:00 PM', venue: 'Venue',
-      guestCount: 50, packageId: '1', selectedAddOnIds: [], paymentMethod: 'gcash', specialRequest: 'No shellfish.',
+      guestCount: 50, packageId: '1', selectedAddOnIds: [], paymentMethod: 'bank-transfer', specialRequest: 'No shellfish.',
     };
     const pkg: CateringPackage = {
       id: '1', name: 'Wedding Package', category: 'wedding', description: 'Package',
@@ -196,7 +201,7 @@ describe('BookingService cancellation', () => {
 
     const pending = service.submitDraft(draft, pkg, [], submissionKey);
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings`);
-    expect(request.request.body.paymentMethod).toBe('e-wallet');
+    expect(request.request.body.paymentMethod).toBe('bank-transfer');
     expect(request.request.body.specialRequest).toBe('No shellfish.');
     request.flush({ success: true, data: {
       id: 27, reference: 'BK-2026-TEST', total: 25000, eventName: 'Wedding Event', eventType: 'wedding',

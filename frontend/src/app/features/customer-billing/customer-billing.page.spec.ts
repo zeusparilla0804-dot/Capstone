@@ -49,7 +49,7 @@ describe('CustomerBillingPageComponent', () => {
       invoiceId: 10,
       reference: 'LAC-0018',
       status: 'payment_submitted',
-      paymentMethod: 'gcash',
+      paymentMethod: 'bank-transfer',
     };
     const cancelledBooking: Booking = {
       ...booking,
@@ -93,7 +93,7 @@ describe('CustomerBillingPageComponent', () => {
   it('hides Submit Payment for a completed booking with a verified down payment', async () => {
     const bookingService = {
       bookings: signal<readonly Booking[]>([{
-        ...booking, status: 'completed', paymentMethod: 'gcash', amountPaid: 5000,
+        ...booking, status: 'completed', paymentMethod: 'bank-transfer', amountPaid: 5000,
       }]),
       loading: signal(false), error: signal(''), loadMine: () => undefined,
     };

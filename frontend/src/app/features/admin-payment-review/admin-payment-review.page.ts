@@ -43,6 +43,7 @@ export class AdminPaymentReviewPage {
   protected correctionReason = '';
   protected rejectionReason = '';
   protected readonly canReview = computed(() => this.detail()?.proof.status === 'SUBMITTED');
+  protected readonly canVerify = computed(() => this.canReview() && ['CASH', 'BANK_TRANSFER'].includes(this.detail()?.proof.method ?? ''));
   protected readonly returnBookingId = computed(() => {
     const id = this.detail()?.booking.id;
     return id && this.route.snapshot.queryParamMap?.get('booking') === String(id) ? id : null;
@@ -74,6 +75,7 @@ export class AdminPaymentReviewPage {
   }
 
   protected requestReview(action: 'verify' | 'reject'): void {
+    if (action === 'verify' && !this.canVerify()) return;
     if (!this.canReview() || this.mutationPending()) return;
     const amount = Number(this.verifiedAmount());
     const reason = (action === 'verify' ? this.correctionReason : this.rejectionReason).trim();
@@ -97,7 +99,7 @@ export class AdminPaymentReviewPage {
   }
 
   protected verify(): void {
-    if (!this.canReview() || this.mutationPending()) return;
+    if (!this.canVerify() || this.mutationPending()) return;
     const amount = Number(this.verifiedAmount());
     if (!Number.isFinite(amount) || amount <= 0) {
       this.reviewError.set('Enter a valid amount to verify.');

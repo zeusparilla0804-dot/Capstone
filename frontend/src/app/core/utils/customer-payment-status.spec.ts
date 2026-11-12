@@ -1,5 +1,5 @@
 import type { Booking } from '../models';
-import { customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction } from './customer-payment-status';
+import { customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, needsPaymentMethodChoice } from './customer-payment-status';
 
 const reservation = (overrides: Partial<Booking> = {}): Booking => ({
   id: '1088', reference: 'TEST', customerId: '7', eventName: 'Event', eventType: 'wedding',
@@ -11,6 +11,13 @@ const reservation = (overrides: Partial<Booking> = {}): Booking => ({
 });
 
 describe('customerPaymentStatus', () => {
+  it('exposes a supported-method switch only for unpaid legacy bookings without proof history', () => {
+    const old = reservation({ status: 'awaiting_payment', paymentMethod: 'gcash', amountPaid: 0 });
+    expect(needsPaymentMethodChoice(old)).toBe(true);
+    expect(needsPaymentMethodChoice({ ...old, amountPaid: 10 })).toBe(false);
+    expect(needsPaymentMethodChoice({ ...old, latestProofStatus: 'REJECTED' })).toBe(false);
+    expect(needsPaymentMethodChoice({ ...old, status: 'cancelled' })).toBe(false);
+  });
 
   it('keeps office instructions accessible for a completed event with an unrecorded balance', () => {
     expect(hasCashPaymentAction(reservation({ paymentMethod: 'cash', status: 'completed' }))).toBe(true);
@@ -19,13 +26,13 @@ describe('customerPaymentStatus', () => {
 
   it('offers balance proof submission after verification, confirmation and completion without offering it for cash or fully paid bookings', () => {
     for (const status of ['payment_verified', 'confirmed', 'completed'] as const) {
-      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'gcash' }))).toBe(true);
       expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'bank-transfer' }))).toBe(true);
+      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'gcash' }))).toBe(false);
       expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'cash' }))).toBe(false);
-      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'gcash', amountPaid: 74300 }))).toBe(false);
+      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'bank-transfer', amountPaid: 74300 }))).toBe(false);
     }
     for (const status of ['pending', 'approved', 'cancelled', 'rejected'] as const) {
-      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'gcash' }))).toBe(false);
+      expect(hasOnlinePaymentAction(reservation({ status, paymentMethod: 'bank-transfer' }))).toBe(false);
     }
   });
   it('shows awaiting cash only for an approved unpaid cash booking without changing confirmation', () => {

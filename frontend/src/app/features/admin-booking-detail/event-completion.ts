@@ -33,7 +33,7 @@ export class EventCompletionComponent {
   protected readonly canSubmit = computed(() => !this.saving() && this.eventDayReached() && this.eventFinished()
     && ['PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(this.booking().status)
     && this.date() >= this.booking().eventDate && this.date() <= this.today
-    && (this.balance() === 0 || (['CASH', 'BANK_TRANSFER', 'E-WALLET'].includes(this.method()) && this.fundsReceived()
+    && (this.balance() === 0 || (['CASH', 'BANK_TRANSFER'].includes(this.method()) && this.fundsReceived()
       && (this.method() === 'CASH' || (this.reference().trim().length > 0 && this.reference().trim().length <= 150)))));
 
   protected submit(): void {

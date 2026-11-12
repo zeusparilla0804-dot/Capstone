@@ -11,6 +11,7 @@ import { isoDate } from '../utils/validation.js';
 import { transitionBooking } from './booking-status.service.js';
 import { queueBookingNotification } from './notification.service.js';
 import { hasRequiredReservationDeposit, requiredReservationDeposit } from './reservation-billing-policy.js';
+import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 
 interface Dependencies {
   readRequest: () => sql.Request | Promise<sql.Request>;
@@ -100,6 +101,7 @@ export function createPaymentVerificationService(deps: Dependencies) {
         const outstanding = dueCents - paidCents;
         let transactionId: string | undefined, invoiceId: number | undefined;
         if (amount !== undefined) {
+          assertSupportedPaymentMethod(proof.method);
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance. Refresh the booking.');
           const cents = Math.round(amount * 100);
           if (cents > outstanding) throw new AppError(409, 'Verified amount exceeds the current outstanding balance. Refresh and correct the amount.');

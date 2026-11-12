@@ -70,7 +70,7 @@
                       </a>
                       }
                     }
-                    @if (record.needsPaymentChoice) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: record.id, step: 4 }">Choose Payment Method</a> }
+                    @if (record.needsPaymentChoice) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: record.id, step: 4 }">{{ record.retiredPaymentMethod ? 'Change payment method' : 'Choose Payment Method' }}</a> }
                   </div>
                 </div>
               </article>

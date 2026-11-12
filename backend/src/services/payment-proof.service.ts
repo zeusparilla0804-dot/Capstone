@@ -9,6 +9,7 @@ import { isoDate } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
 import { transitionBooking } from './booking-status.service.js';
 import { assertProofMatchesPayment } from './booking-payment-policy.js';
+import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 import type { ProofStorage, ValidatedProofFile } from './proof-storage.service.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
 import { queueBookingNotification } from './notification.service.js';
@@ -33,6 +34,7 @@ function validateInput(value: unknown): PaymentProofSubmission {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AppError(400, 'Payment submission is invalid.');
   const raw = value as Record<string, unknown>;
   if (typeof raw.method !== 'string' || !['CASH', 'BANK_TRANSFER', 'E_WALLET'].includes(raw.method)) throw new AppError(400, 'Payment method is invalid.');
+  assertSupportedPaymentMethod(raw.method);
   if (raw.method === 'CASH') throw new AppError(400, 'Cash payments are accepted at the LA Chef office and recorded by an administrator. No online payment proof is required.');
   const amountText = typeof raw.claimedAmount === 'string' ? raw.claimedAmount.trim() : undefined;
   if (amountText !== undefined && !/^\d+(?:\.\d{1,2})?$/.test(amountText)) {
@@ -49,7 +51,7 @@ function validateInput(value: unknown): PaymentProofSubmission {
   if (raw.transactionReference !== undefined && typeof raw.transactionReference !== 'string') throw new AppError(400, 'Transaction reference is invalid.');
   const reference = raw.transactionReference?.trim();
   if (reference && reference.length > 150) throw new AppError(400, 'Transaction reference is too long.');
-  if (raw.method !== 'CASH' && !reference) throw new AppError(400, 'Transaction reference is required.');
+  if (!reference) throw new AppError(400, 'Transaction reference is required.');
   return { method: raw.method as PaymentProofSubmission['method'], claimedAmount: amount, paymentDate, transactionReference: reference || undefined };
 }
 

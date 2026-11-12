@@ -7,7 +7,7 @@
       @if (balance() > 0) {
         <div class="event-completion__fields">
           @if (booking().paymentDestinationLabel) { <p class="wide">Assigned QR account: <strong>{{ booking().paymentDestinationLabel }}</strong>. The saved payment method is selected below; change it only if the final payment was received another way.</p> }
-          <label>Final payment method<select name="finalMethod" [ngModel]="method()" (ngModelChange)="method.set($event); fundsReceived.set(false)" [disabled]="saving()" required><option value="">Select the method actually received</option><option value="CASH">Cash received at the event</option><option value="BANK_TRANSFER">Bank transfer verified by staff</option>@if (booking().paymentMethod === 'E-WALLET') { <option value="E-WALLET">GCash verified by staff</option> }</select></label>
+          <label>Final payment method<select name="finalMethod" [ngModel]="method()" (ngModelChange)="method.set($event); fundsReceived.set(false)" [disabled]="saving()" required><option value="">Select the method actually received</option><option value="CASH">Cash received at the event</option><option value="BANK_TRANSFER">Bank transfer verified by staff</option></select></label>
           <label>Final payment date<input name="finalDate" type="date" [min]="booking().eventDate" [max]="today" [ngModel]="date()" (ngModelChange)="date.set($event)" [disabled]="saving()" required /></label>
           @if (method() && method() !== 'CASH') { <label class="wide">Transaction reference<input name="finalReference" [ngModel]="reference()" (ngModelChange)="reference.set($event)" maxlength="150" [disabled]="saving()" required /></label> }
         </div>

@@ -83,7 +83,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly submitting = signal(false);
   protected readonly uploadProgress = signal(0);
   protected readonly form = new FormGroup({
-    method: new FormControl<PaymentProofMethod>('E_WALLET', { nonNullable: true, validators: Validators.required }),
+    method: new FormControl<PaymentProofMethod>('BANK_TRANSFER', { nonNullable: true, validators: Validators.required }),
     claimedAmount: new FormControl<number | null>(null, { validators: [Validators.required, Validators.min(0.01)] }),
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
     paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
@@ -102,7 +102,7 @@ export class PaymentProofPageComponent implements OnDestroy {
         void this.router.navigate(['/book-event'], { queryParams: { paymentBooking: item.id, step: 4 }, replaceUrl: true });
         return;
       }
-      const key = `${item.id}:${item.paymentMethod ?? ''}`;
+      const key = `${item.id}:${item.paymentMethod ?? ''}:${item.amountPaid}`;
       if (this.initializedBookingKey === key) return;
       this.initializedBookingKey = key;
       this.form.controls.method.setValue(item.paymentMethod === 'bank-transfer' ? 'BANK_TRANSFER' : item.paymentMethod === 'cash' ? 'CASH' : 'E_WALLET');
@@ -127,11 +127,13 @@ export class PaymentProofPageComponent implements OnDestroy {
     this.destinationLoading.set(true); this.destinationError.set(''); this.destination.set(null);
     if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage());
     this.destinationImage.set('');
+    if (this.booking()?.paymentMethod !== 'bank-transfer') { this.destinationLoading.set(false); return; }
     this.destinationService.assigned(this.bookingId).subscribe({
       next: item => {
         if (request !== this.destinationRequest) return;
-        this.destination.set(item); this.destinationLoading.set(false);
-        if (item) this.destinationService.image(item.id).subscribe({
+        const supported = item?.method === 'BANK_TRANSFER' ? item : null;
+        this.destination.set(supported); this.destinationLoading.set(false);
+        if (supported) this.destinationService.image(supported.id).subscribe({
           next: blob => { if (request === this.destinationRequest) this.destinationImage.set(URL.createObjectURL(blob)); },
           error: () => { if (request === this.destinationRequest) this.destinationError.set('Unable to load the assigned QR image.'); },
         });
@@ -141,6 +143,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   }
 
   protected async choosePayment(method: PaymentMethod): Promise<void> {
+    if (method === 'gcash') return;
     if (!this.canChoosePayment() || this.booking()?.paymentMethod === method) return;
     this.choosingPayment.set(true);
     this.paymentChoiceError.set('');
@@ -158,7 +161,7 @@ export class PaymentProofPageComponent implements OnDestroy {
     const select = event.target as HTMLSelectElement;
     const previous = this.booking()?.paymentMethod ?? '';
     const method = select.value;
-    if (!['gcash', 'bank-transfer', 'cash'].includes(method)) {
+    if (!['bank-transfer', 'cash'].includes(method)) {
       select.value = previous;
       return;
     }

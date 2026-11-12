@@ -48,7 +48,7 @@ export class AdminPaymentsPage {
   protected readonly form = new FormGroup({
     reservationId: new FormControl(0, { nonNullable: true, validators: Validators.min(1) }),
     amount: new FormControl(0, { nonNullable: true, validators: [Validators.required, Validators.min(.01)] }),
-    method: new FormControl('CASH', { nonNullable: true }),
+    method: new FormControl('CASH', { nonNullable: true, validators: Validators.required }),
     paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
   });
 
@@ -92,7 +92,7 @@ export class AdminPaymentsPage {
     this.selectedCashBooking.set(item);
     this.cashRequestId = this.cashRequestFor(item);
     this.form.controls.amount.setValidators([Validators.required, Validators.min(.01), Validators.max(Math.round((item.amountDue - item.amountPaid) * 100) / 100)]);
-    this.form.reset({ reservationId: item.reservationId, amount: 0, method: item.paymentMethod!, paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) });
+    this.form.reset({ reservationId: item.reservationId, amount: 0, method: item.paymentMethod === 'E-WALLET' ? '' : item.paymentMethod!, paymentDate: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) });
     this.transactionReference.reset('');
     this.error.set('');
     this.message.set('');
@@ -120,19 +120,20 @@ export class AdminPaymentsPage {
     if (this.saving() || !booking || !this.canRecordPayment(booking)) return;
     this.form.markAllAsTouched();
     this.transactionReference.markAsTouched();
-    if (this.form.invalid || (booking.paymentMethod !== 'CASH' && this.transactionReference.invalid)) {
+    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && this.transactionReference.invalid)) {
       this.feedback.show({ tone: 'error', title: 'Review the payment details', message: 'Enter an amount within the outstanding balance, a payment date, and the actual transaction reference for bank or online payments.' });
       return;
     }
     const amount = this.form.controls.amount.value;
     const date = this.form.controls.paymentDate.value;
     const reference = this.transactionReference.value.trim();
-    const cash = booking.paymentMethod === 'CASH';
+    const method = this.form.controls.method.value;
+    const cash = method === 'CASH';
     const formattedAmount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
     this.feedback.confirm({ title: cash ? 'Record cash payment?' : 'Record verified bank payment?', confirmLabel: cash ? 'Confirm cash received' : 'Confirm payment received',
-      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment date: ${date}\n${cash ? '' : `Account: ${booking.paymentDestinationLabel || booking.paymentMethod}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
+      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment date: ${date}\n${cash ? '' : `Account: ${booking.paymentMethod === 'E-WALLET' ? 'Bank transfer (verified by staff)' : booking.paymentDestinationLabel || method}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
     }, () => {
-      if (this.selectedCashBooking() !== booking || this.form.controls.amount.value !== amount || this.form.controls.paymentDate.value !== date || (!cash && this.transactionReference.value.trim() !== reference)) return;
+      if (this.selectedCashBooking() !== booking || this.form.controls.method.value !== method || this.form.controls.amount.value !== amount || this.form.controls.paymentDate.value !== date || (!cash && this.transactionReference.value.trim() !== reference)) return;
       this.save();
     });
   }
@@ -142,10 +143,10 @@ export class AdminPaymentsPage {
     const selected = this.selectedCashBooking();
     if (!selected || !this.canRecordPayment(selected)) return;
     this.form.markAllAsTouched();
-    if (this.form.invalid || (selected.paymentMethod !== 'CASH' && this.transactionReference.invalid)) return;
+    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && this.transactionReference.invalid)) return;
     const value = { ...this.form.getRawValue(), requestId: this.cashRequestId,
-      ...(selected.paymentMethod !== 'CASH' ? { reference: this.transactionReference.value.trim() } : {}) };
-    if (value.reservationId !== selected.reservationId || value.method !== selected.paymentMethod) return;
+      ...(this.form.controls.method.value !== 'CASH' ? { reference: this.transactionReference.value.trim() } : {}) };
+    if (value.reservationId !== selected.reservationId || (value.method !== selected.paymentMethod && selected.paymentMethod !== 'E-WALLET')) return;
     this.saving.set(true);
     this.error.set('');
     this.message.set('');
