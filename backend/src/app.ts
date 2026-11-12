@@ -38,8 +38,7 @@ app.use(
 
       callback(new Error('Origin is not allowed by CORS.'));
     },
-    credentials: true,
-    exposedHeaders: ['X-Admin-Idle-Timeout']
+    credentials: true
   })
 );
 

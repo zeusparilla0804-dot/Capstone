@@ -1,7 +1,7 @@
-import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, tap, throwError } from 'rxjs';
+import { catchError, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AdminAuthService } from '../services/admin-auth.service';
 import { AuthService } from '../services/auth.service';
@@ -14,13 +14,7 @@ export const apiInterceptor: HttpInterceptorFn = (request, next) => {
   const path = request.url.slice(environment.apiBaseUrl.length).split('?')[0];
   const protectedAdmin = /^\/admin(?:\/|$)|^\/auth\/admin\/(?:me|logout|logout-all)(?:\/|$)/.test(path);
   const protectedCustomer = /^\/(?:bookings|invoices)(?:\/|$)|^\/auth\/(?:me|logout|logout-all)(?:\/|$)/.test(path);
-  const activity = protectedAdmin || path === '/auth/admin/login' ? inject(AdminAuthService) : null;
-  const activityRevision = activity?.sessionVersion;
-  const response = next(request).pipe(tap(event => {
-    if (event instanceof HttpResponse && activity && activityRevision === activity.sessionVersion && request.headers.get('X-La-Chef-Background') !== '1') {
-      activity.noteActivity(Number(event.headers.get('X-Admin-Idle-Timeout')) || undefined);
-    }
-  }));
+  const response = next(request);
   if (!protectedAdmin && !protectedCustomer) return response;
   const auth = protectedAdmin ? inject(AdminAuthService) : inject(AuthService);
   const router = inject(Router);

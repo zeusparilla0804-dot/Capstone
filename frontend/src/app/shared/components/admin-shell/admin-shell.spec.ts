@@ -14,10 +14,8 @@ describe('AdminShellComponent session security', () => {
     window.localStorage.clear();
   });
 
-  it('announces pending expiry and lets the administrator explicitly renew the session', async () => {
-    const warning = signal(true);
-    const auth = { user: signal({ fullName: 'Admin' }), idleWarning: warning,
-      keepAlive: vi.fn(async () => { warning.set(false); }) };
+  it('does not show an inactivity warning or require session renewal', async () => {
+    const auth = { user: signal({ fullName: 'Admin' }) };
     TestBed.configureTestingModule({ imports: [AdminShellComponent],
       providers: [provideRouter([]), { provide: AdminAuthService, useValue: auth }] });
     const fixture = TestBed.createComponent(AdminShellComponent);
@@ -25,11 +23,7 @@ describe('AdminShellComponent session security', () => {
     fixture.componentRef.setInput('description', 'Review current operations.');
     fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
-    expect(root.querySelector('[role="status"]')?.textContent).toContain('less than a minute');
-    const button = Array.from(root.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent?.includes('Stay signed in'))!;
-    button.click();
-    await fixture.whenStable(); fixture.detectChanges();
-    expect(auth.keepAlive).toHaveBeenCalledOnce();
+    expect(root.textContent).not.toContain('Stay signed in');
     expect(root.querySelector('.admin-session-warning')).toBeNull();
   });
 

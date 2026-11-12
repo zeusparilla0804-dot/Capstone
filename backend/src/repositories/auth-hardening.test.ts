@@ -11,10 +11,11 @@ test('durable security schema records attempts/events and last activity without 
   assert.doesNotMatch(script, /(?:UPDATE|DELETE|INSERT|DROP|TRUNCATE)\s+(?:dbo\.)?(?:CUSTOMER|RESERVATION|PAYMENT)\b/i);
   assert.ok(EXPECTED_SCHEMA_CONTRACT.columns.some(c => c.table === 'ADMIN_SESSION' && c.name === 'last_seen_at'));
 });
-test('admin activity is renewed atomically only before both idle and absolute expiry', () => {
+test('admin activity is recorded while absolute expiry remains enforced', () => {
   const source = readFileSync(new URL('./auth.repository.ts', import.meta.url), 'utf8');
   assert.match(source, /UPDATE\s+s\s+SET\s+last_seen_at\s*=\s*SYSUTCDATETIME\(\)/i);
-  assert.match(source, /last_seen_at\s*>\s*DATEADD\(minute,\s*-@idleMinutes,\s*SYSUTCDATETIME\(\)\)/i);
+  assert.doesNotMatch(source, /last_seen_at\s*>|@idleMinutes/i);
+  assert.match(source, /s\.expires_at>SYSUTCDATETIME\(\)/);
   assert.match(source, /OUTPUT\s+INSERTED\.admin_id/i);
 });
 test('session issuance locks the principal and requires the verified password to remain current', () => {

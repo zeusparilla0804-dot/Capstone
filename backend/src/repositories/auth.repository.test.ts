@@ -12,14 +12,14 @@ process.env.DB_PASSWORD ??= 'test';
 const repositoryUrl = new URL('./auth.repository.ts', import.meta.url);
 const source = readFileSync(repositoryUrl, 'utf8');
 
-test('background admin session checks validate expiry without renewing idle activity', async () => {
+test('background admin session checks validate absolute expiry without an inactivity limit', async () => {
   const { findAdminBySession } = await import('./auth.repository.js');
   let command = '';
   const request = { input() { return this; }, async query(value: string) { command = value; return { recordset: [{ admin_id: 7, full_name: 'Admin', email: 'admin@example.test' }] }; } };
   assert.equal((await (findAdminBySession as any)('0'.repeat(64), request, false))?.id, 7);
   assert.doesNotMatch(command, /UPDATE|SET last_seen_at/i);
   assert.match(command, /expires_at>SYSUTCDATETIME\(\)/);
-  assert.match(command, /last_seen_at>DATEADD\(minute,-@idleMinutes,SYSUTCDATETIME\(\)\)/);
+  assert.doesNotMatch(command, /last_seen_at\s*>|@idleMinutes/i);
 });
 
 test('customer and admin session expiry comparisons use the SQL UTC clock', () => {

@@ -28,11 +28,10 @@ describe('API session expiry', () => {
   });
   afterEach(() => http.verify());
 
-  it('does not extend idle time for background admin refreshes but retains session expiry handling', () => {
-    const noteActivity = vi.spyOn(admin, 'noteActivity');
+  it('keeps background admin refreshes authenticated and handles revoked sessions', () => {
     client.get(`${environment.apiBaseUrl}/admin/dashboard`, { headers: { 'X-La-Chef-Background': '1' } }).subscribe();
     http.expectOne(`${environment.apiBaseUrl}/admin/dashboard`).flush({ success: true });
-    expect(noteActivity).not.toHaveBeenCalled();
+    expect(admin.user()?.id).toBe('7');
     client.get(`${environment.apiBaseUrl}/admin/dashboard`, { headers: { 'X-La-Chef-Background': '1' } }).subscribe({ error: () => {} });
     http.expectOne(`${environment.apiBaseUrl}/admin/dashboard`).flush({}, { status: 401, statusText: 'Unauthorized' });
     expect(admin.user()).toBeNull();

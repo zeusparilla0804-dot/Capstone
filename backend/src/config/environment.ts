@@ -135,7 +135,6 @@ export const environment = Object.freeze({
   nodeEnv,
   isProduction: nodeEnv === 'production',
   port: positiveInteger('PORT', 3000),
-  adminIdleMinutes: positiveInteger('ADMIN_IDLE_TIMEOUT_MINUTES', 30, 1440),
   frontendOrigin,
   paymentProofUploadRoot: required('PAYMENT_PROOF_UPLOAD_ROOT'),
   email: readEmailConfiguration(process.env),

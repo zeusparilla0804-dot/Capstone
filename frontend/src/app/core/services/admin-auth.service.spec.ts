@@ -16,6 +16,17 @@ describe('AdminAuthService password recovery', () => {
 
   afterEach(() => http.verify());
 
+  it('keeps the admin signed in after eight hours without activity', async () => {
+    vi.useFakeTimers();
+    try {
+      const login = service.login('admin@example.test', 'password');
+      http.expectOne(`${environment.apiBaseUrl}/auth/admin/login`).flush({ success: true, data: { id: '7', role: 'admin' } });
+      await login;
+      vi.advanceTimersByTime(8 * 60 * 60_000);
+      expect(service.user()?.id).toBe('7');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('requires MFA completion before setting the admin user', async () => {
     const login = service.login('admin@example.test', 'password');
     http.expectOne(`${environment.apiBaseUrl}/auth/admin/login`).flush({ success: true,
@@ -28,55 +39,6 @@ describe('AdminAuthService password recovery', () => {
     request.flush({ success: true, data: { id: 7, role: 'admin', recoveryCodes: ['BACKUP'] } });
     await expect(completion).resolves.toEqual(['BACKUP']);
     expect(service.user()?.id).toBe('7');
-  });
-
-  it('clears an idle admin session at 30 minutes and redirects only the admin page', async () => {
-    vi.useFakeTimers();
-    try {
-      const result = service.login('admin@example.test', 'existing-password');
-      http.expectOne(`${environment.apiBaseUrl}/auth/admin/login`).flush({ success: true, data: { id: '7', role: 'admin' } });
-      await result;
-      vi.advanceTimersByTime(29 * 60_000);
-      expect(service.user()?.id).toBe('7');
-      expect(service.idleWarning()).toBe(true);
-      vi.advanceTimersByTime(60_000);
-      expect(service.user()).toBeNull();
-    } finally { vi.useRealTimers(); }
-  });
-  it('renews activity only after the backend confirms Stay signed in', async () => {
-    vi.useFakeTimers();
-    try {
-      service.user.set({ id: '7', role: 'admin' } as any);
-      service.noteActivity(2);
-      vi.advanceTimersByTime(60_000);
-      expect(service.idleWarning()).toBe(true);
-      const renewal = service.keepAlive();
-      http.expectOne(`${environment.apiBaseUrl}/auth/admin/me`).flush({ success: true, data: { id: '7', role: 'admin' } });
-      await renewal;
-      expect(service.idleWarning()).toBe(false);
-    } finally { vi.useRealTimers(); }
-  });
-  it('renews the frontend timer after authenticated API activity', async () => {
-    vi.useFakeTimers();
-    try {
-      service.user.set({ id: '7', role: 'admin' } as any);
-      service.noteActivity(1);
-      vi.advanceTimersByTime(30_000);
-      service.noteActivity(1);
-      vi.advanceTimersByTime(59_999);
-      expect(service.user()).not.toBeNull();
-      vi.advanceTimersByTime(1);
-      expect(service.user()).toBeNull();
-    } finally { vi.useRealTimers(); }
-  });
-  it('ignores oversized timeout configuration instead of overflowing the browser timer', () => {
-    vi.useFakeTimers();
-    try {
-      service.user.set({ id: '7', role: 'admin' } as any);
-      service.noteActivity(65535);
-      vi.advanceTimersByTime(1000);
-      expect(service.user()).not.toBeNull();
-    } finally { vi.useRealTimers(); }
   });
 
   it('clears a revoked administrator session when signing out', async () => {

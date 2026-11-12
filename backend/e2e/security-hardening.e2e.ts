@@ -35,10 +35,10 @@ try {
     .query(`DECLARE @id int=(SELECT TOP(1) admin_id FROM dbo.ADMIN WHERE status='ACTIVE' ORDER BY admin_id);
       IF @id IS NULL THROW 51020,'A local active administrator is required for this verifier.',1;
       INSERT dbo.ADMIN_SESSION(admin_id,token_hash,expires_at,last_seen_at)
-      VALUES(@id,@hash,DATEADD(day,1,SYSUTCDATETIME()),DATEADD(minute,-${environment.adminIdleMinutes + 1},SYSUTCDATETIME()));`);
+      VALUES(@id,@hash,DATEADD(day,1,SYSUTCDATETIME()),DATEADD(hour,-8,SYSUTCDATETIME()));`);
   assert.equal(fixture.rowsAffected.at(-1), 1);
-  assert.equal(await findAdminBySession(tokenHash, new sql.Request(transaction)), undefined);
-  console.log('PASS idle session cannot be renewed');
+  assert.equal((await findAdminBySession(tokenHash, new sql.Request(transaction)))?.role, 'admin');
+  console.log('PASS eight idle hours do not expire a valid admin session');
   await new sql.Request(transaction).input('hash', sql.Char(64), tokenHash)
     .query('UPDATE dbo.ADMIN_SESSION SET last_seen_at=SYSUTCDATETIME() WHERE token_hash=@hash');
   assert.equal((await findAdminBySession(tokenHash, new sql.Request(transaction)))?.role, 'admin');
