@@ -49,15 +49,17 @@ for (const width of [390, 1440]) {
   });
 }
 
-for (const paid of [false, true]) {
-  test(`billing document shows ${paid ? 'a verified receipt' : 'an unpaid invoice'}`, async ({ page }, testInfo) => {
+for (const state of ['unpaid', 'partial', 'paid']) {
+  const paid = state !== 'unpaid';
+  const partial = state === 'partial';
+  test(`billing document shows ${partial ? 'a partial-deposit receipt' : paid ? 'a verified receipt' : 'an unpaid invoice'}`, async ({ page }, testInfo) => {
     await page.route('**/api/invoices/999', route => route.fulfill({ json: { success: true, data: {
-      invoiceId: 999, invoiceNumber: 'INV-QA-999', issueDate: '2026-11-11', dueDate: '2026-12-20', status: paid ? 'PAID' : 'ISSUED',
+      invoiceId: 999, invoiceNumber: 'INV-QA-999', issueDate: '2026-11-11', dueDate: '2026-12-20', status: partial ? 'PARTIALLY_PAID' : paid ? 'PAID' : 'ISSUED',
       issuer: { name: 'QA Administrator' }, customer: { id: 999, name: 'QA Customer', email: 'qa@example.test', phone: '09171234567' },
-      booking: { id: 999, reference: 'BK-QA-999', status: 'CONFIRMED', eventType: 'Wedding', eventDate: '2026-12-20', eventTime: '10:00', venue: 'QA venue', guestCount: 100 },
+      booking: { id: 999, reference: 'BK-QA-999', status: partial ? 'AWAITING_PAYMENT' : 'CONFIRMED', eventType: 'Wedding', eventDate: '2026-12-20', eventTime: '10:00', venue: 'QA venue', guestCount: 100 },
       items: [{ description: 'Catering package', quantity: 100, unitPrice: 480, amount: 48000 }],
-      subtotal: 48000, discount: 0, totalAmount: 48000, amountPaid: paid ? 48000 : 0, remainingBalance: paid ? 0 : 48000,
-      payments: paid ? [{ id: 1, date: '2026-11-11', reference: 'CASH-QA-999', method: 'CASH', amount: 48000, status: 'VERIFIED' }] : [],
+      subtotal: partial ? 154000 : 48000, discount: 0, totalAmount: partial ? 154000 : 48000, amountPaid: partial ? 70000 : paid ? 48000 : 0, remainingBalance: partial ? 84000 : paid ? 0 : 48000,
+      payments: paid ? [{ id: 1, date: '2026-11-11', reference: 'CASH-QA-999', method: 'CASH', amount: partial ? 70000 : 48000, status: 'VERIFIED' }] : [],
     } } }));
     await page.goto('/invoice/999');
     const document = page.locator('.invoice-document');
@@ -66,6 +68,11 @@ for (const paid of [false, true]) {
     await expect(document.locator('.invoice-signatures')).toContainText('QA Administrator');
     await expect(document.locator('.invoice-totals')).not.toContainText('Discount');
     await expect(document.locator('.payment-history')).toHaveCount(paid ? 1 : 0);
+    if (partial) {
+      await expect(document.locator('[data-testid="remaining-down-payment"]')).toContainText('7,000.00');
+      await expect(document.locator('.balance')).toContainText('84,000.00');
+      await expect(document.locator('.invoice-deposit-help')).toContainText('included in Balance Due');
+    }
     const timestamp = document.locator('footer .receipt-generated');
     if (paid) {
       await expect(timestamp).toContainText('Generated on:');
@@ -80,6 +87,7 @@ for (const paid of [false, true]) {
     await expect(page.locator('.invoice-actions')).toBeHidden();
     if (paid) {
       await expect(document.locator('.payment-history')).toBeVisible();
+      if (partial) await expect(document.locator('[data-testid="remaining-down-payment"]')).toBeVisible();
       await expect(timestamp).toBeVisible();
       await expect(timestamp).toHaveCSS('text-align', 'right');
       await document.screenshot({ path: testInfo.outputPath('receipt-footer-print.png') });

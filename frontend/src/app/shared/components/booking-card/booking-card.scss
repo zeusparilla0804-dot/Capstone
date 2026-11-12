@@ -64,3 +64,6 @@
 :host:has(.booking-card--reservation) ::ng-deep .booking-card__side .status-badge--payment_verified { min-width: 0; }
 .booking-card--reservation .booking-card__actions { grid-template-columns: minmax(0, 1fr); width: 100%; }
 .booking-card--reservation .booking-card__actions .btn { box-sizing: border-box; width: 100%; min-height: 46px; }
+:host .booking-card__deposit { margin: 8px 0; max-width: 30ch; color: var(--color-text-muted); font-size: 13px; line-height: 1.5; }
+:host .booking-card__deposit small { display: block; margin-top: 4px; font-size: 12px; }
+:host .booking-card__deposit strong { white-space: nowrap; }

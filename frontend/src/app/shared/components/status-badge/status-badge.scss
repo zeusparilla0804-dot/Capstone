@@ -30,6 +30,7 @@
 .status-badge--pending_payment_verification,
 .status-badge--pending_verification,
 .status-badge--partially_paid,
+.status-badge--down_payment_incomplete,
 .status-badge--submitted {
   background: color-mix(in srgb, var(--color-warning) 18%, #ffffff);
   color: #8a5a10;
@@ -59,6 +60,7 @@
 }
 
 .status-badge--down_payment_verified,
+.status-badge--down_payment_incomplete,
 .status-badge--pending_payment_verification {
   white-space: normal;
   line-height: 1.3;

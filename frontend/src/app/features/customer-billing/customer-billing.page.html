@@ -49,6 +49,7 @@
                   <span>{{ record.reference }}</span>
                   <h3>{{ record.eventName }}</h3>
                   <time [attr.datetime]="record.eventDate">{{ formatDate(record.eventDate) }}</time>
+                  @if (record.incompleteDeposit) { <p class="billing-record__deposit" data-testid="deposit-shortfall">Remaining down payment: <strong>{{ formatCurrency(record.remainingDeposit) }}</strong><small>{{ record.proofPending ? 'New proof awaiting review. Do not pay this amount again while verification is pending.' : 'Included in the total balance due.' }}</small></p> }
                 </div>
                 <dl class="billing-record__amounts">
                   <div><dt>Total</dt><dd>{{ formatCurrency(record.total) }}</dd></div>
@@ -66,7 +67,7 @@
                         <button class="btn btn-primary btn-sm" type="button" disabled data-testid="waiting-payment-qr">Waiting for Payment QR</button>
                       } @else {
                       <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
-                        {{ record.cashPayment ? 'View Cash Instructions' : record.status === 'payment_submitted' ? 'View Payment' : 'Submit Payment' }}
+                        {{ record.cashPayment ? 'View Cash Instructions' : record.proofPending ? 'View Payment' : record.incompleteDeposit ? 'Pay remaining down payment' : 'Submit Payment' }}
                       </a>
                       }
                     }

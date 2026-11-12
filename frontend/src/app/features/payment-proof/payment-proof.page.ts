@@ -1,4 +1,4 @@
-import { hasCashPaymentAction, hasOnlinePaymentAction } from '../../core/utils/customer-payment-status';
+import { hasCashPaymentAction, hasOnlinePaymentAction, bookingTotal, depositProgress, hasIncompleteDownPayment } from '../../core/utils/customer-payment-status';
 import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
@@ -8,7 +8,6 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { MAX_PAYMENT_PROOF_BYTES, PaymentMethod, PaymentProof, PaymentProofMethod, PaymentProofSubmission } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { BookingCalculationService } from '../../core/services/booking-calculation.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PaymentProofService } from '../../core/services/payment-proof.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
@@ -31,7 +30,6 @@ export class PaymentProofPageComponent implements OnDestroy {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
   protected readonly bookingService = inject(BookingService);
-  private readonly calculationService = inject(BookingCalculationService);
   private readonly proofService = inject(PaymentProofService);
   private readonly destinationService = inject(PaymentDestinationService);
   private readonly badgeState = inject(PortalBadgeStateService);
@@ -52,15 +50,22 @@ export class PaymentProofPageComponent implements OnDestroy {
   }
   protected readonly cashInstructionsAvailable = computed(() => !!this.booking() && hasCashPaymentAction(this.booking()!));
   protected readonly eligible = computed(() => !!this.booking() && hasOnlinePaymentAction(this.booking()!));
-  protected readonly waitingForQr = computed(() => this.eligible() && !this.destinationImage());
-  private readonly totals = computed(() => {
-    const item = this.booking();
-    return item ? this.calculationService.calculateTotals(item) : null;
-  });
-  protected readonly estimatedTotal = computed(() => this.totals()?.total ?? 0);
-  protected readonly requiredDeposit = computed(() => this.totals()?.downPayment ?? 0);
-  protected readonly remainingDeposit = computed(() => Math.max(this.requiredDeposit() - (this.booking()?.amountPaid ?? 0), 0));
-  protected readonly outstandingBalance = computed(() => Math.max(this.estimatedTotal() - (this.booking()?.amountPaid ?? 0), 0));
+  protected readonly waitingForQr = computed(() => this.eligible() && !this.destinationImage() && !this.proofPending());
+  protected readonly estimatedTotal = computed(() => this.booking() ? bookingTotal(this.booking()!) : 0);
+  protected readonly requiredDeposit = computed(() => depositProgress(this.estimatedTotal(), this.booking()?.amountPaid ?? 0).requiredDeposit);
+  protected readonly remainingDeposit = computed(() => depositProgress(this.estimatedTotal(), this.booking()?.amountPaid ?? 0).remainingDeposit);
+  protected readonly outstandingBalance = computed(() => depositProgress(this.estimatedTotal(), this.booking()?.amountPaid ?? 0).outstandingBalance);
+  protected readonly incompleteDeposit = computed(() => !!this.booking() && hasIncompleteDownPayment(this.booking()!));
+  protected readonly proofPending = computed(() => this.booking()?.status === 'payment_submitted' || this.booking()?.latestProofStatus?.toUpperCase() === 'SUBMITTED' || this.proofs().some(proof => proof.status === 'submitted'));
+  protected readonly replacingProof = signal(false);
+  protected readonly pendingProof = computed(() => this.proofs().find(proof => proof.status === 'submitted'));
+
+  protected beginProofReplacement(): void {
+    const proof = this.pendingProof();
+    if (!proof || this.submitting() || this.historyLoading() || this.historyError()) return;
+    this.form.patchValue({ claimedAmount: proof.claimedAmount, paymentDate: proof.paymentDate, transactionReference: proof.transactionReference ?? '' });
+    this.replacingProof.set(true);
+  }
   protected readonly paymentAmountChoice = signal<'deposit' | 'full' | 'custom'>('deposit');
   protected readonly proofs = signal<readonly PaymentProof[]>([]);
   protected readonly destination = signal<PaymentDestination | null>(null);
@@ -239,7 +244,9 @@ export class PaymentProofPageComponent implements OnDestroy {
           this.uploadProgress.set(event.total ? Math.round(event.loaded * 100 / event.total) : 0);
         } else if (event instanceof HttpResponse && event.body?.data) {
           const proof = event.body.data;
-          this.proofs.update(items => [proof, ...items.filter(item => item.id !== proof.id)]);
+          this.replacingProof.set(false);
+          this.proofs.update(items => [proof, ...items.filter(item => item.id !== proof.id)
+            .map(item => item.status === 'submitted' ? { ...item, status: 'superseded' as const } : item)]);
           this.successMessage.set('Payment proof submitted for verification.');
           this.uploadProgress.set(100);
           this.removeFile();

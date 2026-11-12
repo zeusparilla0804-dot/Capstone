@@ -57,7 +57,7 @@ describe('customerPaymentStatus', () => {
   });
 
   it('checks the half-payment boundary in cents and does not change reservation confirmation', () => {
-    expect(customerPaymentStatus(reservation({ total: 74300.01, amountPaid: 37150 }))).toBe('partially_paid');
+    expect(customerPaymentStatus(reservation({ total: 74300.01, amountPaid: 37150 }))).toBe('down_payment_incomplete');
     expect(customerPaymentStatus(reservation({ total: 74300.01, amountPaid: 37150.01 }))).toBe('down_payment_verified');
     const booking = reservation({ status: 'confirmed' });
     expect(customerPaymentStatus(booking)).toBe('down_payment_verified');

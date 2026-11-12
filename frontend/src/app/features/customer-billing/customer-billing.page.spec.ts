@@ -87,7 +87,7 @@ describe('CustomerBillingPageComponent', () => {
     expect(summaryValues.at(-1)).toBe('₱14,000');
     expect([...fixture.nativeElement.querySelectorAll('.billing-record .status-badge')]
       .map((element: Element) => element.textContent!.trim()))
-      .toEqual(['Partially Paid', 'Pending Payment Verification', 'Cancelled']);
+      .toEqual(['Down Payment Incomplete', 'Pending Payment Verification', 'Cancelled']);
   });
 
   it('hides Submit Payment for a completed booking with a verified down payment', async () => {

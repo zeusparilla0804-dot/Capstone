@@ -10,6 +10,10 @@ const columns = `payment_proof_id id,reservation_id reservationId,customer_id cu
   payment_date paymentDate,storage_key storageKey,original_filename originalFilename,
   mime_type mimeType,byte_size byteSize,status,rejection_reason rejectionReason,
   reviewed_by reviewedBy,reviewed_at reviewedAt,verified_amount verifiedAmount,
+  CASE WHEN status='VERIFIED' THEN (SELECT TOP(1) JSON_VALUE(a.new_values,'$.reason') FROM dbo.ADMIN_AUDIT_LOG a
+    WHERE a.entity_type='BOOKING' AND a.entity_id=reservation_id AND a.action='PAYMENT_PROOF_VERIFIED'
+      AND JSON_VALUE(a.new_values,'$.proofId')=CONVERT(varchar(20),payment_proof_id)
+    ORDER BY a.audit_id DESC) END correctionReason,
   created_at createdAt,updated_at updatedAt`;
 
 function record(row: PaymentProofRecord): PaymentProofRecord {
@@ -22,6 +26,7 @@ function record(row: PaymentProofRecord): PaymentProofRecord {
     claimedAmount: Number(row.claimedAmount), byteSize: Number(row.byteSize),
     transactionReference: row.transactionReference ?? undefined,
     rejectionReason: row.rejectionReason ?? undefined,
+    correctionReason: row.correctionReason ?? undefined,
     reviewedBy: row.reviewedBy == null ? undefined : Number(row.reviewedBy),
     reviewedAt: row.reviewedAt == null ? undefined : new Date(row.reviewedAt).toISOString(),
     verifiedAmount: row.verifiedAmount == null ? undefined : Number(row.verifiedAmount),

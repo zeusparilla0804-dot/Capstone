@@ -120,3 +120,7 @@ form { display: grid; gap: 20px; padding-top: 20px; }
 .qr-waiting__history ul { margin: 8px 0 0; padding-left: 20px; color: var(--color-text-muted); font: 400 13px/1.6 var(--font-sans); }
 .cash-method-row { margin-top: 20px; }
 .method-feedback { margin-top: 14px; }
+.deposit-notice { margin: 0 0 24px; padding: 18px; border: 1px solid var(--color-border); border-left: 3px solid var(--color-accent); border-radius: 6px; background: #faf7ef; font-size: 14px; line-height: 1.6; }
+.deposit-notice h2 { margin: 0 0 8px; font-size: 18px; }
+.deposit-notice p { margin: 6px 0 0; }
+.history-reason { white-space: pre-line; overflow-wrap: anywhere; }

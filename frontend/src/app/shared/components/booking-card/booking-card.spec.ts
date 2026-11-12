@@ -13,6 +13,21 @@ const booking: Booking = {
 };
 
 describe('BookingCardComponent pending actions', () => {
+  it('lets the customer pay only the missing deposit after a smaller verified bank payment', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    const partial = { ...booking, total: 154000, status: 'awaiting_payment', paymentMethod: 'bank-transfer', paymentQrReady: true, amountPaid: 70000 };
+    fixture.componentRef.setInput('booking', partial); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Down Payment Incomplete');
+    expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]').textContent).toContain('7,000.00');
+    const action = fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]');
+    expect(action?.textContent).toContain('Pay remaining down payment');
+    fixture.componentRef.setInput('booking', { ...partial, status: 'payment_submitted', latestProofStatus: 'SUBMITTED' }); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Pay remaining down payment');
+    expect(fixture.nativeElement.textContent).toContain('View Payment');
+    fixture.componentRef.setInput('booking', { ...partial, status: 'payment_verified', amountPaid: 77000 }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]')).toBeNull();
+  });
   it('shows both Completed and Fully Paid with a receipt link after final payment', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);

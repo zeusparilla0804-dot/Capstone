@@ -5,6 +5,7 @@ import { Title } from '@angular/platform-browser';
 import { Invoice } from '../../core/models';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
+import { depositProgress } from '../../core/utils/customer-payment-status';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
@@ -37,7 +38,14 @@ export class InvoicePageComponent {
 
   protected paymentStatus(doc: Invoice): string {
     if (!this.isReceipt(doc)) return doc.status;
+    if (this.incompleteDeposit(doc)) return 'down_payment_incomplete';
     return adminPaymentDisplayStatus({ total: doc.totalAmount, amountPaid: doc.amountPaid, status: doc.status }) ?? doc.status;
+  }
+
+  protected deposit(doc: Invoice) { return depositProgress(doc.totalAmount, doc.amountPaid); }
+  protected incompleteDeposit(doc: Invoice): boolean {
+    return this.isReceipt(doc) && !['CANCELLED', 'REJECTED', 'EXPIRED', 'COMPLETED'].includes(doc.booking.status?.toUpperCase() ?? '')
+      && doc.status.toUpperCase() !== 'CANCELLED' && this.deposit(doc).remainingDeposit > 0;
   }
 
   protected load(): void {

@@ -22,6 +22,7 @@ export interface PaymentProof extends PaymentProofSubmission {
   readonly byteSize: number;
   readonly status: PaymentProofStatus;
   readonly rejectionReason?: string;
+  readonly correctionReason?: string;
   readonly reviewedBy?: number;
   readonly reviewedAt?: string;
   readonly verifiedAmount?: number;

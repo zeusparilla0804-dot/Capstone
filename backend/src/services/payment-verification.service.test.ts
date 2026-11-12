@@ -269,6 +269,20 @@ test('corrected amount requires reason and preserves it in history/audit', async
   assert.equal(db.proofs[0]!.rejectionReason, undefined);
 });
 
+test('a corrected payment below the deposit records the actual credit and queues an accurate shortfall snapshot', async () => {
+  const db = new ReviewDb();
+  db.payment!.amountDue = 154000; db.payment!.amountPaid = 0; db.invoice!.totalAmount = 154000;
+  db.proofs[0]!.claimedAmount = 77000;
+  await db.service().verifyProof(2, proof.id, 70000, 'Only 70000 received.');
+  assert.equal(db.payment!.amountPaid, 70000);
+  assert.equal(db.booking!.status, 'AWAITING_PAYMENT');
+  assert.equal(db.credits.length, 1);
+  const payload = JSON.parse(String(db.outbox[0]!['payload']));
+  assert.equal(payload.remainingDeposit, '7000.00');
+  assert.equal(payload.remainingBalance, '84000.00');
+  assert.equal(payload.correctionReason, 'Only 70000 received.');
+});
+
 test('invalid money, reason and schema-compatible identifiers fail before SQL', async () => {
   for (const amount of [0, -1, NaN, Infinity, 1.001, 1.0000000001, '90', null, true, [], 10_000_000_000]) {
     const db = new ReviewDb(); await assert.rejects(db.service().verifyProof(2, proof.id, amount), status(400)); assert.equal(db.queries.length, 0);

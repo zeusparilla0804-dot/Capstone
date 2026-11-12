@@ -314,3 +314,6 @@
 @media (pointer: coarse) {
   .billing-record__actions .btn { min-height: 44px; }
 }
+.billing-record__event .billing-record__deposit { margin: 10px 0 0; font-size: 13px; line-height: 1.5; }
+.billing-record__deposit small { display: block; color: var(--color-text-muted); margin-top: 4px; }
+.billing-record__deposit strong { white-space: nowrap; }

@@ -25,6 +25,37 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+  it('shows review-only instructions for a pending proof until the customer explicitly chooses replacement', () => {
+    bookingState.set([{ ...booking, total: 154000, amountPaid: 70000, status: 'payment_submitted', latestProofStatus: 'SUBMITTED' }]);
+    (fixture.componentInstance as any).proofs.set([{ ...submittedProof, claimedAmount: 7000 }]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.payment-amount-picker')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    const replace = [...fixture.nativeElement.querySelectorAll('button')].find((button: any) => button.textContent.includes('Replace submitted proof')) as HTMLButtonElement;
+    expect(replace).toBeDefined(); replace.click(); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
+    expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(7000);
+  });
+
+  it('keeps corrected proof history readable after full payment without offering a new payment', () => {
+    bookingState.set([{ ...booking, invoiceId: 8, total: 154000, amountPaid: 154000, status: 'confirmed' }]);
+    (fixture.componentInstance as any).proofs.set([{ ...submittedProof, status: 'verified', verifiedAmount: 70000, correctionReason: 'Only 70000 received.' }]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Only 70000 received.');
+    expect(fixture.nativeElement.querySelector('a[href="/invoice/8"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Payment proof is not available');
+  });
+  it('explains a corrected partial deposit and defaults the next proof to only the shortfall', () => {
+    bookingState.set([{ ...booking, total: 154000, amountPaid: 70000, status: 'awaiting_payment', latestProofStatus: 'VERIFIED' }]);
+    const component = fixture.componentInstance as any;
+    component.proofs.set([{ ...submittedProof, status: 'verified', claimedAmount: 77000, verifiedAmount: 70000,
+      correctionReason: 'Bank statement confirms only 70000.', reviewedAt: '2026-11-12T10:00:00Z' }]); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]')?.textContent).toContain('7,000.00');
+    expect(fixture.nativeElement.textContent).toContain('Bank statement confirms only 70000.');
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Verified amount');
+    expect(component.form.controls.claimedAmount.value).toBe(7000);
+  });
   it('displays an automatic submission date as text while preserving the receipt payment date', () => {
     const root = fixture.nativeElement as HTMLElement;
     const submitted = root.querySelector('[data-testid="submission-date"]');

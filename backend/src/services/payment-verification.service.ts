@@ -77,7 +77,7 @@ function publicProof(proof: PaymentProofRecord): PublicPaymentProof {
     claimedAmount: proof.claimedAmount, transactionReference: proof.transactionReference, paymentDate: proof.paymentDate,
     originalFilename: (proof.originalFilename.split(/[\\/]/).at(-1) || 'payment-proof').replace(/[\x00-\x1f\x7f]/g, '_'),
     mimeType: proof.mimeType, byteSize: proof.byteSize, status: proof.status, rejectionReason: proof.rejectionReason,
-    reviewedBy: proof.reviewedBy, reviewedAt: proof.reviewedAt, verifiedAmount: proof.verifiedAmount,
+    reviewedBy: proof.reviewedBy, reviewedAt: proof.reviewedAt, verifiedAmount: proof.verifiedAmount, correctionReason: proof.correctionReason,
     createdAt: proof.createdAt, updatedAt: proof.updatedAt, fileUrl: `/api/payment-proofs/${proof.id}/file` };
 }
 
@@ -133,7 +133,11 @@ export function createPaymentVerificationService(deps: Dependencies) {
             amountPaid: cumulativePaid } }, request);
         await queueBookingNotification(proof.reservationId,
           status === 'VERIFIED' ? 'PAYMENT_PROOF_VERIFIED' : 'PAYMENT_PROOF_REJECTED', request,
-          status === 'VERIFIED' ? { amount: amount!.toFixed(2) } : {}, 'PAYMENT_PROOF', String(proof.id));
+          status === 'VERIFIED' ? { amount: amount!.toFixed(2), amountPaid: cumulativePaid.toFixed(2),
+            requiredDeposit: requiredReservationDeposit(Number(payment.amountDue)).toFixed(2),
+            remainingDeposit: Math.max(0, requiredReservationDeposit(Number(payment.amountDue)) - cumulativePaid).toFixed(2),
+            remainingBalance: ((dueCents - Math.round(cumulativePaid * 100)) / 100).toFixed(2),
+            ...(reason ? { correctionReason: reason.replace(/\s+/g, ' ') } : {}) } : {}, 'PAYMENT_PROOF', String(proof.id));
         // Read through the already-held proof lock, before commit, for server review timestamps.
         const reviewed = await lockedProof(proofId, request);
         if (!reviewed) throw conflict();

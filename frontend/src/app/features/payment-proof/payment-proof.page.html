@@ -10,6 +10,15 @@
         <div><p class="summary-label">Booking</p><h2 id="booking-summary-title">{{ item.reference }}</h2><p>{{ item.eventName }} &middot; {{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</p></div>
         <dl><div><dt>Estimated total</dt><dd>{{ estimatedTotal() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Required deposit (50%)</dt><dd>{{ requiredDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Recorded payments</dt><dd>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div class="summary-balance"><dt>Outstanding balance</dt><dd>{{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div></dl>
       </section>
+      @if (incompleteDeposit()) {
+        <section class="deposit-notice" data-testid="deposit-shortfall" role="status">
+          <h2>Down payment incomplete</h2>
+          <p>{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }} is recorded toward your {{ requiredDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }} required down payment. Remaining down payment: <strong>{{ remainingDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>.</p>
+          <p>This amount is included in your {{ outstandingBalance() | currency:'PHP':'symbol-narrow':'1.2-2' }} total balance due.</p>
+          @if (proofPending()) { <p>A new proof is awaiting review. Do not pay this amount again while verification is pending.</p> }
+          @else { <p>Pay only the remaining down payment to complete the deposit, or choose the full outstanding balance below. Reservation confirmation still requires admin approval.</p> }
+        </section>
+      }
       @if (historyError() && paymentChoiceAvailable()) { <p class="field-error method-feedback" role="alert">Payment history could not be checked. <button class="btn btn-tertiary" type="button" (click)="loadProofs()">Try again</button></p> }
       @if (paymentChoiceError()) { <p class="field-error method-feedback" role="alert">{{ paymentChoiceError() }}</p> }
       @if (itemStatusApproved()) {
@@ -59,11 +68,19 @@
           <a class="btn btn-secondary btn-sm" routerLink="/my-bookings">Back to My Reservations</a>
           @if (proofs().length) { <div class="qr-waiting__history"><h3>Proof history</h3><ul>@for (proof of proofs(); track proof.id) { <li>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }} · {{ statusLabel(proof) }}</li> }</ul></div> }
         </section>
-      } @else if (eligible()) {
+      } @else if (eligible() || (proofs().length > 0 && item.paymentMethod !== 'gcash')) {
         <div class="payment-grid">
+          @if (proofPending() && !replacingProof()) {
+            <section class="proof-tool" aria-labelledby="pending-proof-title">
+              <h2 id="pending-proof-title">Payment proof awaiting verification</h2>
+              <p>Your submitted proof is being reviewed. Do not send this payment again. The recorded balance updates only after verification.</p>
+              <button type="button" class="btn btn-secondary" (click)="beginProofReplacement()" [disabled]="historyLoading() || !!historyError() || !pendingProof()">Replace submitted proof</button>
+            </section>
+          } @else if (eligible()) {
           <section class="proof-tool" aria-labelledby="proof-form-title">
-            <div class="section-heading"><div><h2 id="proof-form-title">Payment details</h2><p>Enter the details shown on your receipt.</p></div></div>
+            <div class="section-heading"><div><h2 id="proof-form-title">{{ proofPending() ? 'Replace submitted proof' : 'Payment details' }}</h2><p>{{ proofPending() ? 'Replace the receipt for the payment already sent. No additional transfer is required.' : 'Enter the details shown on your receipt.' }}</p></div></div>
             <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+              @if (!proofPending()) {
               <fieldset class="payment-amount-picker">
                 <legend>Choose payment amount</legend>
                 <p class="field-help">At least 50% verified payment and explicit admin confirmation are required to confirm your reservation.</p>
@@ -79,7 +96,9 @@
                 </div>
                 <p class="field-help">The remaining balance is due on the event date.</p>
               </fieldset>
+              }
               <p class="form-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
+              @if (!proofPending()) {
               <section class="destination-panel" aria-labelledby="destination-title">
                 <div class="destination-panel__heading"><h3 id="destination-title">Where to send your payment</h3><button type="button" class="btn btn-tertiary" (click)="loadDestination()">Refresh</button></div>
                 @if (destinationLoading()) { <p role="status">Checking assigned payment QR...</p> }
@@ -91,6 +110,7 @@
                   <p class="field-help">Pay only to this assigned account, then upload the receipt below. Include your booking reference {{ item.reference }}.</p>
                 } @else { <p role="status">Waiting for payment instructions. LA Chef will assign an available QR for this booking before you submit proof.</p> }
               </section>
+              }
               <div class="form-pair">
                 <div class="form-row"><label for="claimed-amount">Amount shown on receipt</label><div class="money-input"><span aria-hidden="true">₱</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" (input)="useEnteredAmount()" /></div><p class="field-help">Edit only when your receipt shows a different amount.</p>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
                 <div class="form-row"><label for="payment-date">Payment date (on receipt)</label><input id="payment-date" type="date" formControlName="paymentDate" /><p class="field-help">Use the actual transfer date shown on your receipt.</p>@if(form.controls.paymentDate.touched && form.controls.paymentDate.invalid){<p class="field-error">Choose the payment date.</p>}</div>
@@ -116,11 +136,14 @@
               <button class="btn btn-primary submit-button" type="submit" [disabled]="submitting() || choosingPayment() || !destinationImage()">{{ submitting() ? 'Submitting...' : 'Submit for verification' }}</button>
             </form>
           </section>
+          } @else {
+            <section class="proof-tool"><h2>Payment record</h2><p>Review the verified amounts and administrator feedback below.</p>@if (item.invoiceId) { <a class="btn btn-secondary" [routerLink]="['/invoice', item.invoiceId]">View receipt</a> }</section>
+          }
           <section class="proof-history" aria-labelledby="proof-history-title">
             <div class="section-heading"><div><h2 id="proof-history-title">Proof history</h2><p>Review the status of your submissions.</p></div></div>
             @if (historyLoading()) { <p class="history-state" role="status">Loading history...</p> }
             @else if (historyError()) { <p class="history-state history-state--error" role="alert">{{ historyError() }} <button class="btn btn-tertiary" type="button" (click)="loadProofs()">Try again</button></p> }
-            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>{{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div><p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method | paymentMethodLabel }}</p>@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
+            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>Claimed: {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div>@if (proof.verifiedAmount !== undefined) { <p>Verified amount: <strong>{{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong></p> }<p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method | paymentMethodLabel }}</p>@if (proof.reviewedAt) { <p>Reviewed {{ proof.reviewedAt | date:'MMM d, y, h:mm a':'+0800' }} PHT</p> }@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.correctionReason){<p class="history-reason">Admin correction note: {{ proof.correctionReason }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
             @else { <p class="history-state">No payment proofs submitted yet.</p> }
           </section>
         </div>

@@ -22,6 +22,7 @@ export interface PaymentProofRecord extends PaymentProofSubmission {
   byteSize: number;
   status: PaymentProofStatus;
   rejectionReason?: string;
+  correctionReason?: string;
   reviewedBy?: number;
   reviewedAt?: string;
   verifiedAmount?: number;

@@ -7,6 +7,7 @@ const invoiceFields = ['invoiceUrl', 'invoiceDueDate', 'eventTime', 'eventType',
   'paymentMethod', 'totalAmount', 'amountPaid', 'requiredDeposit', 'remainingDeposit', 'remainingBalance',
   'cashDepositDueDate', 'cashPreparationDays'] as const;
 const invoiceMoneyFields = ['totalAmount', 'amountPaid', 'requiredDeposit', 'remainingDeposit', 'remainingBalance'] as const;
+const paymentReviewFields = ['amountPaid', 'requiredDeposit', 'remainingDeposit', 'remainingBalance', 'correctionReason'] as const;
 const templates: Record<EmailTemplateKey, { subject: string; message: string; extras?: readonly string[] }> = {
   EMAIL_VERIFICATION_CODE: { subject: 'Your LA Chef verification code', message: 'Email verification requires the protected renderer.' },
   ACCOUNT_REGISTERED: { subject: 'Account registration confirmed', message: 'Your LA Chef customer account is ready. You can now reserve an event and manage your billing details.' },
@@ -58,7 +59,7 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
     }
     return { displayName: payload.displayName.trim() };
   }
-  const optionalFields: readonly string[] = key === 'INVOICE_ISSUED' ? invoiceFields : [];
+  const optionalFields: readonly string[] = key === 'INVOICE_ISSUED' ? invoiceFields : key === 'PAYMENT_PROOF_VERIFIED' ? paymentReviewFields : [];
   const keys = ['customerName', 'bookingReference', 'eventDate', ...(definition.extras ?? []), ...optionalFields];
   const payload = raw as Record<string, unknown>;
   if (Object.keys(payload).some(field => !keys.includes(field))) throw new AppError(400, 'Notification payload contains unsupported fields.');
@@ -67,7 +68,7 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
     const value = payload[field];
     if ((field === 'cashPaymentInstructions' || optionalFields.includes(field)) && value === undefined) continue;
     const maximum = field === 'cashPaymentInstructions' || field === 'venue' ? 500
-      : field === 'reason' || field === 'actionUrl' || field === 'invoiceUrl' ? 1_000 : 200;
+      : field === 'reason' || field === 'correctionReason' || field === 'actionUrl' || field === 'invoiceUrl' ? 1_000 : 200;
     if (typeof value !== 'string' || !value.trim() || value.length > maximum || /[\x00-\x1f\x7f]/.test(value)) {
       throw new AppError(400, 'Invalid notification payload value.');
     }
@@ -90,6 +91,7 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
     (result.bookingStatus !== undefined && !['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED',
       'PAYMENT_VERIFIED', 'CONFIRMED', 'REJECTED', 'CANCELLED', 'COMPLETED'].includes(result.bookingStatus))
   )) throw new AppError(400, 'Invalid invoice notification details.');
+  if (key === 'PAYMENT_PROOF_VERIFIED' && invoiceMoneyFields.some(field => result[field] !== undefined && !/^\d{1,10}\.\d{2}$/.test(result[field]!))) throw new AppError(400, 'Invalid payment review amounts.');
   for (const field of ['actionUrl', 'invoiceUrl']) {
     if (result[field] === undefined) continue;
     try {
@@ -236,6 +238,12 @@ export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail 
     `Event date: ${payload.eventDate}`];
   if (key === 'INVOICE_ISSUED') lines.push(`Invoice: ${payload.invoiceNumber}`);
   if (key === 'PAYMENT_PROOF_VERIFIED') lines.push(`Verified amount: PHP ${payload.amount}`);
+  if (key === 'PAYMENT_PROOF_VERIFIED' && payload.remainingDeposit !== undefined) {
+    lines.push(`Total recorded payments: PHP ${payload.amountPaid}`, `Required down payment (50%): PHP ${payload.requiredDeposit}`,
+      `Remaining down payment: PHP ${payload.remainingDeposit}`, `Total balance due: PHP ${payload.remainingBalance}`);
+    if (Number(payload.remainingDeposit) > 0) lines.push('Down payment incomplete. The remaining down payment is included in the total balance due. Pay only the shortfall toward your required deposit; your reservation still requires admin confirmation.');
+  }
+  if (key === 'PAYMENT_PROOF_VERIFIED' && payload.correctionReason) lines.push(`Admin note: ${payload.correctionReason}`);
   if (key === 'PAYMENT_RECORDED') lines.push(`Recorded amount: PHP ${payload.amount}`);
   if (payload.reason) lines.push(`Details needed: ${payload.reason}`);
   if (payload.quoteTotal) lines.push(`Quotation total: PHP ${payload.quoteTotal}`);

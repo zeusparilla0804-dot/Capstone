@@ -10,7 +10,13 @@ export async function customerUpdates(customerId: number) {
   const result = await request.query(`
     WITH updates AS (
       SELECT CONCAT('email:',o.notification_id) id,o.template_key templateKey,r.reservation_id bookingId,
-        r.booking_reference reference,o.created_at createdAt
+        r.booking_reference reference,o.created_at createdAt,
+        TRY_CONVERT(decimal(12,2),JSON_VALUE(o.payload,'$.amount')) verifiedAmount,
+        TRY_CONVERT(decimal(12,2),JSON_VALUE(o.payload,'$.amountPaid')) amountPaid,
+        TRY_CONVERT(decimal(12,2),JSON_VALUE(o.payload,'$.requiredDeposit')) requiredDeposit,
+        TRY_CONVERT(decimal(12,2),JSON_VALUE(o.payload,'$.remainingDeposit')) remainingDeposit,
+        TRY_CONVERT(decimal(12,2),JSON_VALUE(o.payload,'$.remainingBalance')) remainingBalance,
+        CASE WHEN o.template_key='PAYMENT_PROOF_VERIFIED' THEN JSON_VALUE(o.payload,'$.correctionReason') END correctionReason
       FROM dbo.EMAIL_OUTBOX o
       LEFT JOIN dbo.INVOICE i ON o.related_entity_type='INVOICE' AND i.invoice_id=o.related_entity_id
       LEFT JOIN dbo.PAYMENT_PROOF pp ON o.related_entity_type='PAYMENT_PROOF' AND pp.payment_proof_id=o.related_entity_id
@@ -19,7 +25,7 @@ export async function customerUpdates(customerId: number) {
       WHERE r.customer_id=@customerId AND o.template_key IN (${templates})
       UNION ALL
       SELECT CONCAT('qr:',a.reservation_id,':',CONVERT(varchar(33),a.assigned_at,126)),
-        'PAYMENT_QR_READY',r.reservation_id,r.booking_reference,a.assigned_at
+        'PAYMENT_QR_READY',r.reservation_id,r.booking_reference,a.assigned_at,NULL,NULL,NULL,NULL,NULL,NULL
       FROM dbo.BOOKING_PAYMENT_DESTINATION a JOIN dbo.RESERVATION r ON r.reservation_id=a.reservation_id
       JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id
       JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id

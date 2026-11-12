@@ -327,8 +327,9 @@ try {
   const secondProofId = Number(secondSubmission.body.data.id);
   await api(base, `/admin/payment-proofs/${secondProofId}`, { headers: { cookie: adminCookie } });
 
+  const partialDeposit = requiredDeposit - 250;
   const verifyRequest = () => api(base, `/admin/payment-proofs/${secondProofId}/verify`, {
-    method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: requiredDeposit })
+    method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: partialDeposit, reason: 'Bank statement confirms a smaller transfer.' })
   }, 200);
   const concurrent = await Promise.allSettled([verifyRequest(), verifyRequest()]);
   const fulfilled = concurrent.filter(result => result.status === 'fulfilled');
@@ -336,6 +337,17 @@ try {
   assert.equal(fulfilled.length, 1, 'Exactly one concurrent verification must succeed.');
   assert.equal(rejected.length, 1, 'Exactly one concurrent verification must be rejected.');
   assert.match(String((rejected[0] as PromiseRejectedResult).reason), /409/);
+
+  const incomplete = await api(base, `/admin/bookings/${created.booking}`, { headers: { cookie: adminCookie } });
+  assert.equal(incomplete.body.data.status, 'AWAITING_PAYMENT');
+  assert.equal(incomplete.body.data.amountPaid, partialDeposit);
+  await api(base, `/admin/bookings/${created.booking}/status`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'CONFIRMED' }) }, 409);
+  const correctedHistory = await api(base, `/bookings/${created.booking}/payment-proofs`, { headers: { cookie: customerACookie } });
+  assert.equal(correctedHistory.body.data.find((item: any) => Number(item.id) === secondProofId).correctionReason, 'Bank statement confirms a smaller transfer.');
+  const customerUpdates = await api(base, '/notifications', { headers: { cookie: customerACookie } });
+  assert.ok(customerUpdates.body.data.some((item: any) => item.title === 'Down payment incomplete' && item.message.includes('250.00') && item.message.includes('smaller transfer')));
+  const topup = await api(base, `/bookings/${created.booking}/payment-proofs`, { method: 'POST', headers: { cookie: customerACookie }, body: await proofForm(`${marker}-TOPUP`, 250, eventDate) }, 201);
+  await api(base, `/admin/payment-proofs/${topup.body.data.id}/verify`, { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: 250 }) });
 
   await api(base, `/admin/bookings/${created.booking}/status`, {
     method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'CONFIRMED' })
@@ -355,7 +367,7 @@ try {
   const customerBooking = await api(base, `/bookings/${created.booking}`, { headers: { cookie: customerACookie } });
   assert.equal(customerBooking.body.data.status, 'confirmed');
   const customerProofs = await api(base, `/bookings/${created.booking}/payment-proofs`, { headers: { cookie: customerACookie } });
-  assert.deepEqual(customerProofs.body.data.map((proof: { status: string }) => proof.status).sort(), ['REJECTED', 'VERIFIED']);
+  assert.deepEqual(customerProofs.body.data.map((proof: { status: string }) => proof.status).sort(), ['REJECTED', 'VERIFIED', 'VERIFIED']);
 
   const state = await pool.request().input('bookingId', sql.Int, created.booking)
     .input('proofId', sql.BigInt, secondProofId)
@@ -375,7 +387,7 @@ try {
   assert.equal(state.recordsets[0]![0]!.paymentStatus, 'PARTIALLY_PAID');
   assert.equal(state.recordsets[0]![0]!.invoiceStatus, 'PARTIALLY_PAID');
   assert.equal(state.recordsets[1]![0]!.proofStatus, 'VERIFIED');
-  assert.equal(Number(state.recordsets[1]![0]!.verifiedAmount), requiredDeposit);
+  assert.equal(Number(state.recordsets[1]![0]!.verifiedAmount), partialDeposit);
   assert.equal(Number(state.recordsets[1]![0]!.transactionCount), 1);
   const history = state.recordsets[2]!.map(row => row.nextStatus);
   for (const expected of ['APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED']) {

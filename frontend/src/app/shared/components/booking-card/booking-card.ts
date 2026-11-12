@@ -1,13 +1,13 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Booking } from '../../../core/models';
-import { customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../../core/utils/customer-payment-status';
+import { bookingTotal, depositProgress, hasIncompleteDownPayment, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../../core/utils/customer-payment-status';
 import { StatusBadgeComponent } from '../status-badge/status-badge';
 
 @Component({
   selector: 'app-booking-card',
-  imports: [DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent],
+  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent],
   templateUrl: './booking-card.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './booking-card.scss',
@@ -20,6 +20,9 @@ export class BookingCardComponent {
   protected readonly onlinePaymentAction = computed(() => hasOnlinePaymentAction(this.booking()));
   protected readonly waitingForPaymentQr = computed(() => isWaitingForPaymentQr(this.booking()));
   protected readonly needsPaymentChoice = computed(() => needsPaymentMethodChoice(this.booking()));
+  protected readonly incompleteDeposit = computed(() => hasIncompleteDownPayment(this.booking()));
+  protected readonly remainingDeposit = computed(() => depositProgress(bookingTotal(this.booking()), this.booking().amountPaid).remainingDeposit);
+  protected readonly proofPending = computed(() => this.booking().status === 'payment_submitted' || this.booking().latestProofStatus?.toUpperCase() === 'SUBMITTED');
   readonly cancelRequested = output<{ booking: Booking; trigger: HTMLButtonElement }>();
 
   protected requestCancellation(event: MouseEvent): void {

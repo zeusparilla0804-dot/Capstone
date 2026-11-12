@@ -67,7 +67,10 @@ const server = http.createServer(async (req, res) => {
   pages.push('/admin/reports?layout=no-upcoming');
   pages.push('/admin/payments?layout=installment-cash', '/admin/payments?layout=installment-bank');
   pages.push('/admin/bookings/42?layout=edit-time');
+  const depositRoutes = ['/my-bookings', '/billing', '/my-bookings/42/payment', '/invoice/8', '/admin/invoices/8'];
+  pages.push(...depositRoutes.map(route => `${route}?layout=deposit-shortfall`), '/my-bookings?layout=deposit-pending', '/billing?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-complete');
   const selectedPages = process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
+    : process.argv.includes('--deposits-only') ? pages.filter(route => route.includes('layout=deposit-'))
     : process.argv.includes('--operations-only') ? ['/admin/dashboard', '/admin/bookings/42', '/admin/bookings/42?layout=edit-time', '/my-bookings/42/payment', '/admin/payment-qrs']
     : process.argv.includes('--installments-only') ? pages.filter(route => route.includes('layout=installment-'))
     : process.argv.includes('--details-only') ? ['/admin/bookings/42', '/admin/invoices/8', '/invoice/8', '/admin/reports?layout=payments']
@@ -124,11 +127,17 @@ const server = http.createServer(async (req, res) => {
       else if (/^\/admin\/payment-proofs\/\d+$/.test(p)) data = currentLayout === 'legacy-proof' ? { ...review, proof: { ...review.proof, method: 'E_WALLET' } } : review;
       else if (p === '/admin/email-outbox') data = paginate([{ id: '1', recipient: profile.email, templateKey: 'BOOKING_APPROVED', payload: {}, relatedEntityType: 'BOOKING', relatedEntityId: '42', status: 'FAILED', attemptCount: 3, lastError: 'Mailbox unavailable', createdAt: '2026-10-01', updatedAt: '2026-10-02' }]);
       else if (p === '/admin/audit-log') data = paginate([{ id: '1', adminId: 1, adminName: profile.fullName, action: 'CUSTOMER_UPDATED', entityType: 'CUSTOMER', entityId: 7, createdAt: '2026-10-01', oldValues: { status: 'ACTIVE' }, newValues: { status: 'INACTIVE' } }]);
-      else if (p === '/bookings/my') data = [{ ...booking, ...(currentLayout === 'cancel' ? { status: 'pending', amountPaid: 0 }
+      else if (p === '/bookings/my') data = [{ ...booking, ...(currentLayout.startsWith('deposit-')
+        ? { invoiceId: 8, total: 154000, amountPaid: currentLayout === 'deposit-complete' ? 154000 : 70000, status: currentLayout === 'deposit-pending' ? 'payment_submitted' : currentLayout === 'deposit-complete' ? 'confirmed' : 'awaiting_payment', paymentMethod: 'bank-transfer', latestProofStatus: currentLayout === 'deposit-pending' ? 'SUBMITTED' : 'VERIFIED', paymentQrReady: true }
+        : currentLayout === 'cancel' ? { status: 'pending', amountPaid: 0 }
         : currentLayout.startsWith('legacy-') ? { paymentMethod: 'gcash', status: 'awaiting_payment', amountPaid: currentLayout === 'legacy-choice' ? 0 : 10000, latestProofStatus: undefined } : {}) }];
       else if (/^\/bookings\/\d+$/.test(p)) data = { ...booking, id: '42', amountPaid: currentLayout.startsWith('payment') ? 0 : booking.amountPaid, package: { ...booking.package, packageId: '1' }, paymentMethod: null, status: ['addons', 'review'].includes(currentLayout) ? 'pending' : 'awaiting_payment' };
-      else if (p.includes('/invoices/')) data = invoice;
-      else if (p.endsWith('/payment-proofs')) data = [];
+      else if (p.includes('/invoices/')) data = currentLayout === 'deposit-shortfall' ? { ...invoice, subtotal: 154000, totalAmount: 154000, amountPaid: 70000, remainingBalance: 84000, status: 'PARTIALLY_PAID', payments: [{ ...invoice.payments[0], amount: 70000, method: 'BANK_TRANSFER', reference: 'BANK-PARTIAL' }] } : invoice;
+      else if (p.endsWith('/payment-proofs')) data = currentLayout.startsWith('deposit-') ? [{
+        id: 1, reservationId: 42, customerId: 7, claimedAmount: 77000, verifiedAmount: 70000, method: 'BANK_TRANSFER',
+        transactionReference: 'BANK-PARTIAL', paymentDate: '2026-11-12', status: 'VERIFIED', correctionReason: 'Bank statement confirms only PHP 70,000 received.',
+        originalFilename: 'receipt.png', mimeType: 'image/png', byteSize: 100, createdAt: '2026-11-12T02:00:00Z', reviewedAt: '2026-11-12T03:00:00Z', updatedAt: '2026-11-12T03:00:00Z',
+      }, ...(currentLayout === 'deposit-pending' ? [{ id: 2, reservationId: 42, customerId: 7, claimedAmount: 7000, method: 'BANK_TRANSFER', status: 'SUBMITTED', paymentDate: '2026-11-12', createdAt: '2026-11-12T04:00:00Z', updatedAt: '2026-11-12T04:00:00Z' }] : [])] : [];
       else if (p.endsWith('/methods')) data = ['BANK_TRANSFER'];
       else if (p === '/admin/payment-destinations') data = [destination];
       else if (p.endsWith('/waiting-bookings')) data = [{ ...detail, customerName: profile.fullName, paymentMethod: 'BANK_TRANSFER', amountDue: 85000, amountPaid: 0 }];
@@ -155,6 +164,25 @@ const server = http.createServer(async (req, res) => {
           await page.getByRole('button', { name: 'Save time', exact: true }).click();
           await page.getByRole('dialog').waitFor();
           if (!await page.getByRole('dialog').textContent().then(text => text.includes('10:00 PM'))) throw Error('Time adjustment must confirm 10 PM');
+        }
+        if (layout?.startsWith('deposit-')) {
+          const path = new URL(route, 'http://localhost').pathname;
+          if (path.includes('/invoice')) {
+            const remaining = page.locator('[data-testid="remaining-down-payment"]');
+            await remaining.waitFor();
+            if (!(await remaining.textContent()).includes('7,000.00')) throw Error('Receipt must show the deposit shortfall separately');
+          } else {
+            if (layout !== 'deposit-complete') await page.locator('[data-testid="deposit-shortfall"]').waitFor();
+            if (layout === 'deposit-pending' && await page.getByRole('link', { name: 'Pay remaining down payment', exact: true }).count()) throw Error('Pending verification must not prompt another payment');
+            if (path.endsWith('/payment') && layout === 'deposit-shortfall') {
+              if (await page.locator('#claimed-amount').inputValue() !== '7000') throw Error('Next payment must default to the deposit shortfall');
+              if (!(await page.locator('.history-list').textContent()).includes('70,000')) throw Error('Customer must see the corrected verified amount');
+            }
+            if (path.endsWith('/payment') && ['deposit-pending', 'deposit-complete'].includes(layout)) {
+              await page.locator('.history-list').waitFor();
+              if (await page.locator('.payment-amount-picker,.destination-panel,#proof-file').count()) throw Error('Pending or fully-paid view must not prompt a new transfer');
+            }
+          }
         }
         if (layout === 'calendar') await page.getByRole('button', { name: 'Open available dates' }).click();
         if (layout === 'addons' || layout === 'review') {

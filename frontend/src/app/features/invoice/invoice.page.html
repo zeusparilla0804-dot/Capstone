@@ -145,11 +145,16 @@
             <dt>Amount Paid</dt>
             <dd>{{ doc.amountPaid | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
           </div>
+          @if (incompleteDeposit(doc)) {
+            <div><dt>Required down payment (50%)</dt><dd>{{ deposit(doc).requiredDeposit | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+            <div data-testid="remaining-down-payment"><dt>Remaining down payment</dt><dd>{{ deposit(doc).remainingDeposit | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+          }
           <div class="balance">
             <dt>Balance Due</dt>
             <dd>{{ doc.remainingBalance | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
           </div>
         </dl>
+        @if (incompleteDeposit(doc)) { <p class="invoice-deposit-help">The remaining down payment is included in Balance Due. This receipt acknowledges the payment received; the required down payment is not yet complete.</p> }
       </section>
 
       <section class="invoice-agreement" aria-labelledby="agreement-title">

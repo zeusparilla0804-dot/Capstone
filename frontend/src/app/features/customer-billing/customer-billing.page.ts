@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inj
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { bookingTotal, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../core/utils/customer-payment-status';
+import { bookingTotal, customerPaymentStatus, depositProgress, hasIncompleteDownPayment, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -25,6 +25,9 @@ interface BillingRecord {
   readonly needsPaymentChoice: boolean;
   readonly retiredPaymentMethod: boolean;
   readonly waitingForPaymentQr: boolean;
+  readonly remainingDeposit: number;
+  readonly incompleteDeposit: boolean;
+  readonly proofPending: boolean;
 }
 
 @Component({
@@ -60,8 +63,11 @@ export class CustomerBillingPageComponent implements OnDestroy {
         total,
         paid: booking.amountPaid,
         balance,
+        remainingDeposit: depositProgress(total, booking.amountPaid).remainingDeposit,
+        incompleteDeposit: hasIncompleteDownPayment(booking),
+        proofPending: booking.status === 'payment_submitted' || booking.latestProofStatus?.toUpperCase() === 'SUBMITTED',
         acceptsPayment: hasCashPaymentAction(booking)
-          || (hasOnlinePaymentAction(booking) && (booking.amountPaid === 0 || booking.status === 'payment_submitted')),
+          || (hasOnlinePaymentAction(booking) && (booking.amountPaid === 0 || booking.status === 'payment_submitted' || hasIncompleteDownPayment(booking))),
         cashPayment: booking.paymentMethod === 'cash',
         needsPaymentChoice: needsPaymentMethodChoice(booking),
         retiredPaymentMethod: booking.paymentMethod === 'gcash',

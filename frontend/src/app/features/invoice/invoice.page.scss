@@ -166,6 +166,8 @@
 
 .invoice-totals {
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   justify-content: flex-end;
   padding: 24px 0;
 }
@@ -531,3 +533,4 @@
     background: #fff;
   }
 }
+.invoice-deposit-help { width: min(100%, 340px); margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-text-muted); }

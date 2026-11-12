@@ -46,6 +46,19 @@ const invoice: Invoice = {
 };
 
 describe('InvoicePageComponent', () => {
+  it('shows the incomplete deposit as part of the full balance and clears it after the next verified installment', () => {
+    const component = fixture.componentInstance as any;
+    component.invoice.set({ ...invoice, totalAmount: 154000, subtotal: 154000, amountPaid: 70000, remainingBalance: 84000,
+      payments: [{ ...invoice.payments[0], amount: 70000 }] }); fixture.detectChanges();
+    const row = fixture.nativeElement.querySelector('[data-testid="remaining-down-payment"]');
+    expect(row?.textContent).toContain('7,000.00');
+    expect(fixture.nativeElement.querySelector('.invoice-totals').textContent).toContain('84,000.00');
+    expect(fixture.nativeElement.textContent).toContain('included in Balance Due');
+    expect(fixture.nativeElement.querySelector('.invoice-heading .status-badge').textContent).toContain('Down Payment Incomplete');
+    component.invoice.set({ ...component.invoice(), amountPaid: 77000, remainingBalance: 77000 }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="remaining-down-payment"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.invoice-heading .status-badge').textContent).toContain('Down Payment Paid');
+  });
   let fixture: ComponentFixture<InvoicePageComponent>;
   let service: { getInvoiceById: ReturnType<typeof vi.fn> };
 

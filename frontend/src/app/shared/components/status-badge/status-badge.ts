@@ -17,6 +17,7 @@ export class StatusBadgeComponent {
       cancelled: 'Cancelled',
       completed: 'Completed',
       down_payment_verified: 'Down Payment Paid',
+      down_payment_incomplete: 'Down Payment Incomplete',
       fully_paid: 'Fully Paid',
       pending_payment_verification: 'Pending Payment Verification',
       pending_verification: 'Pending Verification',
