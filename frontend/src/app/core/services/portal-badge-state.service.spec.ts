@@ -4,6 +4,18 @@ import { PortalBadgeStateService } from './portal-badge-state.service';
 import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 describe('PortalBadgeStateService', () => {
+  it('counts outstanding billing records once and clears the payment badge for settlement or an account change', () => {
+    const record = { id: '42', total: 154000, amountPaid: 70000, status: 'awaiting_payment' } as Booking;
+    service.setCustomerBookings([record, { ...record, id: '43', amountPaid: 77000, status: 'confirmed' },
+      { ...record, id: '44', amountPaid: 154000 }, { ...record, id: '45', status: 'cancelled' },
+      { ...record, id: '46', status: 'pending' }]);
+    expect((service as any).customerBillingCount()).toBe(2);
+    service.setCustomerBookings([{ ...record, amountPaid: 154000 }]);
+    expect((service as any).customerBillingCount()).toBe(0);
+    service.setCustomerBookings([record]);
+    TestBed.inject(CustomerAccountScopeService).setPrincipal('another-customer');
+    expect((service as any).customerBillingCount()).toBe(0);
+  });
   let service: PortalBadgeStateService;
 
   beforeEach(() => {

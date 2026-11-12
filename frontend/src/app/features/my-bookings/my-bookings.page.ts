@@ -37,7 +37,7 @@ export class MyBookingsPageComponent implements AfterViewChecked, OnDestroy {
   protected readonly filters: readonly { value: BookingTab; label: string }[] = [
     { value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Past' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'rejected', label: 'Rejected' },
   ];
-  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
     this.bookingService.loadMine();

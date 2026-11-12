@@ -20,7 +20,7 @@ export class CustomerProfilePageComponent {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly badgeState = inject(PortalBadgeStateService);
-  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   protected readonly initials = computed(() => initialsForName(this.auth.user()?.fullName));
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);

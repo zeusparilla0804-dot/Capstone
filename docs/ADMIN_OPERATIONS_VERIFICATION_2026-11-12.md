@@ -27,3 +27,9 @@ Existing tables are reused; no schema migration is required. Creation/audit time
 The SQL operations journey verifies authentication restrictions, a 10 PM adjustment, stale-edit rejection, customer visibility, history, payment-choice activity, QR assignment counts, UTC activity timestamps, and unchanged server last-activity time after an automatic poll.
 
 Browser checks use mocked responses, a non-payment QR layout fixture and blocked payment/time writes. Run `node scripts/check-responsive-layout.cjs --operations-only --screenshots --report=admin-operations-final.json` after building the frontend. Screenshots/reports are under `.codex-temp/responsive/`. These checks do not establish real inbox delivery, a live bank payment, or operator acceptance in production.
+
+## Customer reservation and billing follow-up
+
+- Removed only the duplicate remaining down payment paragraph from My Reservations. The incomplete-payment status, receipt link and payment action remain. Billing records retain the remaining down payment amount.
+- Billing & Payments now reuses the sidebar badge style to count reservations with outstanding payments. Fully paid and cancelled records do not count; account changes and logout clear the count.
+- Verification: 552 frontend tests across 67 files passed, production build passed with the existing warnings, and 18 mocked browser cases at 390px and 1440px passed without reported issues. Desktop reservation and mobile billing screenshots were inspected. Run `node scripts/check-responsive-layout.cjs --deposits-only --widths=390,1440 --screenshots --report=customer-billing-badge.json` to repeat the browser checks.

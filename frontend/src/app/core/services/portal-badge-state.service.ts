@@ -2,6 +2,7 @@ import { inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { AdminDashboard, Booking } from '../models';
 import { CustomerAccountScopeService } from './customer-account-scope.service';
+import { bookingTotal } from '../utils/customer-payment-status';
 
 export interface AdminPortalBadges {
   readonly bookings: number;
@@ -24,11 +25,16 @@ const currentBookingStatuses = new Set<Booking['status']>([
 export class PortalBadgeStateService {
   private readonly adminBadgeState = signal<AdminPortalBadges>(emptyAdminBadges);
   private readonly customerBookingState = signal(0);
+  private readonly customerBillingState = signal(0);
   readonly adminBadges = this.adminBadgeState.asReadonly();
   readonly customerBookingCount = this.customerBookingState.asReadonly();
+  readonly customerBillingCount = this.customerBillingState.asReadonly();
 
   constructor() {
-    inject(CustomerAccountScopeService).changes.pipe(takeUntilDestroyed()).subscribe(() => this.customerBookingState.set(0));
+    inject(CustomerAccountScopeService).changes.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.customerBookingState.set(0);
+      this.customerBillingState.set(0);
+    });
   }
 
   setAdminDashboard(summary: AdminDashboard): void {
@@ -42,11 +48,18 @@ export class PortalBadgeStateService {
 
   setCustomerBookings(bookings: readonly Booking[]): void {
     this.customerBookingState.set(bookings.filter(booking => currentBookingStatuses.has(booking.status)).length);
+    this.customerBillingState.set(bookings.filter(booking => {
+      if (!['approved', 'awaiting_payment', 'payment_submitted', 'payment_verified', 'confirmed', 'completed'].includes(booking.status)
+        || !Number.isFinite(booking.amountPaid) || booking.amountPaid < 0) return false;
+      const total = bookingTotal(booking);
+      return Number.isFinite(total) && Math.round(total * 100) > Math.round(booking.amountPaid * 100);
+    }).length);
   }
 
   reset(): void {
     this.adminBadgeState.set(emptyAdminBadges);
     this.customerBookingState.set(0);
+    this.customerBillingState.set(0);
   }
 
   clearAdmin(): void { this.adminBadgeState.set(emptyAdminBadges); }

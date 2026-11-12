@@ -14,7 +14,7 @@
   </div>
   <aside class="booking-card__side" aria-label="Reservation status and actions">
     <app-status-badge [status]="paymentStatus()" />
-    @if (incompleteDeposit()) { <p class="booking-card__deposit" data-testid="deposit-shortfall">Remaining down payment: <strong>{{ remainingDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>@if (proofPending()) { <small>Your new proof is awaiting review. Do not pay this amount again while verification is pending.</small> } @else { <small>Included in your total balance due.</small> }</p> }
+    @if (incompleteDeposit() && !reservationLayout()) { <p class="booking-card__deposit" data-testid="deposit-shortfall">Remaining down payment: <strong>{{ remainingDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>@if (proofPending()) { <small>Your new proof is awaiting review. Do not pay this amount again while verification is pending.</small> } @else { <small>Included in your total balance due.</small> }</p> }
     @if (booking().status === 'completed') { <app-status-badge status="completed" /> }
     <div class="booking-card__actions">
       @if (booking().invoiceId) { <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', booking().invoiceId]">{{ booking().amountPaid > 0 ? 'View Receipt' : 'View Invoice' }}</a> }

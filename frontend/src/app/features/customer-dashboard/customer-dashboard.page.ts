@@ -39,7 +39,7 @@ export class CustomerDashboardPageComponent implements OnDestroy {
   });
   protected readonly submission = signal<{ reference: string; updated: boolean } | null>(null);
   private readonly refreshTimer: ReturnType<typeof setInterval>;
-  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   protected readonly planningProgress = computed<PlanningProgress>(() => this.progressFor(this.nextBooking()?.status));
   protected readonly paymentSummary = computed(() => {
     const booking = this.nextBooking();

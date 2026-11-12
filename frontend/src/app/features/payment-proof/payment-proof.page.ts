@@ -94,7 +94,7 @@ export class PaymentProofPageComponent implements OnDestroy {
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
     paymentDate: new FormControl(this.initialPaymentDate, { nonNullable: true, validators: Validators.required }),
   });
-  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   private initializedBookingKey: string | null = null;
   private destinationRequest = 0;
   private readonly qrRefreshTimer: ReturnType<typeof setInterval>;

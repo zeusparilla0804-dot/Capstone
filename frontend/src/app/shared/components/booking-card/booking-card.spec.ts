@@ -22,6 +22,10 @@ describe('BookingCardComponent pending actions', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]').textContent).toContain('7,000.00');
     const action = fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]');
     expect(action?.textContent).toContain('Pay remaining down payment');
+    fixture.componentRef.setInput('reservationLayout', true); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Down Payment Incomplete');
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')?.textContent).toContain('Pay remaining down payment');
     fixture.componentRef.setInput('booking', { ...partial, status: 'payment_submitted', latestProofStatus: 'SUBMITTED' }); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Pay remaining down payment');
     expect(fixture.nativeElement.textContent).toContain('View Payment');

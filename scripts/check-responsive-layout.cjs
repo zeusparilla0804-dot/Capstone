@@ -172,7 +172,15 @@ const server = http.createServer(async (req, res) => {
             await remaining.waitFor();
             if (!(await remaining.textContent()).includes('7,000.00')) throw Error('Receipt must show the deposit shortfall separately');
           } else {
-            if (layout !== 'deposit-complete') await page.locator('[data-testid="deposit-shortfall"]').waitFor();
+            if (path === '/my-bookings') {
+              await page.locator('app-booking-card').first().waitFor();
+              if (await page.locator('[data-testid="deposit-shortfall"]').count()) throw Error('Reservations must not repeat the remaining down payment amount');
+              if (layout === 'deposit-shortfall') await page.getByRole('link', { name: 'Pay remaining down payment', exact: true }).waitFor();
+            } else if (layout !== 'deposit-complete') await page.locator('[data-testid="deposit-shortfall"]').waitFor();
+            if (['/my-bookings', '/billing'].includes(path)) {
+              const badges = await page.locator('a[href="/billing"] .dashboard-sidebar__badge').allTextContents();
+              if (!badges.length || badges.some(text => text.trim() !== '1')) throw Error('Billing sidebar must count the reservation with an outstanding balance');
+            }
             if (layout === 'deposit-pending' && await page.getByRole('link', { name: 'Pay remaining down payment', exact: true }).count()) throw Error('Pending verification must not prompt another payment');
             if (path.endsWith('/payment') && layout === 'deposit-shortfall') {
               if (await page.locator('#claimed-amount').inputValue() !== '7000') throw Error('Next payment must default to the deposit shortfall');

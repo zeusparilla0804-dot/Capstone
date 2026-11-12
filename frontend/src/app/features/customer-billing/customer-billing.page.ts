@@ -43,7 +43,7 @@ export class CustomerBillingPageComponent implements OnDestroy {
   private readonly router = inject(Router);
   private readonly badgeState = inject(PortalBadgeStateService);
   private readonly refreshTimer: ReturnType<typeof setInterval>;
-  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
+  protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
 
   protected readonly records = computed<readonly BillingRecord[]>(() => [...this.bookingService.bookings()]
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
