@@ -36,6 +36,7 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
     expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(7000);
+    expect(fixture.nativeElement.querySelector('time#payment-date')?.getAttribute('datetime')).toBe(submittedProof.paymentDate);
   });
 
   it('keeps corrected proof history readable after full payment without offering a new payment', () => {
@@ -56,12 +57,14 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Verified amount');
     expect(component.form.controls.claimedAmount.value).toBe(7000);
   });
-  it('displays an automatic submission date as text while preserving the receipt payment date', () => {
+  it('shows a non-interactive payment date and omits the separate submission date', () => {
     const root = fixture.nativeElement as HTMLElement;
-    const submitted = root.querySelector('[data-testid="submission-date"]');
-    expect(submitted).not.toBeNull();
-    expect(submitted?.querySelector('input,button')).toBeNull();
-    expect(root.querySelector('label[for="payment-date"]')?.textContent).toContain('on receipt');
+    const date = root.querySelector('time#payment-date');
+    expect(date).not.toBeNull();
+    expect(date?.getAttribute('datetime')).toBe((fixture.componentInstance as any).form.controls.paymentDate.value);
+    expect(root.querySelector('input[formControlName="paymentDate"],input[type="date"]')).toBeNull();
+    expect(root.querySelector('[data-testid="submission-date"]')).toBeNull();
+    expect(root.textContent).not.toContain('Submission date');
   });
   it('keeps legacy GCash amounts visible without a QR or new receipt upload', async () => {
     bookingState.set([{ ...booking, paymentMethod: 'gcash' }]); fixture.detectChanges();

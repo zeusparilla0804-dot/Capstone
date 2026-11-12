@@ -301,8 +301,9 @@ const server = http.createServer(async (req, res) => {
           const qr = document.querySelector('.destination-panel img');
           const qrAlignment = qr ? (() => { const box = qr.getBoundingClientRect(), panel = qr.closest('.destination-panel').getBoundingClientRect(); return { width: box.width, centerOffset: Math.abs((box.left + box.right - panel.left - panel.right) / 2) }; })() : null;
           if (qrAlignment && (qrAlignment.centerOffset > 2 || (viewport >= 768 && qrAlignment.width < 350))) textOverflow.push({ cls: 'destination-panel', text: 'Payment QR must be larger and centered' });
-          const submission = document.querySelector('[data-testid="submission-date"]');
-          if (submission?.querySelector('input,button')) textOverflow.push({ cls: 'submission-date', text: 'Submission date must not be editable' });
+          const proofDate = document.querySelector('.payment-layout .proof-tool form #payment-date');
+          if (proofDate && (proofDate.tagName !== 'TIME' || proofDate.closest('form').querySelector('input[type="date"]'))) textOverflow.push({ cls: 'payment-date', text: 'Payment date must be non-interactive text' });
+          if (document.querySelector('[data-testid="submission-date"]')) textOverflow.push({ cls: 'submission-date', text: 'Separate submission date must not be shown' });
           return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, numericHeaderAlignment, overlappingControls, splitTokens, qrAlignment, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
         });
         const result = { width, route, ...measurement, blockedActions, errors: [...errors] }; results.push(result);
