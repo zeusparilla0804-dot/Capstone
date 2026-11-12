@@ -28,6 +28,17 @@ describe('API session expiry', () => {
   });
   afterEach(() => http.verify());
 
+  it('does not extend idle time for background admin refreshes but retains session expiry handling', () => {
+    const noteActivity = vi.spyOn(admin, 'noteActivity');
+    client.get(`${environment.apiBaseUrl}/admin/dashboard`, { headers: { 'X-La-Chef-Background': '1' } }).subscribe();
+    http.expectOne(`${environment.apiBaseUrl}/admin/dashboard`).flush({ success: true });
+    expect(noteActivity).not.toHaveBeenCalled();
+    client.get(`${environment.apiBaseUrl}/admin/dashboard`, { headers: { 'X-La-Chef-Background': '1' } }).subscribe({ error: () => {} });
+    http.expectOne(`${environment.apiBaseUrl}/admin/dashboard`).flush({}, { status: 401, statusText: 'Unauthorized' });
+    expect(admin.user()).toBeNull();
+    expect(navigateByUrl).toHaveBeenCalledWith('/admin/login', expect.objectContaining({ replaceUrl: true }));
+  });
+
   it('adds CSRF protection to API writes including login and receipt uploads', () => {
     for (const body of [{}, new FormData()]) {
       client.post(`${environment.apiBaseUrl}/auth/login`, body).subscribe();

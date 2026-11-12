@@ -8,6 +8,7 @@ import { AdminAuthService } from '../../core/services/admin-auth.service';
 import { AdminService } from '../../core/services/admin.service';
 import { stubNativeDialogs } from '../../shared/testing/native-dialog';
 import { AdminBookingDetailPage } from './admin-booking-detail.page';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 
 const detail: AdminBookingDetail = {
   id: 42, reference: 'LC-0042', customerName: 'Klint Charles', email: 'klint@example.test', phone: '09171234567',
@@ -23,6 +24,24 @@ const detail: AdminBookingDetail = {
 };
 
 describe('AdminBookingDetailPage', () => {
+  it('confirms an admin time adjustment to 10 PM before saving the exact original time', () => {
+    const updateTime = vi.fn(() => of({ success: true, data: { eventTime: '22:00' } }));
+    (api as any).updateBookingTime = updateTime;
+    api.booking.mockReturnValue(of({ success: true, data: { ...detail, eventTime: '22:00' } }));
+    const component = fixture.componentInstance as any;
+    component.editEventTime();
+    component.editedEventTime = '22:00';
+    component.requestTimeUpdate();
+    expect(updateTime).not.toHaveBeenCalled();
+    const feedback = TestBed.inject(ActionFeedbackService);
+    expect(feedback.confirmation()?.message).toContain('10:00 PM');
+    feedback.decide(true);
+    expect(updateTime).toHaveBeenCalledWith(42, '22:00', '18:00');
+    expect(component.booking().eventTime).toBe('22:00');
+    component.booking.set({ ...detail, status: 'COMPLETED' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-edit-event-time]')).toBeNull();
+  });
   let fixture: ComponentFixture<AdminBookingDetailPage>;
   let updateResult: Subject<unknown>;
   let restoreDialog: () => void;
@@ -144,15 +163,16 @@ describe('AdminBookingDetailPage', () => {
     expect(details.compareDocumentPosition(fixture.nativeElement.querySelector('.operations')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('labels capacity with its event date and uses the independently supplied count for another date', () => {
+  it('shows capacity for the scheduled date without repeating the date already in the booking summary', () => {
     const component = fixture.componentInstance as any;
     const capacity = () => (fixture.nativeElement as HTMLElement).querySelector('.capacity-strip')!.textContent;
-    expect(capacity()).toContain('December 10, 2026');
+    expect(capacity()).not.toContain('December 10, 2026');
+    expect(fixture.nativeElement.querySelector('.booking-lead').textContent).toContain('December 10, 2026');
     expect(capacity()).toContain('2 of 6 reservations');
     expect(capacity()).toContain('4 slots available');
     component.booking.set({ ...detail, eventDate: '2026-12-11', capacity: { ...detail.capacity, date: '2026-12-11', activeBookingCount: 1, remainingRequestSlots: 5 } });
     fixture.detectChanges();
-    expect(capacity()).toContain('December 11, 2026');
+    expect(fixture.nativeElement.querySelector('.booking-lead').textContent).toContain('December 11, 2026');
     expect(capacity()).toContain('1 of 6 reservations');
     expect(capacity()).toContain('5 slots available');
   });

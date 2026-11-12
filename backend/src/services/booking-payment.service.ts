@@ -35,6 +35,11 @@ export async function chooseBookingPayment(customerId: number, reservationId: nu
           WHERE reservation_id=@reservationId AND amount_paid=0
             AND NOT EXISTS(SELECT 1 FROM dbo.PAYMENT_PROOF WHERE reservation_id=@reservationId)`);
       if (update.rowsAffected[0] !== 1) throw new AppError(409, 'Payment method can no longer be changed.');
+      await new sql.Request(transaction).input('reservationId', sql.Int, reservationId)
+        .input('customerId', sql.Int, customerId)
+        .input('reason', sql.NVarChar(1000), `Payment method ${booking.method ? 'changed' : 'selected'}: ${selected === 'CASH' ? 'Cash' : 'Bank transfer'}${booking.method ? ` (previously ${booking.method === 'CASH' ? 'Cash' : booking.method === 'BANK_TRANSFER' ? 'Bank transfer' : 'GCash'})` : ''}.`)
+        .query(`INSERT dbo.BOOKING_STATUS_HISTORY(reservation_id,previous_status,next_status,actor_type,actor_id,reason)
+          VALUES(@reservationId,'AWAITING_PAYMENT','AWAITING_PAYMENT','CUSTOMER',@customerId,@reason)`);
     }
     await transaction.commit();
   } catch (error) {

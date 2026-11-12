@@ -46,7 +46,7 @@ export class AdminDashboardPageComponent {
       this.error.set('');
     }
     this.refreshError.set('');
-    this.api.dashboard(this.appliedPeriod).pipe(
+    this.api.dashboard(this.appliedPeriod, silent).pipe(
       takeUntilDestroyed(this.destroyRef),
       finalize(() => { this.requestPending = false; this.loading.set(false); }),
     ).subscribe({
@@ -69,7 +69,7 @@ export class AdminDashboardPageComponent {
   }
 
   protected queueLabel(key: string): string {
-    return ({ pendingBookings: 'Booking reviews', submittedProofs: 'Proof verification', upcomingEvents: 'Upcoming events', failedEmails: 'Failed notifications' } as Record<string, string>)[key] ?? key;
+    return ({ pendingBookings: 'Booking reviews', submittedProofs: 'Proof verification', upcomingEvents: 'Events in the next 7 days', failedEmails: 'Failed notifications' } as Record<string, string>)[key] ?? key;
   }
 
   protected queueRoute(key: string): string {

@@ -21,7 +21,7 @@ describe('PortalBadgeStateService', () => {
       },
     } as AdminDashboard);
 
-    expect(service.adminBadges()).toEqual({ bookings: 4, payments: 3, emails: 2 });
+    expect(service.adminBadges()).toEqual({ bookings: 4, payments: 3, emails: 2, qrAssignments: 0 });
   });
 
   it('counts only current customer bookings and ignores finished records', () => {
@@ -58,9 +58,9 @@ describe('PortalBadgeStateService', () => {
     } as AdminDashboard);
     service.setCustomerBookings([{ status: 'pending' }] as Booking[]);
 
-    expect(service.adminBadges()).toEqual({ bookings: 0, payments: 0, emails: 0 });
+    expect(service.adminBadges()).toEqual({ bookings: 0, payments: 0, emails: 0, qrAssignments: 0 });
     service.reset();
-    expect(service.adminBadges()).toEqual({ bookings: 0, payments: 0, emails: 0 });
+    expect(service.adminBadges()).toEqual({ bookings: 0, payments: 0, emails: 0, qrAssignments: 0 });
     expect(service.customerBookingCount()).toBe(0);
   });
 });

@@ -47,7 +47,19 @@
         <dl class="fact-list">
           <div><dt>Venue</dt><dd>{{ item.venue || 'Not provided' }}</dd></div>
           <div><dt>Event date</dt><dd>{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div>
-          <div><dt>Time</dt><dd>{{ eventTimeLabel(item.eventTime) }}</dd></div>
+          <div><dt>Time</dt><dd>
+            @if (editingTime()) {
+              <form class="event-time-form" (ngSubmit)="requestTimeUpdate()">
+                <label for="admin-event-time">Agreed event time</label>
+                <input id="admin-event-time" name="eventTime" type="time" step="60" required [(ngModel)]="editedEventTime" [disabled]="mutationPending()" />
+                <small>Use the time agreed with the client, including evening events.</small>
+                <div><button class="btn btn-primary btn-sm" type="submit" [disabled]="mutationPending() || !editedEventTime">Save time</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="mutationPending()" (click)="editingTime.set(false)">Cancel</button></div>
+              </form>
+            } @else {
+              {{ eventTimeLabel(item.eventTime) }}
+              @if (canEditTime()) { <button class="btn btn-tertiary btn-sm" data-edit-event-time type="button" [disabled]="mutationPending()" (click)="editEventTime()">Edit event time</button> }
+            }
+          </dd></div>
           <div><dt>Guests</dt><dd>{{ item.guestCount }}</dd></div>
           <div><dt>Package</dt><dd>@if (perHeadPackage()) { {{ item.packageUnitPrice | currency:'PHP':'symbol-narrow':'1.0-2' }} per guest } @else { {{ item.packageName || 'Not assigned' }} }</dd></div>
           @if (item.specialRequest) { <div><dt>Special requests</dt><dd>{{ item.specialRequest }}</dd></div> }
@@ -57,11 +69,14 @@
       <section class="detail-section" aria-labelledby="customer-details-title">
         <div class="section-heading"><h2 id="customer-details-title">Customer information</h2></div>
         <dl class="fact-list"><div><dt>Name</dt><dd>{{ item.customerName }}</dd></div><div><dt>Email</dt><dd><a [href]="'mailto:' + item.email">{{ item.email || 'Not provided' }}</a></dd></div><div><dt>Phone</dt><dd><a [href]="'tel:' + item.phone">{{ item.phone || 'Not provided' }}</a></dd></div></dl>
-        <div class="capacity-strip" aria-labelledby="capacity-title">
-          <dl class="fact-list"><div><dt id="capacity-title">Date availability</dt><dd><time [attr.datetime]="item.capacity.date">{{ item.capacity.date + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</time><br>{{ item.capacity.activeBookingCount }} of {{ item.capacity.capacityLimit }} reservations &middot; {{ item.capacity.remainingRequestSlots }} slots available<small class="capacity-state" [attr.data-status]="item.capacity.status">{{ capacityStatusLabel(item.capacity.status) }} &middot; {{ item.capacity.message }}</small></dd></div></dl>
-        </div>
       </section>
     </div>
+
+    @if (canEditTime()) {
+      <section class="capacity-strip" aria-labelledby="capacity-title">
+        <dl class="fact-list"><div><dt id="capacity-title">Date availability</dt><dd>{{ item.capacity.activeBookingCount }} of {{ item.capacity.capacityLimit }} reservations &middot; {{ item.capacity.remainingRequestSlots }} slots available<small class="capacity-state" [attr.data-status]="item.capacity.status">{{ capacityStatusLabel(item.capacity.status) }}@if (item.capacity.requiresAdminConfirmation || item.capacity.status === 'FULL') { &middot; {{ item.capacity.message }} }</small></dd></div></dl>
+      </section>
+    }
 
     <section class="price-breakdown" aria-labelledby="price-breakdown-title">
       <h2 id="price-breakdown-title">Price breakdown</h2>

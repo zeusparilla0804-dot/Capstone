@@ -82,11 +82,12 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly successMessage = signal('');
   protected readonly submitting = signal(false);
   protected readonly uploadProgress = signal(0);
+  protected readonly submissionDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   protected readonly form = new FormGroup({
     method: new FormControl<PaymentProofMethod>('BANK_TRANSFER', { nonNullable: true, validators: Validators.required }),
     claimedAmount: new FormControl<number | null>(null, { validators: [Validators.required, Validators.min(0.01)] }),
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
-    paymentDate: new FormControl(new Date().toISOString().slice(0, 10), { nonNullable: true, validators: Validators.required }),
+    paymentDate: new FormControl(this.submissionDate, { nonNullable: true, validators: Validators.required }),
   });
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount()));
   private initializedBookingKey: string | null = null;

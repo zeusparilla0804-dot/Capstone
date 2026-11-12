@@ -25,6 +25,13 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+  it('displays an automatic submission date as text while preserving the receipt payment date', () => {
+    const root = fixture.nativeElement as HTMLElement;
+    const submitted = root.querySelector('[data-testid="submission-date"]');
+    expect(submitted).not.toBeNull();
+    expect(submitted?.querySelector('input,button')).toBeNull();
+    expect(root.querySelector('label[for="payment-date"]')?.textContent).toContain('on receipt');
+  });
   it('keeps legacy GCash amounts visible without a QR or new receipt upload', async () => {
     bookingState.set([{ ...booking, paymentMethod: 'gcash' }]); fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('GCash is no longer accepted');

@@ -21,6 +21,16 @@ const dashboard: AdminDashboard = {
 };
 
 describe('AdminDashboardPageComponent', () => {
+  it('shows recent customer actions separately from urgent work without the optional average metric', () => {
+    (fixture.componentInstance as any).data.set({ ...dashboard, attention: [], recentActivity: [
+      { id: 'H-7', reservationId: 42, title: 'Payment method selected', detail: 'LC-0042 · Bank transfer', updatedAt: '2026-11-12T04:00:00Z' }
+    ] });
+    fixture.detectChanges();
+    const activity = fixture.nativeElement.querySelector('.recent-activity');
+    expect(activity?.textContent).toContain('Payment method selected');
+    expect(activity?.querySelector('a').getAttribute('href')).toBe('/admin/bookings/42');
+    expect(fixture.nativeElement.textContent).not.toContain('Average confirmed booking');
+  });
   let fixture: ComponentFixture<AdminDashboardPageComponent>;
   let api: { dashboard: ReturnType<typeof vi.fn> };
   afterEach(() => vi.useRealTimers());
@@ -45,6 +55,7 @@ describe('AdminDashboardPageComponent', () => {
       bookings: 4,
       payments: 3,
       emails: 1,
+      qrAssignments: 0,
     });
     const root = fixture.nativeElement as HTMLElement;
     expect(root.querySelector('a[href="/admin/bookings"] .dashboard-sidebar__badge')?.textContent?.trim()).toBe('4');
@@ -107,7 +118,7 @@ describe('AdminDashboardPageComponent', () => {
     api.dashboard.mockReturnValue(pending);
     vi.advanceTimersByTime(30_000);
     fixture.detectChanges();
-    expect(api.dashboard).toHaveBeenLastCalledWith('2026-10');
+    expect(api.dashboard).toHaveBeenLastCalledWith('2026-10', true);
     expect(fixture.nativeElement.querySelector('.attention-list')).not.toBeNull();
     const calls = api.dashboard.mock.calls.length;
     window.dispatchEvent(new Event('focus'));

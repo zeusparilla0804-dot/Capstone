@@ -11,9 +11,12 @@ export class AdminService {
   private readonly base = `${environment.apiBaseUrl}/admin`;
   private readonly options = { withCredentials: true };
 
-  dashboard(period?: string) { return this.http.get<ApiResponse<AdminDashboard>>(`${this.base}/dashboard`, { ...this.options, params: period ? new HttpParams().set('period', period) : undefined }); }
+  dashboard(period?: string, background = false) { return this.http.get<ApiResponse<AdminDashboard>>(`${this.base}/dashboard`, { ...this.options, ...(background ? { headers: { 'X-La-Chef-Background': '1' } } : {}), params: period ? new HttpParams().set('period', period) : undefined }); }
   bookings(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminBooking>>>(`${this.base}/bookings`, { ...this.options, params: this.params(filters) }); }
   booking(id: number) { return this.http.get<ApiResponse<AdminBookingDetail>>(`${this.base}/bookings/${id}`, this.options); }
+  updateBookingTime(id: number, eventTime: string, expectedTime: string | null) {
+    return this.http.patch<ApiResponse<{ eventTime: string }>>(`${this.base}/bookings/${id}/time`, { eventTime, expectedTime }, this.options);
+  }
   updateBookingStatus(id: number, status: string, reason?: string, capacityConfirmed?: boolean) {
     const body = {
       status,

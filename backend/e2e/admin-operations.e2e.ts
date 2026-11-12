@@ -198,6 +198,15 @@ try {
   created.booking = Number(bookingCreate.body.data.id);
   createdBookingIds.push(created.booking);
   assert.equal(bookingCreate.body.data.total, 2500);
+  await api(base, `/admin/bookings/${created.booking}/time`, { method: 'PATCH', body: JSON.stringify({ eventTime: '22:00', expectedTime: '14:00' }) }, 401);
+  await api(base, `/admin/bookings/${created.booking}/time`, { method: 'PATCH', headers: { cookie: customerACookie }, body: JSON.stringify({ eventTime: '22:00', expectedTime: '14:00' }) }, 401);
+  await api(base, `/admin/bookings/${created.booking}/time`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ eventTime: '22:00', expectedTime: '14:00' }) });
+  await api(base, `/admin/bookings/${created.booking}/time`, { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ eventTime: '23:00', expectedTime: '14:00' }) }, 409);
+  const adjustedBooking = await api(base, `/admin/bookings/${created.booking}`, { headers: { cookie: adminCookie } });
+  assert.equal(adjustedBooking.body.data.eventTime, '22:00');
+  assert.ok(adjustedBooking.body.data.statusHistory.some((entry: any) => entry.reason?.includes('10:00 PM')));
+  const customerAfterTimeEdit = await api(base, '/bookings/my', { headers: { cookie: customerACookie } });
+  assert.equal(customerAfterTimeEdit.body.data.find((item: any) => item.id === created.booking).eventTime, '22:00');
   const requiredDeposit = 1250;
 
   const capacityMonth = String((Number.parseInt(marker.slice(-2), 16) % 10) + 1).padStart(2, '0');
@@ -274,6 +283,16 @@ try {
     method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify({ status: 'APPROVED' })
   });
   await api(base, `/bookings/${created.booking}/payment-method`, { method: 'PATCH', headers: { cookie: customerACookie }, body: JSON.stringify({ method: 'bank-transfer' }) });
+  const activityOverview = await api(base, '/admin/dashboard', { headers: { cookie: adminCookie } });
+  assert.ok(activityOverview.body.data.priority.qrAssignmentsWaiting >= 1);
+  assert.ok(activityOverview.body.data.recentActivity.some((entry: any) => entry.reservationId === created.booking && entry.title === 'Payment method selected' && entry.detail.includes('Bank transfer')));
+  const createdActivity = activityOverview.body.data.recentActivity.find((entry: any) => entry.reservationId === created.booking && entry.title === 'Reservation submitted');
+  assert.ok(createdActivity && Math.abs(Date.now() - Date.parse(createdActivity.updatedAt)) < 120_000, 'Creation activity must be returned in UTC before PHT display.');
+  const readAdminActivity = async () => (await pool.request().input('id', sql.Int, created.admin)
+    .query('SELECT CONVERT(varchar(33),last_seen_at,126) lastSeen FROM dbo.ADMIN_SESSION WHERE admin_id=@id ORDER BY token_hash')).recordset;
+  const lastSeenBeforePoll = await readAdminActivity();
+  await api(base, '/admin/dashboard', { headers: { cookie: adminCookie, 'X-La-Chef-Background': '1' } });
+  assert.deepEqual(await readAdminActivity(), lastSeenBeforePoll, 'Automatic badge polling must not renew server idle activity.');
   const issued = await api(base, `/admin/bookings/${created.booking}/invoice`, {
     method: 'POST', headers: { cookie: adminCookie }, body: '{}'
   }, 201);

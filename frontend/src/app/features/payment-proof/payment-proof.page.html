@@ -93,8 +93,9 @@
               </section>
               <div class="form-pair">
                 <div class="form-row"><label for="claimed-amount">Amount shown on receipt</label><div class="money-input"><span aria-hidden="true">₱</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" (input)="useEnteredAmount()" /></div><p class="field-help">Edit only when your receipt shows a different amount.</p>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
-                <div class="form-row"><label for="payment-date">Payment date</label><input id="payment-date" type="date" formControlName="paymentDate" />@if(form.controls.paymentDate.touched && form.controls.paymentDate.invalid){<p class="field-error">Choose the payment date.</p>}</div>
+                <div class="form-row"><label for="payment-date">Payment date (on receipt)</label><input id="payment-date" type="date" formControlName="paymentDate" /><p class="field-help">Use the actual transfer date shown on your receipt.</p>@if(form.controls.paymentDate.touched && form.controls.paymentDate.invalid){<p class="field-error">Choose the payment date.</p>}</div>
               </div>
+              <div class="submission-date" data-testid="submission-date"><span>Submission date</span><time [attr.datetime]="submissionDate">{{ submissionDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</time><p class="field-help">Recorded automatically when submitted, in Philippine time.</p></div>
               @if (form.controls.method.value !== 'CASH') { <div class="form-row"><label for="transaction-reference">Transaction reference</label><input id="transaction-reference" type="text" maxlength="150" autocomplete="off" formControlName="transactionReference" />@if(form.controls.transactionReference.touched && form.controls.transactionReference.invalid){<p class="field-error">Enter the reference shown on your receipt.</p>}</div> }
               <div class="form-row proof-file">
                 <label for="proof-file">Receipt image</label>

@@ -323,6 +323,12 @@ test('pending booking edit is owner-scoped, recalculates pricing, and replaces a
     if (/DELETE FROM dbo\.RESERVATION_ADD_ON/.test(command)) { writes.push('delete-add-ons'); return result(); }
     if (/INSERT dbo\.RESERVATION_ADD_ON/.test(command)) { writes.push('insert-add-on'); return result(); }
     if (/UPDATE dbo\.PAYMENT/.test(command)) { writes.push('payment'); return result(); }
+    if (/INSERT dbo\.BOOKING_STATUS_HISTORY/.test(command)) {
+      assert.equal(parameters['customerId'], 7);
+      assert.equal(parameters['reservationId'], 31);
+      assert.match(command, /'CUSTOMER'/);
+      writes.push('customer-history'); return result();
+    }
     throw new Error(`Unexpected query: ${command}`);
   });
 
@@ -347,7 +353,7 @@ test('pending booking edit is owner-scoped, recalculates pricing, and replaces a
     assert.equal(updateParameters['packageTotal'], 58_000);
     assert.equal(updateParameters['subtotal'], 73_000);
     assert.equal(updateParameters['total'], 73_000);
-    assert.deepEqual(writes, ['reservation', 'delete-add-ons', 'insert-add-on', 'payment']);
+    assert.deepEqual(writes, ['reservation', 'delete-add-ons', 'insert-add-on', 'payment', 'customer-history']);
     assert.equal(booking.total, 73_000);
     assert.equal(booking.package.packageTotal, 58_000);
     assert.equal(booking.specialRequest, 'Use white linens.');

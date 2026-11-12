@@ -1,7 +1,7 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AdminBooking, PageResult } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import { ActionFeedbackService } from '../../core/services/action-feedback.service';
@@ -54,7 +54,11 @@ export class AdminBookingsPage {
   protected page = 1;
   readonly statuses = ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED'];
 
-  constructor() { this.load(); }
+  constructor() {
+    const requestedStatus = inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('status');
+    if (requestedStatus && this.statuses.includes(requestedStatus)) this.status = requestedStatus;
+    this.load();
+  }
 
   protected actionsFor(status: string): readonly string[] { return genericActions[status] ?? []; }
   protected actionLabel(item: AdminBooking, status: string): string {

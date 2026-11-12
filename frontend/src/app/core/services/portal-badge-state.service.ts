@@ -7,9 +7,10 @@ export interface AdminPortalBadges {
   readonly bookings: number;
   readonly payments: number;
   readonly emails: number;
+  readonly qrAssignments: number;
 }
 
-const emptyAdminBadges: AdminPortalBadges = { bookings: 0, payments: 0, emails: 0 };
+const emptyAdminBadges: AdminPortalBadges = { bookings: 0, payments: 0, emails: 0, qrAssignments: 0 };
 const currentBookingStatuses = new Set<Booking['status']>([
   'pending',
   'approved',
@@ -35,6 +36,7 @@ export class PortalBadgeStateService {
       bookings: this.count(summary.priority.pendingBookingReviews),
       payments: this.count(summary.priority.proofsAwaitingVerification),
       emails: this.count(summary.priority.failedEmailNotifications),
+      qrAssignments: this.count(summary.priority.qrAssignmentsWaiting ?? 0),
     });
   }
 
@@ -46,6 +48,8 @@ export class PortalBadgeStateService {
     this.adminBadgeState.set(emptyAdminBadges);
     this.customerBookingState.set(0);
   }
+
+  clearAdmin(): void { this.adminBadgeState.set(emptyAdminBadges); }
 
   private count(value: number): number {
     return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;

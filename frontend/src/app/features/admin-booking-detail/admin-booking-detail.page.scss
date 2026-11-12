@@ -190,6 +190,11 @@
 }
 .completion-summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.5rem; border-bottom: 1px solid var(--color-border, #ddd7cb); margin-bottom: 1rem; }
 .completion-summary h2 { margin: 0 0 .5rem; }
+.event-time-form { display: grid; gap: 10px; max-width: 360px; }
+.event-time-form label { font-weight: 500; }
+.event-time-form input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--color-border); border-radius: 6px; padding: 8px 12px; font: inherit; }
+.event-time-form > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.capacity-strip { margin: 20px 0; }
 .completion-summary p { margin: 0; }
 @media (max-width: 600px) { .completion-summary { align-items: flex-start; flex-direction: column; } }
 

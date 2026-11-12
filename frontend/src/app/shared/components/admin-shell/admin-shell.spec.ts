@@ -49,6 +49,7 @@ describe('AdminShellComponent session security', () => {
         pendingBookingReviews: 4,
         proofsAwaitingVerification: 3,
         failedEmailNotifications: 2,
+        qrAssignmentsWaiting: 5,
       },
     } as never);
     const fixture = TestBed.createComponent(AdminShellComponent);
@@ -61,6 +62,7 @@ describe('AdminShellComponent session security', () => {
       .querySelector(`a[href="${href}"] .dashboard-sidebar__badge`)?.textContent?.trim();
     expect(badgeFor('/admin/bookings')).toBe('4');
     expect(badgeFor('/admin/payments')).toBe('3');
+    expect(badgeFor('/admin/payment-qrs')).toBe('5');
     expect(badgeFor('/admin/email-outbox')).toBeUndefined();
     expect(root.querySelector('a[href="/admin/custom-events"]')).toBeNull();
     const primaryLabels = Array.from(root.querySelectorAll<HTMLAnchorElement>('.dashboard-sidebar a .dashboard-sidebar__label'))

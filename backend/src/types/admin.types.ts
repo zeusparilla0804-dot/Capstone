@@ -110,6 +110,7 @@ export interface AdminDashboard {
     confirmedEventsNextSevenDays: number;
     outstandingBalanceTotal: number;
     failedEmailNotifications: number;
+    qrAssignmentsWaiting?: number;
   };
   ledger: {
     confirmedRevenue: number;
@@ -119,4 +120,5 @@ export interface AdminDashboard {
   };
   actionQueues: { key: string; count: number; href: string }[];
   attention: DashboardAttentionItem[];
+  recentActivity?: { id: string; reservationId: number; title: string; detail: string; updatedAt: string }[];
 }

@@ -44,7 +44,10 @@ form { display: grid; gap: 20px; padding-top: 20px; }
 .destination-panel { display: grid; gap: 10px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; padding: 16px; font-size: 14px; line-height: 1.5; }
 .destination-panel__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .destination-panel h3 { font: 600 16px/1.5 var(--font-sans); }
-.destination-panel img { width: min(100%, 280px); max-height: 320px; object-fit: contain; }
+.destination-panel img { display: block; justify-self: center; width: min(100%, 380px); height: auto; max-height: 460px; object-fit: contain; }
+.submission-date { display: grid; gap: 8px; margin: 0 0 24px; }
+.submission-date > span { font-weight: 500; }
+.submission-date time { font-variant-numeric: tabular-nums; }
 .form-row input, .form-row select { box-sizing: border-box; width: 100%; min-width: 0; height: 46px; border: 1px solid var(--color-border); border-radius: 6px; background: #fff; color: var(--color-text); padding: 10px 12px; font: 400 14px/1.5 var(--font-sans); }
 .form-row input:focus, .form-row select:focus { border-color: var(--color-primary); outline: 3px solid color-mix(in srgb, var(--color-primary) 16%, transparent); outline-offset: 0; }
 .money-input { position: relative; }

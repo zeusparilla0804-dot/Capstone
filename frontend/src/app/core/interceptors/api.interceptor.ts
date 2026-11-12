@@ -17,7 +17,7 @@ export const apiInterceptor: HttpInterceptorFn = (request, next) => {
   const activity = protectedAdmin || path === '/auth/admin/login' ? inject(AdminAuthService) : null;
   const activityRevision = activity?.sessionVersion;
   const response = next(request).pipe(tap(event => {
-    if (event instanceof HttpResponse && activity && activityRevision === activity.sessionVersion) {
+    if (event instanceof HttpResponse && activity && activityRevision === activity.sessionVersion && request.headers.get('X-La-Chef-Background') !== '1') {
       activity.noteActivity(Number(event.headers.get('X-Admin-Idle-Timeout')) || undefined);
     }
   }));

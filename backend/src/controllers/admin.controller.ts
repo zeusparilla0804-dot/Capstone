@@ -1,6 +1,7 @@
 import type {NextFunction,Request,Response} from 'express';import {adminService} from '../services/admin.service.js';import type {AddOnInput,BookingStatus,PackageInput,PageQuery,PaymentInput} from '../types/admin.types.js';import {AppError} from '../utils/app-error.js';
 import { paymentVerificationService } from '../services/payment-verification.service.js';
 import { normalizePackageInput } from '../services/package-admin-input.service.js';
+import { bookingTimeService } from '../services/booking-time.service.js';
 
 function proofId(request: Request): number {
  const value = request.params['id'];
@@ -40,6 +41,7 @@ function statusInput(body:unknown):{status:BookingStatus;reason?:string;capacity
  return{status:status as BookingStatus,reason,capacityConfirmed:value['capacityConfirmed'] as boolean|undefined};
 }
 export const adminController={
+ updateBookingTime: async(q:Request,s:Response,n:NextFunction)=>{try{s.json({success:true,data:await bookingTimeService.update(q.admin!.id,id(q),q.body)});}catch(e){n(e);}},
  paymentProofs: async (q: Request, s: Response, n: NextFunction) => {
   try { s.json({ success: true, data: await paymentVerificationService.listPendingProofs(q.query) }); } catch (e) { n(e); }
  },

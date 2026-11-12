@@ -78,6 +78,42 @@ export class AdminBookingDetailPage {
     || this.proofHistory()?.items.some(proof => proof.status === 'SUBMITTED') === true);
   protected readonly methodLabel = paymentMethodLabel;
   protected actionReason = '';
+  protected readonly editingTime = signal(false);
+  protected editedEventTime = '';
+  protected readonly canEditTime = computed(() => !!this.booking() && ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED'].includes(this.booking()!.status));
+
+  protected editEventTime(): void {
+    if (!this.canEditTime() || this.mutationPending()) return;
+    this.editedEventTime = this.booking()?.eventTime ?? '';
+    this.editingTime.set(true);
+    this.actionError.set('');
+  }
+
+  protected requestTimeUpdate(): void {
+    const booking = this.booking();
+    const time = this.editedEventTime;
+    if (!booking || !this.canEditTime() || this.mutationPending()) return;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) { this.actionError.set('Enter a valid event time.'); return; }
+    if (time === booking.eventTime) { this.editingTime.set(false); return; }
+    this.feedbackDialog.confirm({ title: 'Adjust event time?', confirmLabel: 'Save event time',
+      message: `${booking.reference}\nFrom ${this.eventTimeLabel(booking.eventTime)} to ${this.eventTimeLabel(time)}.\nConfirm that this time has been agreed with the client.`,
+    }, () => {
+      if (this.mutationPending() || this.booking() !== booking || this.editedEventTime !== time) return;
+      this.mutationPending.set(true);
+      this.actionError.set('');
+      this.api.updateBookingTime(this.bookingId, time, booking.eventTime ?? null)
+        .pipe(finalize(() => this.mutationPending.set(false))).subscribe({
+          next: response => {
+            this.booking.set({ ...booking, eventTime: response.data.eventTime });
+            this.editingTime.set(false);
+            this.feedback.set('Event time updated.');
+            this.api.booking(this.bookingId).subscribe({ next: result => this.booking.set(result.data),
+              error: () => this.actionError.set('Time saved. Refresh to load the updated history.') });
+          },
+          error: error => { this.actionError.set(error?.error?.message || 'Unable to update the event time.'); if (error?.status === 409) { this.editingTime.set(false); this.load(); } },
+        });
+    });
+  }
   protected readonly availableActions = computed(() => {
     const booking = this.booking();
     if (!booking) return [];

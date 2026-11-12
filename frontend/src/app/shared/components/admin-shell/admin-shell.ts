@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, input, signal } f
 import { Router } from '@angular/router';
 import { AdminAuthService } from '../../../core/services/admin-auth.service';
 import { PortalBadgeStateService } from '../../../core/services/portal-badge-state.service';
+import { AdminBadgeRefreshService } from '../../../core/services/admin-badge-refresh.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../dashboard-sidebar/dashboard-sidebar';
 
 @Component({
@@ -12,6 +13,7 @@ import { DashboardNavItem, DashboardSidebarComponent } from '../dashboard-sideba
   styleUrl: './admin-shell.scss',
 })
 export class AdminShellComponent {
+  private readonly badgeRefresh = inject(AdminBadgeRefreshService);
   readonly title = input.required<string>();
   readonly description = input.required<string>();
   protected readonly auth = inject(AdminAuthService);
@@ -33,7 +35,7 @@ export class AdminShellComponent {
     { label: 'Reservations', route: '/admin/bookings', icon: 'calendar', badge: this.badgeState.adminBadges().bookings, badgeLabel: 'pending reservation reviews' },
     { label: 'Customers', route: '/admin/customers', icon: 'profile' },
     { label: 'Billing & Payments', route: '/admin/payments', icon: 'wallet', badge: this.badgeState.adminBadges().payments, badgeLabel: 'payments awaiting review' },
-    { label: 'Payment QR Codes', route: '/admin/payment-qrs', icon: 'wallet' },
+    { label: 'Payment QR Codes', route: '/admin/payment-qrs', icon: 'wallet', badge: this.badgeState.adminBadges().qrAssignments, badgeLabel: 'reservations waiting for QR assignment' },
     { label: 'Reports', route: '/admin/reports', icon: 'reports' },
     { label: 'Packages & Menu', route: '/admin/packages', icon: 'catalog' },
     {

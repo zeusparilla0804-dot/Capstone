@@ -167,15 +167,23 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
         .replaceInput('periodStart', sql.DateTime2, period.start)
         .replaceInput('periodEnd', sql.DateTime2, period.end)
         .query(`
-          DECLARE @today date=CONVERT(date,SYSUTCDATETIME());
+          DECLARE @today date=CONVERT(date,DATEADD(hour,8,SYSUTCDATETIME()));
           DECLARE @nextSeven date=DATEADD(day,7,@today);
+          DECLARE @serverOffset int=DATEPART(TZOFFSET,SYSDATETIMEOFFSET());
 
           SELECT
             (SELECT COUNT(*) FROM dbo.RESERVATION WHERE status='PENDING') pendingBookingReviews,
             (SELECT COUNT(*) FROM dbo.PAYMENT_PROOF WHERE status='SUBMITTED') proofsAwaitingVerification,
             (SELECT COUNT(*) FROM dbo.RESERVATION WHERE status='CONFIRMED' AND event_date>=@today AND event_date<@nextSeven) confirmedEventsNextSevenDays,
-            (SELECT COALESCE(SUM(CASE WHEN amount_due>amount_paid THEN amount_due-amount_paid ELSE 0 END),0) FROM dbo.PAYMENT) outstandingBalanceTotal,
+            (SELECT COALESCE(SUM(CASE WHEN p.amount_due>p.amount_paid THEN p.amount_due-p.amount_paid ELSE 0 END),0)
+             FROM dbo.PAYMENT p JOIN dbo.RESERVATION r ON r.reservation_id=p.reservation_id
+             WHERE r.status IN('PENDING','APPROVED','AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED')) outstandingBalanceTotal,
             (SELECT COUNT(*) FROM dbo.EMAIL_OUTBOX WHERE status='FAILED') failedEmailNotifications,
+            (SELECT COUNT(*) FROM dbo.RESERVATION r JOIN dbo.PAYMENT p ON p.reservation_id=r.reservation_id
+             LEFT JOIN dbo.BOOKING_PAYMENT_DESTINATION a ON a.reservation_id=r.reservation_id
+             LEFT JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id AND d.method=p.payment_method
+             WHERE r.status='AWAITING_PAYMENT' AND p.amount_paid<p.amount_due AND p.payment_method='BANK_TRANSFER'
+               AND (d.destination_id IS NULL OR d.is_available=0)) qrAssignmentsWaiting,
             (SELECT COALESCE(SUM(pt.amount),0) FROM dbo.PAYMENT_TRANSACTION pt WHERE pt.payment_date>=@periodStart AND pt.payment_date<@periodEnd) confirmedRevenue,
             (SELECT COALESCE(SUM(pp.claimed_amount),0) FROM dbo.PAYMENT_PROOF pp WHERE pp.status='SUBMITTED' AND pp.created_at>=@periodStart AND pp.created_at<@periodEnd) submittedProofValue,
             (SELECT COALESCE(SUM(CASE WHEN p.amount_due>p.amount_paid THEN p.amount_due-p.amount_paid ELSE 0 END),0)
@@ -213,6 +221,33 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
           )
           SELECT TOP (10) urgencyRank,type,stableId id,title,detail,eventDate,updatedAt
           FROM attention ORDER BY updatedAt DESC,type,stableId DESC;
+
+          ;WITH activity AS (
+            SELECT CONCAT('R-',r.reservation_id) id,r.reservation_id reservationId,'Reservation submitted' title,
+              CONCAT(r.booking_reference,' · ',c.first_name,' ',c.last_name) detail,DATEADD(minute,-@serverOffset,r.created_at) updatedAt
+            FROM dbo.RESERVATION r JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+            UNION ALL
+            SELECT CONCAT('H-',h.booking_status_history_id) id,r.reservation_id reservationId,
+              CASE WHEN h.reason LIKE 'Payment method %' THEN 'Payment method selected'
+                WHEN h.previous_status IS NULL THEN 'Reservation submitted'
+                WHEN h.next_status='CANCELLED' THEN 'Reservation cancelled'
+                ELSE 'Reservation updated' END title,
+              CONCAT(r.booking_reference,' · ',c.first_name,' ',c.last_name,' · ',COALESCE(h.reason,h.next_status)) detail,
+              h.created_at updatedAt
+            FROM dbo.BOOKING_STATUS_HISTORY h JOIN dbo.RESERVATION r ON r.reservation_id=h.reservation_id
+            JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+            WHERE h.actor_type='CUSTOMER' AND h.previous_status IS NOT NULL AND h.next_status<>'PAYMENT_SUBMITTED'
+            UNION ALL
+            SELECT CONCAT('P-',pp.payment_proof_id),r.reservation_id,'Payment proof submitted',
+              CONCAT(r.booking_reference,' · ',c.first_name,' ',c.last_name,' · PHP ',CONVERT(varchar(30),pp.claimed_amount)),pp.created_at
+            FROM dbo.PAYMENT_PROOF pp JOIN dbo.RESERVATION r ON r.reservation_id=pp.reservation_id
+            JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
+            UNION ALL
+            SELECT CONCAT('A-',a.audit_id),r.reservation_id,'Event time adjusted by admin',
+              CONCAT(r.booking_reference,' · ',JSON_VALUE(a.old_values,'$.eventTime'),' → ',JSON_VALUE(a.new_values,'$.eventTime')),DATEADD(minute,-@serverOffset,a.created_at)
+            FROM dbo.ADMIN_AUDIT_LOG a JOIN dbo.RESERVATION r ON r.reservation_id=a.entity_id
+            WHERE a.entity_type='BOOKING' AND a.action='BOOKING_TIME_UPDATED'
+          ) SELECT TOP(20) id,reservationId,title,detail,updatedAt FROM activity ORDER BY updatedAt DESC,id DESC;
         `);
       const sets = (result.recordsets ?? []) as unknown as Record<string, unknown>[][];
       const metrics = sets[0]?.[0] ?? {};
@@ -226,7 +261,8 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
         proofsAwaitingVerification: numberValue(metrics['proofsAwaitingVerification']),
         confirmedEventsNextSevenDays: numberValue(metrics['confirmedEventsNextSevenDays']),
         outstandingBalanceTotal: numberValue(metrics['outstandingBalanceTotal']),
-        failedEmailNotifications: numberValue(metrics['failedEmailNotifications'])
+        failedEmailNotifications: numberValue(metrics['failedEmailNotifications']),
+        qrAssignmentsWaiting: numberValue(metrics['qrAssignmentsWaiting'])
       };
       return {
         period: period.key,
@@ -243,7 +279,9 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
           { key: 'upcomingEvents', count: priority.confirmedEventsNextSevenDays, href: '/admin/calendar?range=7d' },
           { key: 'failedEmails', count: priority.failedEmailNotifications, href: '/admin/email-outbox?status=FAILED' }
         ],
-        attention
+        attention,
+        recentActivity: (sets[2] ?? []).map(row => ({ id: String(row['id']), reservationId: numberValue(row['reservationId']),
+          title: String(row['title']), detail: String(row['detail'] ?? ''), updatedAt: dateValue(row['updatedAt']) }))
       };
     },
 

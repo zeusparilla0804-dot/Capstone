@@ -91,7 +91,7 @@ export async function createAdminSession(adminId: number, tokenHash: string, exp
       WHERE admin_id=@adminId AND status='ACTIVE' AND (@expectedPasswordHash IS NULL OR password=@expectedPasswordHash)`);
   if ((result.rowsAffected[0] ?? 0) !== 1) throw new AppError(401, 'Invalid administrator credentials.');
 }
-export async function findAdminBySession(tokenHash: string, request?: sql.Request): Promise<AuthenticatedAdmin | undefined> {
+export async function findAdminBySession(tokenHash: string, request?: sql.Request, renewActivity = true): Promise<AuthenticatedAdmin | undefined> {
   // One atomic conditional update: idle sessions can never be refreshed back into validity.
   // Avoid referencing the migration table in development installations where MFA is disabled.
   const mfaCondition = environment.adminMfa.key
@@ -99,8 +99,8 @@ export async function findAdminBySession(tokenHash: string, request?: sql.Reques
     : '';
   const result = await (request ?? (await getDbPool()).request()).input('tokenHash', sql.Char(64), tokenHash)
     .input('idleMinutes', sql.Int, environment.adminIdleMinutes)
-    .query(`UPDATE s SET last_seen_at=SYSUTCDATETIME()
-      OUTPUT INSERTED.admin_id,a.full_name,a.email
+    .query(`${renewActivity ? 'UPDATE s SET last_seen_at=SYSUTCDATETIME() OUTPUT INSERTED.admin_id,a.full_name,a.email'
+      : 'SELECT s.admin_id,a.full_name,a.email'}
       FROM dbo.ADMIN_SESSION s JOIN dbo.ADMIN a ON a.admin_id=s.admin_id
       WHERE s.token_hash=@tokenHash AND s.expires_at>SYSUTCDATETIME() AND a.status='ACTIVE'
         ${mfaCondition}

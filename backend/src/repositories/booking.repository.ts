@@ -212,6 +212,9 @@ export async function updatePendingBooking(
       .input('method', sql.NVarChar(50), paymentMethod(dto.paymentMethod))
       .query(`UPDATE dbo.PAYMENT SET amount_due=@due,payment_method=COALESCE(@method,payment_method)
         WHERE reservation_id=@reservationId AND status='PENDING'`);
+    await new sql.Request(transaction).input('reservationId', sql.Int, reservationId).input('customerId', sql.Int, customerId)
+      .query(`INSERT dbo.BOOKING_STATUS_HISTORY(reservation_id,previous_status,next_status,actor_type,actor_id,reason)
+        VALUES(@reservationId,'PENDING','PENDING','CUSTOMER',@customerId,'Reservation details updated by customer.')`);
     await transaction.commit();
 
     return {

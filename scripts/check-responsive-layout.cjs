@@ -34,6 +34,11 @@ const server = http.createServer(async (req, res) => {
 (async () => {
   await fs.mkdir(output, { recursive: true });
   const dashboard = await fixture('admin-dashboard', 'dashboard');
+  dashboard.priority.qrAssignmentsWaiting = 3;
+  dashboard.recentActivity = [
+    { id: 'H-1', reservationId: 42, title: 'Payment method selected', detail: 'BK-2026-12345678 · Alexandra Dela Cruz Santos · Bank transfer', updatedAt: '2026-11-12T04:30:00Z' },
+    { id: 'A-1', reservationId: 42, title: 'Event time adjusted by admin', detail: 'BK-2026-12345678 · 18:00 → 22:00', updatedAt: '2026-11-12T04:00:00Z' },
+  ];
   const detail = await fixture('admin-booking-detail', 'detail');
   const review = await fixture('admin-payment-review', 'review');
   review.proof.fileUrl = '/assets/images/packages/premium-package.webp';
@@ -61,7 +66,9 @@ const server = http.createServer(async (req, res) => {
     '/my-bookings/42/payment?layout=legacy-proof', '/my-bookings?layout=legacy-choice', '/billing?layout=legacy-choice');
   pages.push('/admin/reports?layout=no-upcoming');
   pages.push('/admin/payments?layout=installment-cash', '/admin/payments?layout=installment-bank');
+  pages.push('/admin/bookings/42?layout=edit-time');
   const selectedPages = process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
+    : process.argv.includes('--operations-only') ? ['/admin/dashboard', '/admin/bookings/42', '/admin/bookings/42?layout=edit-time', '/my-bookings/42/payment', '/admin/payment-qrs']
     : process.argv.includes('--installments-only') ? pages.filter(route => route.includes('layout=installment-'))
     : process.argv.includes('--details-only') ? ['/admin/bookings/42', '/admin/invoices/8', '/invoice/8', '/admin/reports?layout=payments']
     : process.argv.includes('--payments-only') ? pages.filter(route => /payment|billing|legacy-choice/.test(route))
@@ -92,6 +99,7 @@ const server = http.createServer(async (req, res) => {
       const url = new URL(route.request().url()); const p = url.pathname.replace(/^\/api/, '');
       if (p === '/auth/admin/login' && route.request().method() === 'POST') return route.fulfill({ json: { success: true, data: { requiresMfa: true, challenge: 'local-layout-test', setupSecret: 'JBSWY3DPEHPK3PXP', setupUri: 'otpauth://totp/Local:qa?secret=JBSWY3DPEHPK3PXP&issuer=Local' } } });
       if (route.request().method() !== 'GET') throw new Error(`Visual audit blocked mutation: ${p}`);
+      if (p.includes('/payment-destinations/') && p.endsWith('/image')) return route.fulfill({ body: '<svg xmlns="http://www.w3.org/2000/svg" width="540" height="680" viewBox="0 0 540 680"><rect width="540" height="680" fill="white"/><text x="270" y="64" text-anchor="middle" font-size="26">TEST ACCOUNT</text><path d="M70 150h140v140H70zM330 150h140v140H330zM70 410h140v140H70zM250 330h60v60h-60zM330 410h60v60h-60zM410 490h60v60h-60z" fill="black"/><path d="M90 170h100v100H90zM350 170h100v100H350zM90 430h100v100H90z" fill="white"/><path d="M110 190h60v60h-60zM370 190h60v60h-60zM110 450h60v60h-60z" fill="black"/><text x="270" y="625" text-anchor="middle" font-size="20">LAYOUT FIXTURE — NOT FOR PAYMENT</text></svg>', contentType: 'image/svg+xml' });
       if (p.endsWith('/image')) return route.fulfill({ body: await fs.readFile(path.join(publicRoot, 'assets/images/packages/premium-package.webp')), contentType: 'image/webp' });
       let data = [];
       if (p === '/auth/me' || p === '/auth/admin/me') data = { ...profile, role: p.includes('/admin/') ? 'admin' : role };
@@ -141,6 +149,13 @@ const server = http.createServer(async (req, res) => {
         if (layout === 'create') await page.getByRole('button', { name: route.includes('add-ons') ? 'Create Add-on' : 'Create Package', exact: true }).click();
         if (layout === 'deactivate') await page.getByRole('button', { name: 'Deactivate account', exact: true }).click();
         if (layout === 'payments') await page.getByRole('tab', { name: 'Payments', exact: true }).click();
+        if (layout === 'edit-time') {
+          await page.locator('[data-edit-event-time]').click();
+          await page.locator('#admin-event-time').fill('22:00');
+          await page.getByRole('button', { name: 'Save time', exact: true }).click();
+          await page.getByRole('dialog').waitFor();
+          if (!await page.getByRole('dialog').textContent().then(text => text.includes('10:00 PM'))) throw Error('Time adjustment must confirm 10 PM');
+        }
         if (layout === 'calendar') await page.getByRole('button', { name: 'Open available dates' }).click();
         if (layout === 'addons' || layout === 'review') {
           await page.getByRole('button', { name: /Continue to Add-ons/ }).click();
@@ -255,7 +270,12 @@ const server = http.createServer(async (req, res) => {
               return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size > 1 ? [{ text: match[0], cls: el.className }] : [];
             });
           });
-          return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, numericHeaderAlignment, overlappingControls, splitTokens, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
+          const qr = document.querySelector('.destination-panel img');
+          const qrAlignment = qr ? (() => { const box = qr.getBoundingClientRect(), panel = qr.closest('.destination-panel').getBoundingClientRect(); return { width: box.width, centerOffset: Math.abs((box.left + box.right - panel.left - panel.right) / 2) }; })() : null;
+          if (qrAlignment && (qrAlignment.centerOffset > 2 || (viewport >= 768 && qrAlignment.width < 350))) textOverflow.push({ cls: 'destination-panel', text: 'Payment QR must be larger and centered' });
+          const submission = document.querySelector('[data-testid="submission-date"]');
+          if (submission?.querySelector('input,button')) textOverflow.push({ cls: 'submission-date', text: 'Submission date must not be editable' });
+          return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, numericHeaderAlignment, overlappingControls, splitTokens, qrAlignment, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
         });
         const result = { width, route, ...measurement, blockedActions, errors: [...errors] }; results.push(result);
         if (measurement.scrollWidth > width + 1 || measurement.overflowing.length || measurement.actionOffsets.length || measurement.textOverflow.length || measurement.dialogOverflow.length || measurement.numericHeaderAlignment.length || measurement.overlappingControls.length || measurement.splitTokens.length || blockedActions.length || measurement.headerGap > 48 || errors.length || width === 390 || process.argv.includes('--screenshots') || (width === 768 && ['/my-bookings', '/admin/payment-qrs'].includes(route))) {

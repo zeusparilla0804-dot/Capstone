@@ -13,7 +13,7 @@
       <header><div><h2 id="priority-title">Priority queues</h2><p>Live work that should be reviewed before routine administration.</p></div></header>
       <div class="priority-grid">
         @for (queue of summary.actionQueues; track queue.key) {
-          <a [routerLink]="queueRoute(queue.key)" [queryParams]="queueParams(queue.key)" [class.is-critical]="queue.key === 'failedEmails' && queue.count > 0"><span>{{ queueLabel(queue.key) }}</span><strong>{{ queue.count }}</strong><small>Open queue <span aria-hidden="true">&rarr;</span></small></a>
+          <a [routerLink]="queueRoute(queue.key)" [queryParams]="queueParams(queue.key)" [class.is-critical]="queue.key === 'failedEmails' && queue.count > 0"><span>{{ queueLabel(queue.key) }}</span><strong>{{ queue.count }}</strong><small>{{ queue.key === 'upcomingEvents' ? 'View confirmed reservations' : 'Open queue' }} <span aria-hidden="true">&rarr;</span></small></a>
         }
         <div class="balance-priority"><span>Outstanding balance</span><strong class="balance-priority__value">{{ summary.priority.outstandingBalanceTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong><small>Across active reservations</small></div>
       </div>
@@ -35,9 +35,16 @@
           <div class="ledger-primary"><dt>Confirmed revenue</dt><dd>{{ summary.ledger.confirmedRevenue | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Verified payment transactions in this period</p></div>
           <div><dt>Submitted proof value</dt><dd>{{ summary.ledger.submittedProofValue | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Awaiting manual verification, not revenue</p></div>
           <div><dt>Overdue outstanding</dt><dd>{{ summary.ledger.overdueOutstanding | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Past event date with an unpaid balance</p></div>
-          <div><dt>Average confirmed booking</dt><dd>{{ summary.ledger.averageConfirmedBookingValue | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd><p>Bookings confirmed during this period</p></div>
         </dl>
       </section>
     </div>
+    <section class="attention-list recent-activity" aria-labelledby="activity-title">
+      <header class="section-header"><div><h2 id="activity-title">Recent customer activity</h2></div><span>Latest {{ summary.recentActivity?.length || 0 }} updates &middot; Philippine time</span></header>
+      <ol>
+        @for (item of summary.recentActivity || []; track item.id) {
+          <li><a [routerLink]="['/admin/bookings', item.reservationId]"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div><time [attr.datetime]="item.updatedAt">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }} PHT</span></time><span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
+        } @empty { <li class="empty-row">Customer reservation and payment updates will appear here.</li> }
+      </ol>
+    </section>
   }
 </app-admin-shell>
