@@ -82,15 +82,14 @@ describe('PackagesPageComponent editorial discovery', () => {
     expect(navigate).toHaveBeenCalledTimes(2);
   });
 
-  it('offers one closing reservation action after the package catalogue', () => {
+  it('keeps the closing planning copy without a reservation button', () => {
     const fixture = TestBed.createComponent(PackagesPageComponent);
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
     const closingActions = element.querySelectorAll<HTMLAnchorElement>('.custom-event a, .planning-cta a');
-    expect(closingActions).toHaveLength(1);
-    expect(closingActions[0]!.closest('.planning-cta')).not.toBeNull();
-    expect(closingActions[0]!.getAttribute('href')).toBe('/book-event');
+    expect(closingActions).toHaveLength(0);
+    expect(element.querySelector('.planning-cta')?.textContent).toContain('Your celebration, thoughtfully catered.');
   });
 
   it('contains no custom quotation creation entry point', () => {

@@ -7,7 +7,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PackageCategory } from '../../core/models';
 import { PackageService } from '../../core/services/package.service';
 import { PackageExperienceComponent } from '../../shared/components/package-experience/package-experience';
@@ -20,7 +20,7 @@ interface CategoryFilter {
 
 @Component({
   selector: 'app-packages-page',
-  imports: [PackageExperienceComponent, PublicHeaderComponent, RouterLink],
+  imports: [PackageExperienceComponent, PublicHeaderComponent],
   templateUrl: './packages.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './packages.page.scss',
