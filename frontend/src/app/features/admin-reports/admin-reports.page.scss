@@ -50,6 +50,10 @@
 .report-table td small { display: block; margin-top: 3px; color: var(--portal-text-secondary); }
 .report-table .is-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+@media (min-width: 768px) {
+  .report-table .report-table__venue { padding-left: 24px; }
+}
+
 .report-state { margin: 0; padding: 42px 0; color: var(--portal-text-secondary); text-align: center; }
 .report-state--empty { border-bottom: 1px solid var(--portal-divider); }
 .report-state--error { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #d9b7b1; color: #8f332c; padding: 18px 0; text-align: left; }
