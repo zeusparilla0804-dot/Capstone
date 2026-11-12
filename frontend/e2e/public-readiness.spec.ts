@@ -50,7 +50,7 @@ for (const width of [390, 1440]) {
 }
 
 for (const paid of [false, true]) {
-  test(`billing document shows ${paid ? 'a verified receipt' : 'an unpaid invoice'}`, async ({ page }) => {
+  test(`billing document shows ${paid ? 'a verified receipt' : 'an unpaid invoice'}`, async ({ page }, testInfo) => {
     await page.route('**/api/invoices/999', route => route.fulfill({ json: { success: true, data: {
       invoiceId: 999, invoiceNumber: 'INV-QA-999', issueDate: '2026-11-11', dueDate: '2026-12-20', status: paid ? 'PAID' : 'ISSUED',
       issuer: { name: 'QA Administrator' }, customer: { id: 999, name: 'QA Customer', email: 'qa@example.test', phone: '09171234567' },
@@ -66,8 +66,24 @@ for (const paid of [false, true]) {
     await expect(document.locator('.invoice-signatures')).toContainText('QA Administrator');
     await expect(document.locator('.invoice-totals')).not.toContainText('Discount');
     await expect(document.locator('.payment-history')).toHaveCount(paid ? 1 : 0);
+    const timestamp = document.locator('footer .receipt-generated');
+    if (paid) {
+      await expect(timestamp).toContainText('Generated on:');
+      await expect(timestamp).toContainText('PHT');
+      for (const width of [390, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(timestamp).toHaveCSS('text-align', 'right');
+        expect(await timestamp.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+      }
+    } else await expect(timestamp).toHaveCount(0);
     await page.emulateMedia({ media: 'print' });
     await expect(page.locator('.invoice-actions')).toBeHidden();
-    if (paid) await expect(document.locator('.payment-history')).toBeVisible();
+    if (paid) {
+      await expect(document.locator('.payment-history')).toBeVisible();
+      await expect(timestamp).toBeVisible();
+      await expect(timestamp).toHaveCSS('text-align', 'right');
+      await document.screenshot({ path: testInfo.outputPath('receipt-footer-print.png') });
+      await page.pdf({ path: testInfo.outputPath('receipt-footer.pdf'), printBackground: true, preferCSSPageSize: true });
+    }
   });
 }

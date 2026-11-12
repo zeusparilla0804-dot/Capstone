@@ -219,7 +219,12 @@
       </section>
       }
 
-      <footer>Thank you for choosing LA Chef Event Catering Services.</footer>
+      <footer>
+        <p>Thank you for choosing LA Chef Event Catering Services.</p>
+        @if (isReceipt(doc)) {
+          <p class="receipt-generated">Generated on: <time [attr.datetime]="generatedAt().toISOString()">{{ generatedAt() | date:'MMM d, y, h:mm:ss a':'+0800' }}</time> PHT</p>
+        }
+      </footer>
     </article>
   } @else {
     <p class="data-state">Invoice not found.</p>

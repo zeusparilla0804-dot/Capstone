@@ -82,7 +82,40 @@ describe('InvoicePageComponent', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('aligns the receipt generation timestamp at the bottom in Philippine time without changing payment dates', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T09:45:00Z'));
+    service.getInvoiceById.mockReturnValue(of({ success: true, data: invoice }));
+    (fixture.componentInstance as any).load(); fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const footer = root.querySelector('.invoice-document > footer')!;
+    const stamp = footer.querySelector('.receipt-generated') as HTMLElement;
+    expect(stamp).not.toBeNull();
+    expect(stamp.textContent).toContain('Generated on: Nov 12, 2026, 5:45:00 PM PHT');
+    expect(stamp.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-12T09:45:00.000Z');
+    expect(getComputedStyle(stamp).textAlign).toBe('right');
+    expect(footer).toBe(root.querySelector('.invoice-document')?.lastElementChild);
+    expect(root.querySelector('.payment-history')?.textContent).toContain('Oct 18, 2026');
+    const original = stamp.textContent;
+    vi.setSystemTime(new Date('2026-11-12T09:46:00Z')); fixture.detectChanges();
+    expect(stamp.textContent).toBe(original);
+    window.dispatchEvent(new Event('beforeprint'));
+    expect(stamp.textContent).toContain('5:46:00 PM PHT');
+  });
+
+  it('updates the timestamp before opening the receipt print dialog and keeps it off unpaid invoices', () => {
+    expect(fixture.nativeElement.querySelector('.receipt-generated')).toBeNull();
+    (fixture.componentInstance as any).invoice.set(invoice); fixture.detectChanges();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-12T09:50:00Z'));
+    let timestampAtPrint: string | undefined;
+    const print = vi.spyOn(window, 'print').mockImplementation(() => { timestampAtPrint = fixture.nativeElement.querySelector('.receipt-generated')?.textContent; });
+    fixture.nativeElement.querySelector('[data-action="print-receipt"]').click();
+    expect(print).toHaveBeenCalledOnce();
+    expect(timestampAtPrint).toContain('5:50:00 PM PHT');
+  });
 
   it('hides payment history when no payment has been recorded', () => {
     expect(fixture.nativeElement.querySelector('.payment-history')).toBeNull();

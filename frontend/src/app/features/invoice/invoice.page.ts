@@ -1,5 +1,5 @@
 import { CurrencyPipe, DatePipe, NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { Invoice } from '../../core/models';
@@ -12,7 +12,7 @@ import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.
 
 @Component({
   selector: 'app-invoice-page',
-  host: { '(window:focus)': 'refreshOnReturn()' },
+  host: { '(window:focus)': 'refreshOnReturn()', '(window:beforeprint)': 'preparePrint()' },
   imports: [AdminShellComponent, PublicHeaderComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, NgTemplateOutlet, PaymentMethodLabelPipe],
   templateUrl: './invoice.page.html',
   styleUrl: './invoice.page.scss',
@@ -22,6 +22,8 @@ export class InvoicePageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly service = inject(InvoiceService);
   private readonly title = inject(Title);
+  private readonly changeDetector = inject(ChangeDetectorRef);
+  protected readonly generatedAt = signal(new Date());
   protected readonly invoice = signal<Invoice | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal('');
@@ -45,6 +47,7 @@ export class InvoicePageComponent {
       next: response => {
         this.error.set('');
         this.invoice.set(response.data);
+        this.generatedAt.set(new Date());
         this.title.setTitle(`${this.isReceipt(response.data) ? 'Payment Receipt' : 'Invoice'} | LA Chef${this.admin ? ' Admin' : ''}`);
         this.loading.set(false);
       },
@@ -57,5 +60,11 @@ export class InvoicePageComponent {
 
   protected refreshOnReturn(): void { if (!this.loading()) this.load(); }
 
-  protected print(): void { window.print(); }
+  protected preparePrint(): void {
+    this.generatedAt.set(new Date());
+    // Flush the timestamp before the browser captures the printable document.
+    this.changeDetector.detectChanges();
+  }
+
+  protected print(): void { this.preparePrint(); window.print(); }
 }
