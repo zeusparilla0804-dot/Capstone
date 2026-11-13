@@ -16,3 +16,9 @@ test('month availability marks full dates before customers can choose them', () 
   assert.equal(days.find(day => day.date === '2026-11-10')?.status, 'FULL');
   assert.equal(days.find(day => day.date === '2026-11-11')?.status, 'AVAILABLE');
 });
+
+test('November 17 stays selectable for 500 guests when small-event slots remain', () => {
+  const snapshots = new Map([['2026-11-17', { activeBookingCount: 3, largestGuestCount: 500, hasMediumEvent: false }]]);
+  assert.equal(buildMonthAvailability('2026-11', 500, snapshots).find(day => day.date === '2026-11-17')?.status, 'AVAILABLE');
+  assert.equal(buildMonthAvailability('2026-11', 501, snapshots).find(day => day.date === '2026-11-17')?.status, 'FULL');
+});

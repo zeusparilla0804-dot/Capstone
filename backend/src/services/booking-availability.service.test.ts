@@ -24,7 +24,8 @@ for (const [guestCount, capacityLimit, status, remainingRequestSlots] of [
   [149, 6, 'AVAILABLE', 5],
   [150, 6, 'NEEDS_CONFIRMATION', 5],
   [499, 6, 'NEEDS_CONFIRMATION', 5],
-  [500, 3, 'AVAILABLE', 2],
+  [500, 6, 'AVAILABLE', 5],
+  [501, 3, 'AVAILABLE', 2],
   [999, 3, 'AVAILABLE', 2],
   [1000, 1, 'LIMITED', 0],
 ] as const) {
@@ -193,4 +194,12 @@ test('pending edit excludes its current reservation from the locked capacity sna
     '2026-12-10',
     { request, lock: true, excludeReservationId: 42 },
   ]]);
+});
+
+test('500 guests can take a fourth small-event slot while 501 guests cannot', () => {
+  const snapshot = { activeBookingCount: 3, largestGuestCount: 500, hasMediumEvent: false };
+  const assess = (guestCount: number) => assessDateAvailability({ date: '2026-11-17', guestCount, snapshot, includeProposed: true });
+  assert.equal(assess(500).status, 'AVAILABLE');
+  assert.equal(assess(500).capacityLimit, 6);
+  assert.equal(assess(501).status, 'FULL');
 });

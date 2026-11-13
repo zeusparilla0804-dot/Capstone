@@ -16,7 +16,7 @@ function isMediumEvent(guestCount: number): boolean {
 
 function capacityLimit(largestGuestCount: number): number {
   if (largestGuestCount >= 1_000) return 1;
-  if (largestGuestCount >= 500) return 3;
+  if (largestGuestCount > 500) return 3;
   return 6;
 }
 
