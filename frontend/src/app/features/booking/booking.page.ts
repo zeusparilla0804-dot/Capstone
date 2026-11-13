@@ -300,7 +300,7 @@ export class BookingPageComponent {
   }
 
   protected photoboothOptions() {
-    return this.draftService.availableAddOns().filter(item => /photobooth/i.test(item.name));
+    return this.draftService.availableAddOns().filter(item => /photobooth/i.test(item.name) && !/magnetic/i.test(item.name));
   }
 
   protected otherAddOns() {

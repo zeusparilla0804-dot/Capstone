@@ -158,6 +158,7 @@ describe('BookingPageComponent submission validation', () => {
     const { fixture, draft, component } = chairQuantityFixture();
     draft.addOns.set([...draft.addOns(),
       { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
+      { id: 'magnetic', name: 'Magnetic Photobooth (2 Hours Unlimited)', price: 5000 },
       { id: 'mirror', name: 'Mirror Photobooth (2 Hours Unlimited)', price: 10000 },
       { id: 'coffee', name: 'Coffee Bar for 50 Guests', price: 15000 },
       { id: 'coffee100', name: 'Coffee Bar for 100 Guests', price: 22000 },
@@ -173,6 +174,9 @@ describe('BookingPageComponent submission validation', () => {
     checkbox.click(); fixture.detectChanges();
     expect(checkbox.closest('.selection-row')?.classList.contains('is-selected')).toBe(true);
     const select = page.querySelector('#photobooth-choice') as HTMLSelectElement;
+    expect(page.querySelector('label[for=photobooth-choice]')?.textContent).toBe('Photo booth set up');
+    expect([...select.options].map(option => option.value)).toEqual(['basic', 'mirror']);
+    expect(page.textContent).not.toContain('Magnetic Photobooth');
     select.value = 'basic'; select.dispatchEvent(new Event('change'));
     select.value = 'mirror'; select.dispatchEvent(new Event('change'));
     expect(draft.draft().selectedAddOnIds).toEqual(['chair', 'lechon', 'mirror']);

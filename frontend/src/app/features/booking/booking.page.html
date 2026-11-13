@@ -197,11 +197,11 @@
               @if (photoboothOptions().length) {
                 <div class="selection-row" [class.is-selected]="!!selectedPhotoboothId()">
                   <input id="addon-photobooth" type="checkbox" [checked]="!!selectedPhotoboothId()" (change)="togglePhotobooth($event)" [attr.aria-controls]="selectedPhotoboothId() ? 'photobooth-choice' : null" />
-                  <label class="selection-copy" for="addon-photobooth"><strong>Photobooth (2 Hours Unlimited)</strong><small id="photobooth-help">Unlimited use for two hours. Select a photobooth type.</small></label>
+                  <label class="selection-copy" for="addon-photobooth"><strong>Photobooth (2 Hours Unlimited)</strong><small id="photobooth-help">Unlimited use for two hours. Select a photo booth set up.</small></label>
                   <b>@if (!selectedPhotoboothId()) { From } {{ photoboothPrice() | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
                   @if (selectedPhotoboothId()) {
                     <div class="photobooth-variant form-field">
-                      <label for="photobooth-choice">Photobooth type</label>
+                      <label for="photobooth-choice">Photo booth set up</label>
                       <select id="photobooth-choice" [value]="selectedPhotoboothId()" (change)="choosePhotobooth($event)" aria-describedby="photobooth-help">
                         @for (option of photoboothOptions(); track option.id) { <option [value]="option.id">{{ option.name.split(' (')[0] }} — {{ option.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</option> }
                       </select>
