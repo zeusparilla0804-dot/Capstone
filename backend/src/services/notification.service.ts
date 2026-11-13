@@ -114,7 +114,7 @@ export async function queueBookingNotification(
       bookingReference: context.bookingReference,
       eventDate: context.eventDate,
       ...(templateKey === 'BOOKING_APPROVED' && context.paymentMethod?.toUpperCase() === 'CASH' && context.guestCount
-        ? { cashPaymentInstructions: `Cash down payment (50%) is due by ${cashDepositDeadline(context.eventDate, context.guestCount).date}, 6:00 PM Philippine Time. Pay at the LA Chef office, open daily 8:00 AM-6:00 PM. Booking remains subject to final confirmation.` }
+        ? { cashPaymentInstructions: `Cash down payment (50%) is due by ${cashDepositDeadline(context.eventDate, context.guestCount).date}, 6:00 PM. Pay at the LA Chef office, open daily 8:00 AM-6:00 PM. Booking remains subject to final confirmation.` }
         : {}),
       ...(templateKey === 'INVOICE_ISSUED' && context.invoiceNumber ? { invoiceNumber: context.invoiceNumber } : {}),
       ...(templateKey === 'INVOICE_ISSUED' ? invoiceNotificationPayload(context) : {}),

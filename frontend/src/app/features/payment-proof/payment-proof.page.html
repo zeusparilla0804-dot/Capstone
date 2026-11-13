@@ -34,10 +34,10 @@
           <div class="section-heading"><div><h2 id="cash-instructions-title">Pay at the LA Chef office</h2><p>No online payment proof is required for cash payments.</p></div></div>
           <p class="form-row cash-method-row" data-testid="selected-payment-method">Selected payment method: <strong>{{ item.paymentMethod | paymentMethodLabel }}</strong></p>
           <dl class="cash-payment-details">
-            <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM <span>Philippine Time</span></dd></div>
+            <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM</dd></div>
             @if (remainingDeposit() > 0) {
               @if (cashDeadline(); as deadline) {
-                <div><dt>50% deposit due</dt><dd>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM <span>Philippine Time · {{ deadline.preparationDays }} calendar days before your event</span></dd></div>
+                <div><dt>50% deposit due</dt><dd>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM <span>{{ deadline.preparationDays }} calendar days before your event</span></dd></div>
               }
             }
           </dl>
@@ -142,7 +142,7 @@
             <div class="section-heading"><div><h2 id="proof-history-title">Proof history</h2><p>Review the status of your submissions.</p></div></div>
             @if (historyLoading()) { <p class="history-state" role="status">Loading history...</p> }
             @else if (historyError()) { <p class="history-state history-state--error" role="alert">{{ historyError() }} <button class="btn btn-tertiary" type="button" (click)="loadProofs()">Try again</button></p> }
-            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>Claimed: {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div>@if (proof.verifiedAmount !== undefined) { <p>Verified amount: <strong>{{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong></p> }<p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method | paymentMethodLabel }}</p>@if (proof.reviewedAt) { <p>Reviewed {{ proof.reviewedAt | date:'MMM d, y, h:mm a':'+0800' }} PHT</p> }@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.correctionReason){<p class="history-reason">Admin correction note: {{ proof.correctionReason }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
+            @else if (proofs().length) { <ol class="history-list">@for (proof of proofs(); track proof.id) { <li><div class="history-topline"><strong>Claimed: {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><span [attr.data-status]="proof.status">{{ statusLabel(proof) }}</span></div>@if (proof.verifiedAmount !== undefined) { <p>Verified amount: <strong>{{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong></p> }<p>{{ proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &middot; {{ proof.method | paymentMethodLabel }}</p>@if (proof.reviewedAt) { <p>Reviewed {{ proof.reviewedAt | date:'MMM d, y, h:mm a':'+0800' }}</p> }@if(proof.transactionReference){<p>Reference {{ proof.transactionReference }}</p>}@if(proof.correctionReason){<p class="history-reason">Admin correction note: {{ proof.correctionReason }}</p>}@if(proof.rejectionReason){<p class="history-reason">{{ proof.rejectionReason }}</p>}</li> }</ol> }
             @else { <p class="history-state">No payment proofs submitted yet.</p> }
           </section>
         </div>

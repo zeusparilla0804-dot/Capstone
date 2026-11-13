@@ -136,7 +136,7 @@ export class BookingPageComponent {
   }
   protected get dateValidationMessage(): string {
     return this.draftService.draft().paymentMethod === 'cash'
-      ? `This event date is too soon for cash payment. Choose ${formatDate(this.minimumBookingDate + 'T00:00:00Z', 'MMMM d, y', 'en-US', 'UTC')} or later so the 50% deposit can be paid by 6:00 PM Philippine Time before preparation begins.`
+      ? `This event date is too soon for cash payment. Choose ${formatDate(this.minimumBookingDate + 'T00:00:00Z', 'MMMM d, y', 'en-US', 'UTC')} or later so the 50% deposit can be paid by 6:00 PM before preparation begins.`
       : `Unavailable Date. Please select a date at least ${cashPreparationDays(this.eventForm?.controls.guestCount.value ?? this.draftService.draft().guestCount) + 1} days in advance.`;
   }
   protected get selectedCashDeadline() {

@@ -65,7 +65,7 @@
                 <p>No online payment QR is currently available. You can choose Cash.</p>
               }
               @if (approvedCashDeadline(); as deadline) {
-                <div class="cash-payment-note"><h3>Cash deposit deadline</h3><p>Pay the required 50% deposit by {{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM Philippine Time.</p></div>
+                <div class="cash-payment-note"><h3>Cash deposit deadline</h3><p>Pay the required 50% deposit by {{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM.</p></div>
               }
             </div>
             <aside class="payment-summary">
@@ -252,8 +252,8 @@
                 @if (selectedCashDeadline; as deadline) {
                   <div class="cash-payment-note">
                     <dl>
-                      <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM <span>Philippine Time</span></dd></div>
-                      @if (!cashPaymentDateError) { <div><dt>50% deposit due</dt><dd>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM <span>Philippine Time</span></dd></div> }
+                      <div><dt>Office hours</dt><dd>Daily, 8:00 AM–6:00 PM</dd></div>
+                      @if (!cashPaymentDateError) { <div><dt>50% deposit due</dt><dd>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM</dd></div> }
                     </dl>
                     @if (cashPaymentDateError) {
                       <div class="cash-payment-note__error" role="alert"><p>{{ cashPaymentDateError }}</p><button class="btn btn-tertiary" type="button" (click)="goToStep(1)">Update event date</button></div>

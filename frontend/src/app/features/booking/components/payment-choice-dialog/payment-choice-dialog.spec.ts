@@ -28,7 +28,7 @@ describe('PaymentChoiceDialogComponent Cash terms', () => {
     expect(content).toContain('8:00 AM');
     expect(content).toContain('42,944.00');
     expect(content).toContain('January 7, 2027');
-    expect(content).toContain('6:00 PM Philippine Time');
+    expect(content).toContain('6:00 PM');
     expect(content).toContain('does not count as a payment');
     const confirm = fixture.nativeElement.querySelector('[data-testid="confirm-approved-payment"]') as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);

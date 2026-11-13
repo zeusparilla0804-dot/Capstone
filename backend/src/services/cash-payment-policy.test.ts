@@ -52,7 +52,8 @@ test('cash submission rejects dates inside the preparation cutoff without an ext
 test('approval emails preserve legacy payloads and render escaped cash instructions when provided', () => {
   const payload = { customerName: 'Customer', bookingReference: 'BK-5', eventDate: '2026-11-20' };
   assert.doesNotThrow(() => renderEmail('BOOKING_APPROVED', payload));
-  const rendered = renderEmail('BOOKING_APPROVED', { ...payload, cashPaymentInstructions: 'Pay by November 15, 6:00 PM. Office: 8:00 AM-6:00 PM. <safe>' });
+  const rendered = renderEmail('BOOKING_APPROVED', { ...payload, cashPaymentInstructions: 'Pay by November 15, 6:00 PM PHT. Office: 8:00 AM-6:00 PM Philippine Time. <safe>' });
   assert.match(rendered.text, /November 15, 6:00 PM/);
   assert.match(rendered.html, /&lt;safe&gt;/);
+  assert.doesNotMatch(rendered.text + rendered.html, /\bPHT\b|Philippine time/i);
 });

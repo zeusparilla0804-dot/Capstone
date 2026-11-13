@@ -93,7 +93,7 @@
       <p>Minimum down payment: <strong>{{ requiredDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }} (50%)</strong></p>
       <p>Suggested payment window: {{ paymentWindowHours() }} hours after approval. Full payment is also accepted.</p>
       @if (item.status !== 'PENDING') {
-        @if (suggestedPaymentDeadline(); as deadline) { <p>Suggested payment date: {{ deadline | date:'MMMM d, y, h:mm a':'+0800' }} PHT</p> }
+        @if (suggestedPaymentDeadline(); as deadline) { <p>Suggested payment date: {{ deadline | date:'MMMM d, y, h:mm a':'+0800' }}</p> }
       }
     </section>
 
@@ -128,8 +128,8 @@
       <div class="disclosure-content supplementary-details">
         <dl class="fact-list"><div><dt>Invoice</dt><dd>{{ item.invoiceNumber || 'Not issued' }}</dd></div>@if (item.invoiceStatus) { <div><dt>Invoice status</dt><dd>{{ item.invoiceStatus }}</dd></div> }</dl>
         @if (cashDeadline(); as deadline) {
-          <div class="cash-summary" aria-label="Cash down payment terms"><p><span>Cash deposit due</span><strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM PHT</strong></p>@if (cashDepositOverdue) { <p class="cash-summary__warning" role="alert">Deposit overdue. Review availability before approval.</p> }</div>
-          <section aria-label="Cash payment instructions"><h3>Cash payment</h3><p>Office open daily, 8:00 AM-6:00 PM Philippine Time. The 50% deposit is required {{ deadline.preparationDays }} calendar days before the event, by 6:00 PM. Approval does not change this deadline.</p><p>Record only cash actually received. An overdue deadline does not automatically cancel the booking or change recorded payments.</p></section>
+          <div class="cash-summary" aria-label="Cash down payment terms"><p><span>Cash deposit due</span><strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM</strong></p>@if (cashDepositOverdue) { <p class="cash-summary__warning" role="alert">Deposit overdue. Review availability before approval.</p> }</div>
+          <section aria-label="Cash payment instructions"><h3>Cash payment</h3><p>Office open daily, 8:00 AM-6:00 PM. The 50% deposit is required {{ deadline.preparationDays }} calendar days before the event, by 6:00 PM. Approval does not change this deadline.</p><p>Record only cash actually received. An overdue deadline does not automatically cancel the booking or change recorded payments.</p></section>
         }
         <section aria-label="Capacity details"><h3>Date capacity</h3><p>{{ item.capacity.message }}</p><p>Counts active reservations on {{ item.capacity.date + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}. Pending requests are included.</p>@if (item.capacity.requiresAdminConfirmation && item.status === 'PENDING') { <p>Approval requires an explicit capacity confirmation for this event size.</p> }</section>
       </div>
@@ -144,7 +144,7 @@
           <ul class="proof-history-list">
             @for (proof of history.items; track proof.id) {
               <li [attr.data-proof-id]="proof.id">
-                <div><strong>{{ methodLabel(proof.method) }} &middot; {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><p>{{ proof.transactionReference || 'No reference provided' }} &middot; Submitted {{ proof.createdAt | date:'MMM d, y, h:mm a':'+0800' }} PHT</p>@if (proof.status === 'VERIFIED') { <p>Verified: {{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</p> }@if (proof.rejectionReason) { <p>{{ proof.rejectionReason }}</p> }</div>
+                <div><strong>{{ methodLabel(proof.method) }} &middot; {{ proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong><p>{{ proof.transactionReference || 'No reference provided' }} &middot; Submitted {{ proof.createdAt | date:'MMM d, y, h:mm a':'+0800' }}</p>@if (proof.status === 'VERIFIED') { <p>Verified: {{ proof.verifiedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</p> }@if (proof.rejectionReason) { <p>{{ proof.rejectionReason }}</p> }</div>
                 <app-status-badge [status]="proof.status" />
                 <a class="btn btn-secondary btn-sm" [routerLink]="['/admin/payments/proofs', proof.id]" [queryParams]="{ booking: bookingId }">{{ proof.status === 'SUBMITTED' ? 'Review proof' : 'View receipt' }}</a>
               </li>

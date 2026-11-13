@@ -24,7 +24,7 @@
         <header class="section-header"><div><h2 id="attention-title">Needs attention</h2></div><span>Newest updates first · {{ summary.attention.length }} records</span></header>
         <ol>
           @for (item of summary.attention; track item.type + item.id) {
-            <li><a [routerLink]="attentionRoute(item)"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>@if (item.updatedAt) { <time [attr.datetime]="item.updatedAt" aria-label="Last updated, Philippine time">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }} PHT</span></time> }<span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
+            <li><a [routerLink]="attentionRoute(item)"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div>@if (item.updatedAt) { <time [attr.datetime]="item.updatedAt" aria-label="Last updated">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }}</span></time> }<span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
           } @empty { <li class="empty-row">No urgent records. The operations queue is clear.</li> }
         </ol>
       </section>
@@ -39,10 +39,10 @@
       </section>
     </div>
     <section class="attention-list recent-activity" aria-labelledby="activity-title">
-      <header class="section-header"><div><h2 id="activity-title">Recent customer activity</h2></div><span>Latest {{ summary.recentActivity?.length || 0 }} updates &middot; Philippine time</span></header>
+      <header class="section-header"><div><h2 id="activity-title">Recent customer activity</h2></div><span>Latest {{ summary.recentActivity?.length || 0 }} updates</span></header>
       <ol>
         @for (item of summary.recentActivity || []; track item.id) {
-          <li><a [routerLink]="['/admin/bookings', item.reservationId]"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div><time [attr.datetime]="item.updatedAt">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }} PHT</span></time><span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
+          <li><a [routerLink]="['/admin/bookings', item.reservationId]"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div><time [attr.datetime]="item.updatedAt">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }}</span></time><span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
         } @empty { <li class="empty-row">Customer reservation and payment updates will appear here.</li> }
       </ol>
     </section>

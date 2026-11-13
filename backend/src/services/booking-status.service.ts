@@ -120,7 +120,7 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       const deadline = cashDepositDeadline(current.eventDate, current.guestCount);
       if (!hasRequiredReservationDeposit(Number(payment.amountDue), Number(payment.amountPaid))
         && now.getTime() > Date.parse(deadline.at)) {
-        throw new AppError(409, `The cash down payment deadline was ${deadline.date}, 6:00 PM Philippine Time. Review the booking with the customer.`, 'CASH_DEPOSIT_DEADLINE_PASSED');
+        throw new AppError(409, `The cash down payment deadline was ${deadline.date}, 6:00 PM. Review the booking with the customer.`, 'CASH_DEPOSIT_DEADLINE_PASSED');
       }
     }
     if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request, input.actor.type === 'CUSTOMER' ? input.actor.id : undefined)) {

@@ -106,7 +106,8 @@ describe('InvoicePageComponent', () => {
     const footer = root.querySelector('.invoice-document > footer')!;
     const stamp = footer.querySelector('.receipt-generated') as HTMLElement;
     expect(stamp).not.toBeNull();
-    expect(stamp.textContent).toContain('Generated on: Nov 12, 2026, 5:45:00 PM PHT');
+    expect(stamp.textContent).not.toMatch(/\bPHT\b|Philippine time/i);
+    expect(stamp.textContent).toContain('Generated on: Nov 12, 2026, 5:45:00 PM');
     expect(stamp.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-12T09:45:00.000Z');
     expect(getComputedStyle(stamp).textAlign).toBe('right');
     expect(footer).toBe(root.querySelector('.invoice-document')?.lastElementChild);
@@ -115,7 +116,7 @@ describe('InvoicePageComponent', () => {
     vi.setSystemTime(new Date('2026-11-12T09:46:00Z')); fixture.detectChanges();
     expect(stamp.textContent).toBe(original);
     window.dispatchEvent(new Event('beforeprint'));
-    expect(stamp.textContent).toContain('5:46:00 PM PHT');
+    expect(stamp.textContent).toContain('5:46:00 PM');
   });
 
   it('updates the timestamp before opening the receipt print dialog and keeps it off unpaid invoices', () => {
@@ -127,7 +128,7 @@ describe('InvoicePageComponent', () => {
     const print = vi.spyOn(window, 'print').mockImplementation(() => { timestampAtPrint = fixture.nativeElement.querySelector('.receipt-generated')?.textContent; });
     fixture.nativeElement.querySelector('[data-action="print-receipt"]').click();
     expect(print).toHaveBeenCalledOnce();
-    expect(timestampAtPrint).toContain('5:50:00 PM PHT');
+    expect(timestampAtPrint).toContain('5:50:00 PM');
   });
 
   it('hides payment history when no payment has been recorded', () => {

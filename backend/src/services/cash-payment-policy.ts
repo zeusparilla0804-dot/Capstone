@@ -2,7 +2,7 @@ import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 
 export const BIG_CASH_EVENT_GUESTS = 500;
-export const CASH_OFFICE_HOURS = 'Daily, 8:00 AM-6:00 PM Philippine Time';
+export const CASH_OFFICE_HOURS = 'Daily, 8:00 AM-6:00 PM';
 
 export function cashPreparationDays(guestCount: number): number {
   return guestCount >= BIG_CASH_EVENT_GUESTS ? 5 : 3;
@@ -37,6 +37,6 @@ export function assertCashPaymentWindow(eventDate: string, guestCount: number, n
   // Calendar rollover is 11 PM; the office cash deadline remains 6 PM.
   const minimum = minimumEventDateAtHour(guestCount, now, 18);
   if (eventDate < minimum) {
-    throw new AppError(status, `Cash down payment must be received by 6:00 PM Philippine Time on the ${cashPreparationDays(guestCount)}-day preparation cutoff. Select an event date on or after ${minimum}.`, 'CASH_PAYMENT_WINDOW_UNAVAILABLE');
+    throw new AppError(status, `Cash down payment must be received by 6:00 PM on the ${cashPreparationDays(guestCount)}-day preparation cutoff. Select an event date on or after ${minimum}.`, 'CASH_PAYMENT_WINDOW_UNAVAILABLE');
   }
 }

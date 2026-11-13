@@ -8,12 +8,12 @@
       <section class="cash-terms" aria-label="Cash payment instructions">
         <h3>Pay at the LA Chef office</h3>
         <p>Panorama Ville, Dita, Santa Rosa, Laguna</p>
-        <p>Office hours: Daily, 8:00 AM–6:00 PM Philippine Time.</p>
+        <p>Office hours: Daily, 8:00 AM–6:00 PM.</p>
         <ol>
           <li>Present your booking reference to the office staff.</li>
           <li>Pay the required 50% deposit of <strong>{{ cashDeposit() | currency:'PHP':'symbol-narrow':'1.2-2' }}</strong>, or settle the full outstanding balance.
             @if (cashDeadline(); as deadline) {
-              <span class="cash-terms__deadline">Deposit deadline: <strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM Philippine Time</strong> ({{ deadline.preparationDays }} calendar days before your event).</span>
+              <span class="cash-terms__deadline">Deposit deadline: <strong>{{ deadline.at | date:'MMMM d, y':'+0800' }}, 6:00 PM</strong> ({{ deadline.preparationDays }} calendar days before your event).</span>
             }
           </li>
           <li>No online payment proof is required. Collect your receipt after paying.</li>

@@ -76,7 +76,7 @@ for (const state of ['unpaid', 'partial', 'paid']) {
     const timestamp = document.locator('footer .receipt-generated');
     if (paid) {
       await expect(timestamp).toContainText('Generated on:');
-      await expect(timestamp).toContainText('PHT');
+      await expect(timestamp).not.toContainText(/\bPHT\b|Philippine time/i);
       for (const width of [390, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await expect(timestamp).toHaveCSS('text-align', 'right');

@@ -33,13 +33,14 @@ test('payment request email waits for admin request and the assigned QR', () => 
 
 test('invoice email organizes event, billing, cash deadline and office payment instructions', () => {
   const message = renderEmail('INVOICE_ISSUED', invoice);
+  assert.doesNotMatch(message.text + message.html, /\bPHT\b|Philippine time/i);
   for (const value of [
     'Your reservation has been approved', 'LA Chef will notify you when payment is requested', 'BK-42', 'Wedding & celebration', 'November 20, 2026',
-    '1:05 PM Philippine Time', 'Hall <North>', '499', 'INV-2026-42',
+    '1:05 PM', 'Hall <North>', '499', 'INV-2026-42',
     'Invoice total: PHP 100.01', 'Recorded payments: PHP 20.00', 'Required deposit (50%): PHP 50.01',
     'Remaining deposit to pay: PHP 30.01', 'Outstanding balance: PHP 80.01', 'Balance due: November 20, 2026',
-    'November 17, 2026, 6:00 PM Philippine Time', '3 calendar days before your event',
-    'Panorama Ville, Dita, Santa Rosa, Laguna', 'Daily, 8:00 AM-6:00 PM Philippine Time',
+    'November 17, 2026, 6:00 PM', '3 calendar days before your event',
+    'Panorama Ville, Dita, Santa Rosa, Laguna', 'Daily, 8:00 AM-6:00 PM',
     'Present your booking reference BK-42', 'Collect your receipt', 'No online payment proof is required for cash payments.',
     'Sign in to your LA Chef account', 'https://lachef.example/invoice/42',
   ]) assert.ok(message.text.includes(value), `missing ${value}`);
@@ -74,7 +75,7 @@ for (const [method, label] of [['E_WALLET', 'GCash'], ['BANK_TRANSFER', 'Bank tr
 test('fully paid invoice does not request another deposit or cash payment', () => {
   const message = renderEmail('INVOICE_ISSUED', { ...invoice, amountPaid: '100.01', remainingDeposit: '0.00', remainingBalance: '0.00' });
   assert.match(message.text, /No further payment is required/);
-  assert.doesNotMatch(message.text, /Pay the remaining required deposit|6:00 PM Philippine Time|Present your booking reference/);
+  assert.doesNotMatch(message.text, /Pay the remaining required deposit|6:00 PM|Present your booking reference/);
 });
 
 test('extended invoice payload rejects unsupported, unsafe or malformed fields', () => {

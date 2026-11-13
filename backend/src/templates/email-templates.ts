@@ -117,7 +117,7 @@ const invoiceDate = (value: string) => new Intl.DateTimeFormat('en-US', {
 const invoiceMoney = (value: string) => `PHP ${Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const invoiceTime = (value: string) => new Intl.DateTimeFormat('en-US', {
   hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC',
-}).format(new Date(`2000-01-01T${value}:00Z`)) + ' Philippine Time';
+}).format(new Date(`2000-01-01T${value}:00Z`));
 
 function invoiceSection(heading: string, rows: readonly (readonly [string, string])[]): string {
   return `<h2 style="margin:26px 0 12px;font-size:16px;line-height:1.4;color:#252525">${escapeHtml(heading)}</h2>` +
@@ -154,12 +154,12 @@ function renderInvoiceEmail(payload: Record<string, string>): RenderedEmail {
     text.push('Cash payment');
     html += '<h2 style="margin:26px 0 12px;font-size:16px;line-height:1.4;color:#252525">Cash payment</h2>';
     if (Number(payload.remainingDeposit) > 0 && payload.cashDepositDueDate) {
-      const due = `50% deposit due: ${invoiceDate(payload.cashDepositDueDate)}, 6:00 PM Philippine Time`;
+      const due = `50% deposit due: ${invoiceDate(payload.cashDepositDueDate)}, 6:00 PM`;
       const cutoff = payload.cashPreparationDays ? `${payload.cashPreparationDays} calendar days before your event. Approval does not change this deadline.` : 'Approval does not change this deadline.';
       text.push(due, cutoff);
       html += `<div style="margin:0 0 18px;padding:16px;background-color:#f8f6f1;border-left:3px solid #956a24"><strong>${escapeHtml(due)}</strong><br>${escapeHtml(cutoff)}</div>`;
     }
-    const office = ['LA Chef office: Panorama Ville, Dita, Santa Rosa, Laguna', 'Office hours: Daily, 8:00 AM-6:00 PM Philippine Time'];
+    const office = ['LA Chef office: Panorama Ville, Dita, Santa Rosa, Laguna', 'Office hours: Daily, 8:00 AM-6:00 PM'];
     const steps = [`Present your booking reference ${payload.bookingReference} to the office staff.`,
       Number(payload.remainingDeposit) > 0
         ? `Pay the remaining required deposit of ${invoiceMoney(payload.remainingDeposit!)} toward the 50% deposit, or settle the full outstanding balance of ${invoiceMoney(payload.remainingBalance!)}.`
@@ -249,7 +249,7 @@ export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail 
   if (payload.quoteTotal) lines.push(`Quotation total: PHP ${payload.quoteTotal}`);
   if (payload.validUntil) lines.push(`Valid until: ${payload.validUntil}`);
   if (payload.actionUrl) lines.push(`View details: ${payload.actionUrl}`);
-  if (payload.cashPaymentInstructions) lines.push(payload.cashPaymentInstructions);
+  if (payload.cashPaymentInstructions) lines.push(payload.cashPaymentInstructions.replace(/\s+(?:Philippine Time|PHT)\b/gi, ''));
   lines.push(brand);
   return { subject: `${definition.subject} | LA Chef`, text: lines.join('\n\n'),
     html: emailLayout(definition.subject, lines.slice(0, -1).map(emailParagraph).join('')) };
