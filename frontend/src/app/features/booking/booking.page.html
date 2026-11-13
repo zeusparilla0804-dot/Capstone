@@ -97,7 +97,7 @@
               <div class="step-heading"><p>Step 1</p><h2>Event Details</h2><span>Required fields are marked with an asterisk.</span></div>
               <div class="form-grid booking-form-grid">
               <div id="date-preparation-note" class="booking-preparation">
-                <span>Book at least 4 calendar days ahead for 500 guests or fewer; 6 days for 501 or more. Includes 1 day for the deposit and 3 or 5 days for preparation.</span>
+                <span>Book at least 4 calendar days ahead for 500 guests or fewer, 6 days for 501 or more. Includes 1 day for the deposit and 3 or 5 days for preparation.</span>
               </div>
                 <div class="form-field booking-event-type"><label for="eventType">Event Type *</label><select id="eventType" formControlName="eventType" [attr.disabled]="selectedFormPackage() && selectedFormPackage()?.category !== 'standard' ? '' : null"><option value="">Select event type</option>@for (type of eventTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select>@if (selectedFormPackage() && selectedFormPackage()?.category !== 'standard') { <small>Set by the selected package.</small> } @else if (controlInvalid('eventType')) { <small>Event type is required.</small> }</div>
                   <div class="form-field booking-date-field">
