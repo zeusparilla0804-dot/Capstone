@@ -15,6 +15,7 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
   private readonly cleanups: (() => void)[] = [];
   private observer?: MutationObserver;
   private resizeObserver?: ResizeObserver;
+  private touchPointer?: MediaQueryList;
   private initialized = false;
 
   ngAfterViewChecked(): void {
@@ -25,6 +26,12 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
       }
       const view = this.document.defaultView;
       if (view) {
+        this.touchPointer = view.matchMedia?.('(pointer: coarse)');
+        if (this.touchPointer) {
+          const pointerChanged = () => this.sync();
+          this.touchPointer.addEventListener?.('change', pointerChanged);
+          this.cleanups.push(() => this.touchPointer?.removeEventListener?.('change', pointerChanged));
+        }
         this.cleanups.push(this.renderer.listen(view, 'resize', () => this.sync()));
         this.observer = new view.MutationObserver(() => this.sync());
         this.observer.observe(this.element, { attributes: true, attributeFilter: ['type', 'value'] });
@@ -40,7 +47,8 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
   private sync(): void {
     const input = this.element;
     const view = this.document.defaultView;
-    if (!view || !this.enabled() || input.type !== 'password' || !input.value) {
+    // Mobile browsers must draw the mask and caret together; custom asterisks can have a different advance width.
+    if (!view || this.touchPointer?.matches || !this.enabled() || input.type !== 'password' || !input.value) {
       this.clearMask();
       return;
     }
