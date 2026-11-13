@@ -52,12 +52,16 @@
             </div>
             }
             @if (isReceipt(doc) && doc.payments.length) {
-              <div><dt>Latest payment</dt><dd>{{ doc.payments[0].date | date: 'mediumDate' }}</dd></div>
+              <div><dt>Latest payment</dt><dd>{{ doc.payments[0].date | date: 'mediumDate': 'UTC' }}</dd></div>
             }
+            @if (paymentComplete(doc)) {
+              <div><dt>Payment complete</dt><dd>{{ doc.payments[0].date | date: 'mediumDate': 'UTC' }}</dd></div>
+            } @else {
             <div>
               <dt>Balance due</dt>
               <dd>{{ doc.dueDate ? (doc.dueDate | date: 'mediumDate': 'UTC') : 'Not set' }}</dd>
             </div>
+            }
             <div>
               <dt>Status</dt>
               <dd><app-status-badge [status]="paymentStatus(doc)" /></dd>
@@ -160,7 +164,7 @@
       <section class="invoice-agreement" aria-labelledby="agreement-title">
         <div class="invoice-agreement__heading">
           <h2 id="agreement-title">{{ isReceipt(doc) ? 'Payment acknowledgment' : 'Terms and agreement' }}</h2>
-          <p>{{ isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
+          <p>{{ paymentComplete(doc) ? 'Payment received in full. No outstanding balance.' : isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
         </div>
 
         @if (!isReceipt(doc)) {
@@ -204,7 +208,7 @@
               <tbody>
                 @for (payment of doc.payments; track payment.id) {
                   <tr>
-                    <td>{{ payment.date | date: 'mediumDate' }}</td>
+                    <td>{{ payment.date | date: 'mediumDate': 'UTC' }}</td>
                     <td>
                       @if (payment.reference) {
                         {{ payment.reference }}

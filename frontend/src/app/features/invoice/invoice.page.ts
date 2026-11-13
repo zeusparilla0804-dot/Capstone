@@ -43,6 +43,10 @@ export class InvoicePageComponent {
     return adminPaymentDisplayStatus({ total: doc.totalAmount, amountPaid: doc.amountPaid, status: doc.status }) ?? doc.status;
   }
 
+  protected paymentComplete(doc: Invoice): boolean {
+    return this.isReceipt(doc) && this.paymentStatus(doc) === 'fully_paid';
+  }
+
   protected deposit(doc: Invoice) { return depositProgress(doc.totalAmount, doc.amountPaid); }
   protected incompleteDeposit(doc: Invoice): boolean {
     return this.isReceipt(doc) && !['CANCELLED', 'REJECTED', 'EXPIRED', 'COMPLETED'].includes(doc.booking.status?.toUpperCase() ?? '')

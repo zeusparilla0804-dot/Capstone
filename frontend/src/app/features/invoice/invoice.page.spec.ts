@@ -214,6 +214,9 @@ describe('InvoicePageComponent', () => {
     expect(page.querySelector('.payment-history tbody tr td:nth-child(3)')?.textContent?.trim()).toBe('GCash');
     expect(page.querySelector('.invoice-totals')?.textContent).toContain('50,000.00');
     expect(page.querySelector('.invoice-heading .status-badge')?.textContent?.trim()).toBe('Down Payment Paid');
+    expect(page.querySelector('.invoice-heading')?.textContent).toContain('Balance due');
+    expect(page.querySelector('.invoice-heading')?.textContent).not.toContain('Payment complete');
+    expect(page.querySelector('.invoice-agreement')?.textContent).toContain('Any remaining balance is still due.');
     expect(page.querySelector('.invoice-agreement ol')).toBeNull();
     const signatures = page.querySelectorAll('.invoice-signature');
     expect(signatures[0]?.querySelector('.invoice-signature__line')?.textContent?.trim()).toBe(invoice.customer.name);
@@ -237,12 +240,25 @@ describe('InvoicePageComponent', () => {
     expect((fixture.componentInstance as any).invoice().remainingBalance).toBe(0);
   });
 
-  it('shows Fully Paid on the receipt when verified payments cover the total', () => {
+  it('replaces the deadline with Payment complete and the final payment date when verified payments cover the total', () => {
     (fixture.componentInstance as any).invoice.set({
       ...invoice, amountPaid: invoice.totalAmount, remainingBalance: 0, status: 'PAID',
-      payments: [{ ...invoice.payments[0], amount: invoice.totalAmount }],
+      payments: [{ ...invoice.payments[0], id: 13, date: '2026-11-14T00:00:00.000Z', reference: 'FINAL-42' }, invoice.payments[0]],
     });
     fixture.detectChanges();
-    expect((fixture.nativeElement as HTMLElement).querySelector('.invoice-heading .status-badge')?.textContent?.trim()).toBe('Fully Paid');
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.invoice-heading .status-badge')?.textContent?.trim()).toBe('Fully Paid');
+    const complete = Array.from(page.querySelectorAll('.invoice-heading dl > div'))
+      .find(row => row.querySelector('dt')?.textContent?.trim() === 'Payment complete');
+    expect(complete?.querySelector('dd')?.textContent).toContain('Nov 14, 2026');
+    const latest = Array.from(page.querySelectorAll('.invoice-heading dl > div'))
+      .find(row => row.querySelector('dt')?.textContent?.trim() === 'Latest payment');
+    expect(latest?.querySelector('dd')?.textContent).toContain('Nov 14, 2026');
+    expect(page.querySelector('.payment-history tbody tr td')?.textContent).toContain('Nov 14, 2026');
+    expect(page.querySelector('.invoice-heading')?.textContent).not.toContain('Balance due');
+    expect(page.querySelector('.invoice-heading')?.textContent).not.toContain('Oct 25, 2026');
+    expect(page.querySelector('.invoice-totals .balance')?.textContent).toContain('0.00');
+    expect(page.querySelector('.invoice-agreement')?.textContent).toContain('Payment received in full. No outstanding balance.');
+    expect(page.querySelector('.invoice-agreement')?.textContent).not.toContain('Any remaining balance is still due.');
   });
 });

@@ -69,6 +69,7 @@ const server = http.createServer(async (req, res) => {
   pages.push('/admin/reports?layout=no-upcoming');
   pages.push('/admin/payments?layout=installment-cash', '/admin/payments?layout=installment-bank');
   pages.push('/admin/bookings/42?layout=edit-time');
+  pages.push('/admin/invoices/8?layout=fully-paid', '/invoice/8?layout=fully-paid');
   const depositRoutes = ['/my-bookings', '/billing', '/my-bookings/42/payment', '/invoice/8', '/admin/invoices/8'];
   pages.push(...depositRoutes.map(route => `${route}?layout=deposit-shortfall`), '/my-bookings?layout=deposit-pending', '/billing?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-complete');
   const selectedPages = process.argv.includes('--banks-only') ? ['/my-bookings/42/payment', '/billing', '/my-bookings', '/admin/payment-qrs?layout=accounts', '/admin/payments?layout=installment-bank', '/admin/payments/proofs/1', '/invoice/8']
@@ -76,7 +77,7 @@ const server = http.createServer(async (req, res) => {
     : process.argv.includes('--deposits-only') ? pages.filter(route => route.includes('layout=deposit-'))
     : process.argv.includes('--operations-only') ? ['/admin/dashboard', '/admin/bookings/42', '/admin/bookings/42?layout=edit-time', '/my-bookings/42/payment', '/admin/payment-qrs']
     : process.argv.includes('--installments-only') ? pages.filter(route => route.includes('layout=installment-'))
-    : process.argv.includes('--details-only') ? ['/admin/bookings/42', '/admin/invoices/8', '/invoice/8', '/admin/reports?layout=payments']
+    : process.argv.includes('--details-only') ? ['/admin/bookings/42', '/admin/invoices/8', '/invoice/8', '/admin/invoices/8?layout=fully-paid', '/invoice/8?layout=fully-paid', '/admin/reports?layout=payments']
     : process.argv.includes('--payments-only') ? pages.filter(route => /payment|billing|legacy-choice/.test(route))
     : process.argv.includes('--states-only') ? pages.filter(route => route.includes('?')) : pages;
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -135,7 +136,9 @@ const server = http.createServer(async (req, res) => {
         : currentLayout === 'cancel' ? { status: 'pending', amountPaid: 0 }
         : currentLayout.startsWith('legacy-') ? { paymentMethod: 'gcash', status: 'awaiting_payment', amountPaid: currentLayout === 'legacy-choice' ? 0 : 10000, latestProofStatus: undefined } : {}) }];
       else if (/^\/bookings\/\d+$/.test(p)) data = { ...booking, id: '42', amountPaid: currentLayout.startsWith('payment') ? 0 : booking.amountPaid, package: { ...booking.package, packageId: '1' }, paymentMethod: null, status: ['addons', 'review'].includes(currentLayout) ? 'pending' : 'awaiting_payment' };
-      else if (p.includes('/invoices/')) data = currentLayout === 'deposit-shortfall' ? { ...invoice, subtotal: 154000, totalAmount: 154000, amountPaid: 70000, remainingBalance: 84000, status: 'PARTIALLY_PAID', payments: [{ ...invoice.payments[0], amount: 70000, method: 'BANK_TRANSFER', reference: 'BANK-PARTIAL' }] } : invoice;
+      else if (p.includes('/invoices/')) data = currentLayout === 'fully-paid'
+        ? { ...invoice, amountPaid: invoice.totalAmount, remainingBalance: 0, status: 'PAID', payments: [{ ...invoice.payments[0], id: 13, date: '2026-11-14T00:00:00.000Z', reference: 'BANK-FINAL', amount: invoice.totalAmount - invoice.amountPaid }, ...invoice.payments] }
+        : currentLayout === 'deposit-shortfall' ? { ...invoice, subtotal: 154000, totalAmount: 154000, amountPaid: 70000, remainingBalance: 84000, status: 'PARTIALLY_PAID', payments: [{ ...invoice.payments[0], amount: 70000, method: 'BANK_TRANSFER', reference: 'BANK-PARTIAL' }] } : invoice;
       else if (p.endsWith('/payment-proofs')) data = currentLayout.startsWith('deposit-') ? [{
         id: 1, reservationId: 42, customerId: 7, claimedAmount: 77000, verifiedAmount: 70000, method: 'BANK_TRANSFER',
         transactionReference: 'BANK-PARTIAL', paymentDate: '2026-11-12', status: 'VERIFIED', correctionReason: 'Bank statement confirms only PHP 70,000 received.',
@@ -161,6 +164,11 @@ const server = http.createServer(async (req, res) => {
         if (layout === 'create') await page.getByRole('button', { name: route.includes('add-ons') ? 'Create Add-on' : 'Create Package', exact: true }).click();
         if (layout === 'deactivate') await page.getByRole('button', { name: 'Deactivate account', exact: true }).click();
         if (layout === 'payments') await page.getByRole('tab', { name: 'Payments', exact: true }).click();
+        if (layout === 'fully-paid') {
+          const heading = await page.locator('.invoice-heading').textContent();
+          if (!heading.includes('Payment complete') || !heading.includes('Nov 14, 2026') || heading.includes('Balance due')) throw Error('A fully paid receipt must show Payment complete with the final payment date');
+          if (!(await page.locator('.invoice-agreement').textContent()).includes('Payment received in full. No outstanding balance.')) throw Error('A fully paid receipt must acknowledge zero outstanding balance');
+        }
         if (layout === 'edit-time') {
           await page.locator('[data-edit-event-time]').click();
           await page.locator('#admin-event-time').fill('10:00 PM');
