@@ -22,13 +22,14 @@ const invoice = {
   cashDepositDueDate: '2026-11-17', cashPreparationDays: '3',
 };
 
-test('payment request email waits for admin request and the assigned QR', () => {
+test('payment request email follows the admin request and explains customer bank selection', () => {
   const context = { customerName: legacy.customerName, bookingReference: legacy.bookingReference, eventDate: legacy.eventDate };
   const approved = renderEmail('BOOKING_APPROVED', context);
   const requested = renderEmail('PAYMENT_REQUESTED', context);
   assert.match(approved.text, /notify you when payment is requested/i);
   assert.match(requested.text, /choose bank transfer or cash/i);
-  assert.match(requested.text, /wait for your assigned QR/i);
+  assert.match(requested.text, /choose an available receiving bank.*view its QR/i);
+  assert.doesNotMatch(requested.text, /wait for your assigned QR/i);
 });
 
 test('invoice email organizes event, billing, cash deadline and office payment instructions', () => {

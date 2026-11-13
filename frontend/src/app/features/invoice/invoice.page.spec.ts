@@ -46,6 +46,21 @@ const invoice: Invoice = {
 };
 
 describe('InvoicePageComponent', () => {
+  it('keeps the receiving bank on every verified installment and identifies unknown historical banks', () => {
+    const component = fixture.componentInstance as any;
+    component.invoice.set({ ...invoice, amountPaid: 100000, remainingBalance: 0, status: 'PAID', payments: [
+      { ...invoice.payments[0], id: 3, method: 'BANK_TRANSFER', amount: 20000, destinationLabel: 'Bank B', destinationAccountName: 'LA Chef B', destinationAccountHint: '2222' },
+      { ...invoice.payments[0], id: 2, method: 'BANK_TRANSFER', amount: 30000, destinationLabel: 'Bank B', destinationAccountName: 'LA Chef B', destinationAccountHint: '2222' },
+      { ...invoice.payments[0], id: 1, method: 'BANK_TRANSFER', amount: 50000, destinationLabel: 'Bank A at payment', destinationAccountName: 'LA Chef A', destinationAccountHint: '1111' },
+      { ...invoice.payments[0], id: 4, method: 'BANK_TRANSFER', amount: 1 },
+      { ...invoice.payments[0], id: 5, method: 'CASH', amount: 1 },
+    ] }); fixture.detectChanges();
+    const rows = fixture.nativeElement.querySelectorAll('.payment-history tbody tr');
+    expect(rows.length).toBe(5);
+    expect(rows[0].textContent).toContain('Bank B'); expect(rows[0].textContent).toContain('LA Chef B');
+    expect(rows[2].textContent).toContain('Bank A at payment'); expect(rows[2].textContent).toContain('1111');
+    expect(rows[3].textContent).toContain('Bank not recorded'); expect(rows[4].textContent).not.toContain('Bank not recorded');
+  });
   it('shows the incomplete deposit as part of the full balance and clears it after the next verified installment', () => {
     const component = fixture.componentInstance as any;
     component.invoice.set({ ...invoice, totalAmount: 154000, subtotal: 154000, amountPaid: 70000, remainingBalance: 84000,

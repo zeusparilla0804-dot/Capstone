@@ -15,6 +15,18 @@ describe('supported payment destinations', () => {
   });
   afterEach(() => http.verify());
 
+  it('scopes available banks and versioned images to the owned booking', async () => {
+    const bank = { id: 2, method: 'BANK_TRANSFER' as const, label: 'Bank B', accountName: 'LA Chef', accountHint: '2222', version: 'b'.repeat(64) };
+    const options = firstValueFrom(service.options('42'));
+    const request = http.expectOne(`${base}/payment-destinations/bookings/42/options`);
+    expect(request.request.withCredentials).toBe(true); request.flush({ data: [bank] });
+    expect(await options).toEqual([bank]);
+    const image = firstValueFrom(service.optionImage('42', bank));
+    const qr = http.expectOne(req => req.url === `${base}/payment-destinations/bookings/42/options/2/image`);
+    expect(qr.request.params.get('version')).toBe(bank.version);
+    expect(qr.request.responseType).toBe('blob'); qr.flush(new Blob(['qr'])); await image;
+  });
+
   it('filters retired methods and accounts from an older API response', async () => {
     const methods = firstValueFrom(service.availableMethods());
     http.expectOne(`${base}/payment-destinations/methods`).flush({ data: ['E-WALLET', 'BANK_TRANSFER'] });

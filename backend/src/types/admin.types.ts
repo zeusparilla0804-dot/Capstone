@@ -47,7 +47,7 @@ export type PackageInput = PackageInputBase & (
   | { pricingType: 'BASE_PLUS_EXCESS'; pricePerGuest: null; basePrice: number; includedGuests: number; excessGuestPrice: number }
 );
 export interface AddOnInput{name:string;description:string;price:number;isActive:boolean;}
-export interface PaymentInput{reservationId:number;amount:number;method:'CASH'|'BANK_TRANSFER'|'E-WALLET';reference?:string;requestId?:string;paymentDate:string;}
+export interface PaymentInput{reservationId:number;amount:number;method:'CASH'|'BANK_TRANSFER'|'E-WALLET';reference?:string;requestId?:string;paymentDate:string;destinationId?:number;destinationVersion?:string;}
 export type AdminBookingCapacitySummary = BookingAvailability;
 
 export type BookingStatus = 'PENDING' | 'APPROVED' | 'AWAITING_PAYMENT' | 'PAYMENT_SUBMITTED' | 'PAYMENT_VERIFIED' | 'CONFIRMED' | 'COMPLETED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';

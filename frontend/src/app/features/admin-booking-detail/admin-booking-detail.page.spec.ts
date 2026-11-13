@@ -1,3 +1,4 @@
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
@@ -60,6 +61,7 @@ describe('AdminBookingDetailPage', () => {
       imports: [AdminBookingDetailPage],
       providers: [
         provideRouter([]),
+        { provide: PaymentDestinationService, useValue: { adminOptions: () => of([]) } },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: '42' }) } } },
         { provide: AdminService, useValue: api },
         { provide: AdminAuthService, useValue: { idleWarning: signal(false), user: signal({ fullName: 'Admin' }), logout: vi.fn() } }

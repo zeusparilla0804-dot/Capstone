@@ -1,9 +1,8 @@
 import type sql from 'mssql';
-import mssql from 'mssql';
 import { proofStorage } from '../config/uploads.js';
 import { getDbPool } from '../config/database.js';
 import { lockedBookingStatus, runBookingStatusTransaction } from '../repositories/booking-status.repository.js';
-import { customerOwnsReservation, findProof, insertPaymentProof, listProofs, lockedPayment, proofReferencesStorageKey, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
+import { customerOwnsReservation, findProof, insertPaymentProof, listProofs, lockedPayment, lockedSubmittedProof, proofReferencesStorageKey, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
 import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
@@ -13,6 +12,7 @@ import { assertSupportedPaymentMethod } from './payment-method-policy.js';
 import type { ProofStorage, ValidatedProofFile } from './proof-storage.service.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
 import { queueBookingNotification } from './notification.service.js';
+import { resolvePaymentBankSnapshot } from './payment-bank.service.js';
 
 type Actor = { type: 'CUSTOMER' | 'ADMIN'; id: number };
 type Dependencies = {
@@ -52,7 +52,18 @@ function validateInput(value: unknown): PaymentProofSubmission {
   const reference = raw.transactionReference?.trim();
   if (reference && reference.length > 150) throw new AppError(400, 'Transaction reference is too long.');
   if (!reference) throw new AppError(400, 'Transaction reference is required.');
-  return { method: raw.method as PaymentProofSubmission['method'], claimedAmount: amount, paymentDate, transactionReference: reference || undefined };
+  let destinationId: number | undefined;
+  if (raw.destinationId !== undefined) {
+    if ((typeof raw.destinationId !== 'number' && typeof raw.destinationId !== 'string') || !/^[1-9]\d*$/.test(String(raw.destinationId))) throw new AppError(400, 'Bank account identifier is invalid.');
+    destinationId = Number(raw.destinationId);
+    if (!Number.isSafeInteger(destinationId) || destinationId > 2_147_483_647) throw new AppError(400, 'Bank account identifier is invalid.');
+  }
+  if (raw.destinationVersion !== undefined && (typeof raw.destinationVersion !== 'string' || !/^[a-f0-9]{64}$/.test(raw.destinationVersion))) throw new AppError(400, 'Bank account version is invalid.');
+  if ((destinationId === undefined) !== (raw.destinationVersion === undefined)) throw new AppError(400, 'Select a bank account and its current QR.');
+  if (raw.replacesProofId !== undefined && (typeof raw.replacesProofId !== 'string' || !/^[1-9]\d{0,18}$/.test(raw.replacesProofId))) throw new AppError(400, 'Replacement proof identifier is invalid.');
+  return { method: raw.method as PaymentProofSubmission['method'], claimedAmount: amount, paymentDate,
+    transactionReference: reference || undefined, destinationId, destinationVersion: raw.destinationVersion as string | undefined,
+    replacesProofId: raw.replacesProofId as string | undefined };
 }
 
 function duplicateReference(error: unknown): boolean {
@@ -100,17 +111,23 @@ export function createPaymentProofService(deps: Dependencies) {
           if (!payment) throw new AppError(409, 'Booking has no payment record.');
           if (payment.paymentMethod?.toUpperCase() === 'CASH') throw new AppError(409, 'This booking uses cash payment. Please pay at the LA Chef office.');
           assertProofMatchesPayment(payment.paymentMethod, input.method);
-          const destination = await request.input('destinationReservationId', mssql.Int, reservationId)
-            .input('destinationMethod', mssql.NVarChar(30), payment.paymentMethod)
-            .query(`SELECT TOP(1) d.destination_id FROM dbo.BOOKING_PAYMENT_DESTINATION a
-              JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id
-              WHERE a.reservation_id=@destinationReservationId AND d.is_available=1 AND d.method=@destinationMethod`);
-          if (!destination.recordset.length) throw new AppError(409, 'An available payment QR has not been assigned to this booking.');
+          const original = input.replacesProofId ? await lockedSubmittedProof(customerId, reservationId, request) : undefined;
+          if (input.replacesProofId && (!original || String(original.id) !== input.replacesProofId)) {
+            throw new AppError(409, 'This submitted proof has changed or has already been reviewed. Refresh payment history before replacing it.');
+          }
+          // An image correction describes money already sent. Retain the trusted stored account,
+          // even if it was disabled later. An explicit bank correction validates the new choice.
+          const unchangedBank = original && input.destinationId === original.destinationId && input.destinationVersion === original.destinationVersion
+            && original.destinationId !== undefined && original.destinationVersion && original.destinationLabel
+            && original.destinationAccountName && original.destinationAccountHint;
+          const bank = unchangedBank ? { destinationId: original.destinationId!, destinationVersion: original.destinationVersion!,
+            destinationLabel: original.destinationLabel!, destinationAccountName: original.destinationAccountName!, destinationAccountHint: original.destinationAccountHint! }
+            : await resolvePaymentBankSnapshot(reservationId, input.destinationId, input.destinationVersion, request);
           const outstanding = Math.round(Number(payment.amountDue) * 100) - Math.round(Number(payment.amountPaid) * 100);
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance.');
           if (Math.round(input.claimedAmount * 100) > outstanding) throw new AppError(409, 'Claimed amount exceeds the outstanding balance.');
           await supersedeSubmittedProofs(reservationId, customerId, request);
-          const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId, input, stored, request);
+          const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId, { ...input, ...bank }, stored, request);
           if (booking.status === 'AWAITING_PAYMENT') {
             await transitionBooking({ reservationId, nextStatus: 'PAYMENT_SUBMITTED', expectedStatus: 'AWAITING_PAYMENT', actor: { type: 'CUSTOMER', id: customerId }, request });
           }

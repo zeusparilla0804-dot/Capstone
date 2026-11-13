@@ -13,7 +13,7 @@ const templates: Record<EmailTemplateKey, { subject: string; message: string; ex
   ACCOUNT_REGISTERED: { subject: 'Account registration confirmed', message: 'Your LA Chef customer account is ready. You can now reserve an event and manage your billing details.' },
   BOOKING_RECEIVED: { subject: 'Booking received', message: 'We received your booking request. It is pending review.' },
   BOOKING_APPROVED: { subject: 'Booking approved', message: 'Your booking has been approved. LA Chef will notify you when payment is requested. You can review your invoice in your account.', extras: ['cashPaymentInstructions'] },
-  PAYMENT_REQUESTED: { subject: 'Payment requested for your booking', message: 'LA Chef has requested payment for your approved booking. Sign in to your account and choose bank transfer or cash. If you choose bank transfer, wait for your assigned QR before paying.' },
+  PAYMENT_REQUESTED: { subject: 'Payment requested for your booking', message: 'LA Chef has requested payment for your approved booking. Sign in to your account and choose bank transfer or cash. For bank transfer, choose an available receiving bank in your account to view its QR, then upload proof after paying.' },
   BOOKING_REJECTED: { subject: 'Booking request rejected', message: 'Your booking request has been rejected. Please check your booking or contact LA Chef for details.' },
   INVOICE_ISSUED: { subject: 'Invoice issued', message: 'Your invoice is available. Please review it in your account.', extras: ['invoiceNumber'] },
   PAYMENT_PROOF_SUBMITTED: { subject: 'Payment proof received', message: 'Your payment proof was received for manual verification. Your recorded balance will change only after verification.' },

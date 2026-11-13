@@ -1,3 +1,5 @@
+import type { PaymentBankSnapshot } from './payment-bank.types.js';
+
 export type PaymentProofMethod = 'CASH' | 'BANK_TRANSFER' | 'E_WALLET';
 
 export type PaymentProofStatus = 'SUBMITTED' | 'VERIFIED' | 'REJECTED' | 'SUPERSEDED';
@@ -7,9 +9,12 @@ export interface PaymentProofSubmission {
   claimedAmount: number;
   transactionReference?: string;
   paymentDate: string;
+  destinationId?: number;
+  destinationVersion?: string;
+  replacesProofId?: string;
 }
 
-export interface PaymentProofRecord extends PaymentProofSubmission {
+export interface PaymentProofRecord extends PaymentProofSubmission, Partial<PaymentBankSnapshot> {
   id: number;
   reservationId: number;
   customerId: number;

@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inj
 import { Router, RouterLink } from '@angular/router';
 import { BookingStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
-import { bookingTotal, customerPaymentStatus, depositProgress, hasIncompleteDownPayment, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../core/utils/customer-payment-status';
+import { bookingTotal, customerPaymentStatus, depositProgress, hasIncompleteDownPayment, hasCashPaymentAction, hasOnlinePaymentAction, customerPaymentActionLabel, needsPaymentMethodChoice } from '../../core/utils/customer-payment-status';
 import { BookingService } from '../../core/services/booking.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/components/dashboard-sidebar/dashboard-sidebar';
@@ -24,7 +24,7 @@ interface BillingRecord {
   readonly cashPayment: boolean;
   readonly needsPaymentChoice: boolean;
   readonly retiredPaymentMethod: boolean;
-  readonly waitingForPaymentQr: boolean;
+  readonly paymentActionLabel: string;
   readonly remainingDeposit: number;
   readonly incompleteDeposit: boolean;
   readonly proofPending: boolean;
@@ -67,11 +67,11 @@ export class CustomerBillingPageComponent implements OnDestroy {
         incompleteDeposit: hasIncompleteDownPayment(booking),
         proofPending: booking.status === 'payment_submitted' || booking.latestProofStatus?.toUpperCase() === 'SUBMITTED',
         acceptsPayment: hasCashPaymentAction(booking)
-          || (hasOnlinePaymentAction(booking) && (booking.amountPaid === 0 || booking.status === 'payment_submitted' || hasIncompleteDownPayment(booking))),
+          || hasOnlinePaymentAction(booking),
         cashPayment: booking.paymentMethod === 'cash',
         needsPaymentChoice: needsPaymentMethodChoice(booking),
         retiredPaymentMethod: booking.paymentMethod === 'gcash',
-        waitingForPaymentQr: isWaitingForPaymentQr(booking),
+        paymentActionLabel: customerPaymentActionLabel(booking),
       };
     }));
   protected readonly totalBilled = computed(() => this.records().reduce((sum, item) => sum + item.total, 0));

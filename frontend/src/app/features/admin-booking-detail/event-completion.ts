@@ -7,16 +7,22 @@ import { AdminBookingDetail } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
+import { PaymentBankOption, PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 @Component({ selector: 'app-event-completion', imports: [FormsModule, CurrencyPipe, DatePipe],
   templateUrl: './event-completion.html', styleUrl: './event-completion.scss', changeDetection: ChangeDetectionStrategy.OnPush })
 export class EventCompletionComponent {
   constructor() {
     effect(() => { this.method.set(this.booking().paymentMethod ?? ''); });
+    this.loadBanks();
   }
   readonly booking = input.required<AdminBookingDetail>();
   readonly completed = output<void>();
   private readonly api = inject(AdminService);
+  private readonly bankApi = inject(PaymentDestinationService);
+  protected readonly bankOptions = signal<readonly PaymentBankOption[]>([]);
+  protected readonly receivingBank = signal<number | null>(null);
+  protected readonly selectedBank = computed(() => this.bankOptions().find(bank => bank.id === this.receivingBank()));
   private readonly feedback = inject(ActionFeedbackService);
   private readonly destroyRef = inject(DestroyRef);
   private requestId = '';
@@ -34,21 +40,28 @@ export class EventCompletionComponent {
     && ['PAYMENT_VERIFIED', 'CONFIRMED', 'COMPLETED'].includes(this.booking().status)
     && this.date() >= this.booking().eventDate && this.date() <= this.today
     && (this.balance() === 0 || (['CASH', 'BANK_TRANSFER'].includes(this.method()) && this.fundsReceived()
-      && (this.method() === 'CASH' || (this.reference().trim().length > 0 && this.reference().trim().length <= 150)))));
+      && (this.method() === 'CASH' || (!!this.selectedBank() && this.reference().trim().length > 0 && this.reference().trim().length <= 150)))));
+
+  protected loadBanks(): void {
+    this.bankApi.adminOptions().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: banks => this.bankOptions.set(banks),
+      error: () => this.error.set('Unable to load receiving banks. Refresh the accounts before recording a bank payment.') });
+  }
 
   protected submit(): void {
     if (!this.canSubmit()) return;
     const booking = this.booking();
+    const bank = this.balance() > 0 && this.method() === 'BANK_TRANSFER' ? this.selectedBank() : undefined;
     const value = { amount: this.balance(), method: this.balance() > 0 ? this.method() : 'CASH',
       paymentDate: this.date(), reference: this.method() === 'CASH' ? undefined : this.reference().trim(),
-      fundsReceived: this.balance() > 0 && this.fundsReceived(), eventFinished: this.eventFinished() };
+      fundsReceived: this.balance() > 0 && this.fundsReceived(), eventFinished: this.eventFinished(),
+      ...(bank ? { destinationId: bank.id, destinationVersion: bank.version } : {}) };
     const amount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value.amount);
     this.feedback.confirm({ title: value.amount > 0 ? 'Record final payment and complete event?' : 'Complete this fully paid event?',
       confirmLabel: value.amount > 0 ? 'Record payment & complete' : 'Confirm event completed',
-      message: `${booking.reference} · ${booking.customerName}\n${value.amount > 0 ? `Final payment received: ${amount}\nMethod: ${paymentMethodLabel(value.method)}\nPayment date: ${value.paymentDate}` : 'The full amount is already recorded. No additional payment will be created.'}\n\nConfirm that the event has finished. The receipt will reflect the recorded payments and Completed status.`,
+      message: `${booking.reference} · ${booking.customerName}\n${value.amount > 0 ? `Final payment received: ${amount}\nMethod: ${paymentMethodLabel(value.method)}${bank ? '\nReceiving bank: ' + bank.label + ' · ' + bank.accountHint : ''}\nPayment date: ${value.paymentDate}` : 'The full amount is already recorded. No additional payment will be created.'}\n\nConfirm that the event has finished. The receipt will reflect the recorded payments and Completed status.`,
     }, () => {
       if (!this.canSubmit() || this.booking() !== booking || this.balance() !== value.amount || this.date() !== value.paymentDate
-        || (value.amount > 0 && (this.method() !== value.method || (this.method() !== 'CASH' && this.reference().trim() !== value.reference)))) return;
+        || (value.amount > 0 && (this.method() !== value.method || (this.method() !== 'CASH' && (this.reference().trim() !== value.reference || this.selectedBank() !== bank))))) return;
       const key = `lachef.event-completion.${booking.id}`;
       if (!this.requestId) {
         try { this.requestId = sessionStorage.getItem(key) ?? ''; } catch { /* Memory still protects a retry in this form. */ }

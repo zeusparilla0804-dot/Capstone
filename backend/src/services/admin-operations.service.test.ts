@@ -116,15 +116,15 @@ test('admin attention uses activity timestamps before limiting results, with sta
   assert.equal(result.attention[0]!.updatedAt, '2026-11-09T02:30:00.000Z');
 });
 
-test('overview includes durable recent activity and QR assignment work independently of urgent attention', async () => {
-  const recorder = new RequestRecorder(() => ({ recordsets: [[{ qrAssignmentsWaiting: 2 }], [], [{
+test('overview retains recent activity without treating bank selection as an administrator assignment', async () => {
+  const recorder = new RequestRecorder(() => ({ recordsets: [[{ qrAssignmentsWaiting: 0 }], [], [{
     id: 'H-15', reservationId: 42, title: 'Payment method selected', detail: 'Customer chose Bank transfer', updatedAt: new Date('2026-11-12T04:00:00Z')
   }]] }));
   const result = await repositoryWith(recorder)['dashboard']({ key: '2026-11', start: new Date('2026-11-01'), end: new Date('2026-12-01') }) as any;
-  assert.equal(result.priority.qrAssignmentsWaiting, 2);
+  assert.equal(result.priority.qrAssignmentsWaiting, 0);
   assert.equal(result.recentActivity[0].reservationId, 42);
   assert.equal(result.recentActivity[0].updatedAt, '2026-11-12T04:00:00.000Z');
-  assert.match(recorder.calls[0]!.command, /BOOKING_PAYMENT_DESTINATION/);
+  assert.doesNotMatch(recorder.calls[0]!.command, /BOOKING_PAYMENT_DESTINATION/);
   assert.match(recorder.calls[0]!.command, /actor_type='CUSTOMER'/);
   assert.match(recorder.calls[0]!.command, /BOOKING_TIME_UPDATED/);
 });

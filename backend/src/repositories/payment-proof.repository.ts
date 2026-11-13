@@ -3,8 +3,10 @@ import { getDbPool } from '../config/database.js';
 import type { PaymentProofRecord, PaymentProofSubmission } from '../types/payment-proof.types.js';
 import type { StoredProof } from '../services/proof-storage.service.js';
 import type { BookingStatus, PageResult, ProofReviewQuery } from '../types/admin.types.js';
+import type { PaymentBankSnapshot } from '../types/payment-bank.types.js';
+import { bankSnapshotColumns, bindBankSnapshot } from './payment-bank.repository.js';
 
-const columns = `payment_proof_id id,reservation_id reservationId,customer_id customerId,
+const columns = `${bankSnapshotColumns()},payment_proof_id id,reservation_id reservationId,customer_id customerId,
   payment_id paymentId,CONVERT(varchar(20),payment_transaction_id) paymentTransactionId,invoice_id invoiceId,
   method,claimed_amount claimedAmount,COALESCE(transaction_reference,archived_transaction_reference) transactionReference,
   payment_date paymentDate,storage_key storageKey,original_filename originalFilename,
@@ -19,6 +21,9 @@ const columns = `payment_proof_id id,reservation_id reservationId,customer_id cu
 function record(row: PaymentProofRecord): PaymentProofRecord {
   return {
     ...row,
+    destinationId: row.destinationId == null ? undefined : Number(row.destinationId),
+    destinationLabel: row.destinationLabel ?? undefined, destinationAccountName: row.destinationAccountName ?? undefined,
+    destinationAccountHint: row.destinationAccountHint ?? undefined, destinationVersion: row.destinationVersion ?? undefined,
     id: Number(row.id), reservationId: Number(row.reservationId), customerId: Number(row.customerId),
     paymentId: row.paymentId == null ? undefined : Number(row.paymentId),
     paymentTransactionId: row.paymentTransactionId ?? undefined,
@@ -42,6 +47,15 @@ export async function lockedPayment(reservationId: number, request: sql.Request)
   return result.recordset[0];
 }
 
+/** Caller owns reservation and payment locks, then locks the proof being replaced. */
+export async function lockedSubmittedProof(customerId: number, reservationId: number, request: sql.Request): Promise<PaymentProofRecord | undefined> {
+  const result = await request.replaceInput('customerId', sql.Int, customerId).replaceInput('reservationId', sql.Int, reservationId)
+    .query<PaymentProofRecord>(`SELECT TOP(1) ${columns} FROM dbo.PAYMENT_PROOF WITH(UPDLOCK,HOLDLOCK)
+      WHERE customer_id=@customerId AND reservation_id=@reservationId AND status='SUBMITTED'
+      ORDER BY created_at DESC,payment_proof_id DESC`);
+  return result.recordset[0] ? record(result.recordset[0]) : undefined;
+}
+
 export async function supersedeSubmittedProofs(reservationId: number, customerId: number, request: sql.Request): Promise<void> {
   await request.replaceInput('reservationId', sql.Int, reservationId).replaceInput('customerId', sql.Int, customerId)
     .query(`UPDATE dbo.PAYMENT_PROOF SET status='SUPERSEDED',archived_transaction_reference=transaction_reference,
@@ -50,8 +64,8 @@ export async function supersedeSubmittedProofs(reservationId: number, customerId
 }
 
 export async function insertPaymentProof(customerId: number, reservationId: number, paymentId: number,
-  input: PaymentProofSubmission, stored: StoredProof, request: sql.Request): Promise<PaymentProofRecord> {
-  const result = await request
+  input: PaymentProofSubmission & Partial<PaymentBankSnapshot>, stored: StoredProof, request: sql.Request): Promise<PaymentProofRecord> {
+  const result = await bindBankSnapshot(request, input)
     .replaceInput('reservationId', sql.Int, reservationId)
     .replaceInput('customerId', sql.Int, customerId)
     .replaceInput('paymentId', sql.Int, paymentId)
@@ -64,16 +78,20 @@ export async function insertPaymentProof(customerId: number, reservationId: numb
     .replaceInput('mimeType', sql.NVarChar(100), stored.mimeType)
     .replaceInput('byteSize', sql.BigInt, stored.byteSize)
     .query<PaymentProofRecord>(`INSERT dbo.PAYMENT_PROOF(reservation_id,customer_id,payment_id,method,claimed_amount,
-      transaction_reference,payment_date,storage_key,original_filename,mime_type,byte_size,status)
+      transaction_reference,payment_date,storage_key,original_filename,mime_type,byte_size,status,
+      destination_id,destination_label,destination_account_name,destination_account_hint,destination_version)
       OUTPUT INSERTED.payment_proof_id id,INSERTED.reservation_id reservationId,INSERTED.customer_id customerId,
       INSERTED.payment_id paymentId,CONVERT(varchar(20),INSERTED.payment_transaction_id) paymentTransactionId,INSERTED.invoice_id invoiceId,
       INSERTED.method,INSERTED.claimed_amount claimedAmount,INSERTED.transaction_reference transactionReference,
       INSERTED.payment_date paymentDate,INSERTED.storage_key storageKey,INSERTED.original_filename originalFilename,
       INSERTED.mime_type mimeType,INSERTED.byte_size byteSize,INSERTED.status,INSERTED.rejection_reason rejectionReason,
       INSERTED.reviewed_by reviewedBy,INSERTED.reviewed_at reviewedAt,INSERTED.verified_amount verifiedAmount,
-      INSERTED.created_at createdAt,INSERTED.updated_at updatedAt
+      INSERTED.destination_id destinationId,INSERTED.destination_label destinationLabel,
+      INSERTED.destination_account_name destinationAccountName,INSERTED.destination_account_hint destinationAccountHint,
+      INSERTED.destination_version destinationVersion,INSERTED.created_at createdAt,INSERTED.updated_at updatedAt
       VALUES(@reservationId,@customerId,@paymentId,@method,@claimedAmount,@transactionReference,@paymentDate,
-      @storageKey,@originalFilename,@mimeType,@byteSize,'SUBMITTED')`);
+      @storageKey,@originalFilename,@mimeType,@byteSize,'SUBMITTED',
+      @destinationId,@destinationLabel,@destinationAccountName,@destinationAccountHint,@destinationVersion)`);
   return record(result.recordset[0]!);
 }
 
@@ -101,13 +119,15 @@ export async function lockedProof(proofId: number, request: sql.Request): Promis
 
 export async function insertProofCredit(adminId: number, paymentId: number, proof: PaymentProofRecord,
   amount: number, request: sql.Request): Promise<string> {
-  const result = await request.replaceInput('adminId', sql.Int, adminId).replaceInput('paymentId', sql.Int, paymentId)
+  const result = await bindBankSnapshot(request, proof).replaceInput('adminId', sql.Int, adminId).replaceInput('paymentId', sql.Int, paymentId)
     .replaceInput('amount', sql.Decimal(12, 2), amount)
     .replaceInput('method', sql.NVarChar(50), proof.method === 'E_WALLET' ? 'E-WALLET' : proof.method)
     .replaceInput('reference', sql.NVarChar(150), proof.transactionReference ?? null)
     .replaceInput('paymentDate', sql.DateTime2, new Date(`${proof.paymentDate}T00:00:00.000Z`))
-    .query<{ id: string }>(`INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
-      OUTPUT CONVERT(varchar(20),INSERTED.payment_transaction_id) id VALUES(@paymentId,@adminId,@amount,@method,@reference,@paymentDate)`);
+    .query<{ id: string }>(`INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date,
+      destination_id,destination_label,destination_account_name,destination_account_hint,destination_version)
+      OUTPUT CONVERT(varchar(20),INSERTED.payment_transaction_id) id VALUES(@paymentId,@adminId,@amount,@method,@reference,@paymentDate,
+      @destinationId,@destinationLabel,@destinationAccountName,@destinationAccountHint,@destinationVersion)`);
   return result.recordset[0]!.id;
 }
 

@@ -1,3 +1,4 @@
+import { staffBankChoice } from './payment-bank.service.js';
 import type { PaymentInput } from '../types/admin.types.js';
 import { recordPayment } from '../repositories/admin.repository.js';
 import { findInvoiceIdByBooking } from '../repositories/invoice.repository.js';
@@ -22,7 +23,7 @@ export function completionPaymentInput(reservationId: number, body: unknown): Pa
   const method = value['method'] as PaymentInput['method'];
   const reference = amount === 0 ? undefined : method === 'CASH' ? `CASH-${requestId.replace(/-/g, '').toUpperCase()}`
     : text(value['reference'], 'Transaction reference', { max: 150 });
-  return { reservationId, amount, method, reference, requestId, paymentDate: isoDate(value['paymentDate'], 'Payment date') };
+  return { reservationId, amount, method, reference, requestId, ...staffBankChoice(method, amount, value['destinationId'] as number | undefined, value['destinationVersion'] as string | undefined), paymentDate: isoDate(value['paymentDate'], 'Payment date') };
 }
 
 export async function completeEventPayment(adminId: number, reservationId: number, body: unknown) {

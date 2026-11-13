@@ -212,7 +212,14 @@
                         &mdash;
                       }
                     </td>
-                    <td>{{ payment.method | paymentMethodLabel }}</td>
+                    <td>{{ payment.method | paymentMethodLabel }}
+                      @if (payment.method === 'BANK_TRANSFER') {
+                        <span class="receiving-bank"><strong>{{ payment.destinationLabel || 'Bank not recorded' }}</strong>
+                          @if (payment.destinationAccountName) { <span>{{ payment.destinationAccountName }}</span> }
+                          @if (payment.destinationAccountHint) { <span>{{ payment.destinationAccountHint }}</span> }
+                        </span>
+                      }
+                    </td>
                     <td>{{ payment.amount | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</td>
                     <td>{{ payment.status }}</td>
                   </tr>

@@ -7,6 +7,14 @@ import { AdminService } from '../../core/services/admin.service';
 import { AdminCustomerDetailPage } from './admin-customer-detail.page';
 
 describe('AdminCustomerDetailPage', () => {
+  it('renders real ISO transaction dates with their recorded receiving bank', () => {
+    api['customerPayments'].mockReturnValue(of({ data: { items: [{ id: '1', bookingId: 42, bookingReference: 'LC-0042', amount: 10000,
+      paymentMethod: 'BANK_TRANSFER', paymentDate: '2026-11-13T00:00:00.000Z', destinationLabel: 'Bank B', destinationAccountHint: '2222' }] } }));
+    (fixture.componentInstance as any).loadPayments(1);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    expect(fixture.nativeElement.querySelector('.payment-list').textContent).toContain('Nov 13, 2026');
+    expect(fixture.nativeElement.querySelector('.payment-list').textContent).toContain('Bank B');
+  });
   let fixture: ComponentFixture<AdminCustomerDetailPage>;
   let api: Record<string, ReturnType<typeof vi.fn>>;
   beforeEach(async () => {

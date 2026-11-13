@@ -2,7 +2,7 @@ import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Booking } from '../../../core/models';
-import { bookingTotal, depositProgress, hasIncompleteDownPayment, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, isWaitingForPaymentQr, needsPaymentMethodChoice } from '../../../core/utils/customer-payment-status';
+import { bookingTotal, depositProgress, hasIncompleteDownPayment, customerPaymentStatus, hasCashPaymentAction, hasOnlinePaymentAction, customerPaymentActionLabel, needsPaymentMethodChoice } from '../../../core/utils/customer-payment-status';
 import { StatusBadgeComponent } from '../status-badge/status-badge';
 
 @Component({
@@ -18,7 +18,7 @@ export class BookingCardComponent {
   protected readonly paymentStatus = computed(() => customerPaymentStatus(this.booking()));
   protected readonly cashPaymentAction = computed(() => hasCashPaymentAction(this.booking()));
   protected readonly onlinePaymentAction = computed(() => hasOnlinePaymentAction(this.booking()));
-  protected readonly waitingForPaymentQr = computed(() => isWaitingForPaymentQr(this.booking()));
+  protected readonly paymentActionLabel = computed(() => customerPaymentActionLabel(this.booking()));
   protected readonly needsPaymentChoice = computed(() => needsPaymentMethodChoice(this.booking()));
   protected readonly incompleteDeposit = computed(() => hasIncompleteDownPayment(this.booking()));
   protected readonly remainingDeposit = computed(() => depositProgress(bookingTotal(this.booking()), this.booking().amountPaid).remainingDeposit);

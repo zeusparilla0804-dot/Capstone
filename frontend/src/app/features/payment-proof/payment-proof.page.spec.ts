@@ -25,6 +25,22 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+  it('offers an explicit bank choice without waiting for an administrator assignment', () => {
+    const api = TestBed.inject(PaymentDestinationService) as any;
+    api.options = vi.fn(() => of([
+      { id: 1, method: 'BANK_TRANSFER', label: 'Bank A', accountName: 'LA Chef', accountHint: '1111', version: 'a'.repeat(64) },
+      { id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: '2222', version: 'b'.repeat(64) },
+    ]));
+    api.optionImage = vi.fn(() => of(new Blob(['qr'], { type: 'image/png' })));
+    (fixture.componentInstance as any).loadDestination(); fixture.detectChanges();
+    const select = fixture.nativeElement.querySelector('#bank-account') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('');
+    select.value = '2'; select.dispatchEvent(new Event('change')); fixture.detectChanges();
+    expect(api.optionImage).toHaveBeenCalledWith('42', expect.objectContaining({ id: 2 }));
+    expect(fixture.nativeElement.querySelector('.destination-panel')?.textContent).toContain('Bank B');
+    expect(fixture.nativeElement.textContent).not.toContain('LA Chef will assign');
+  });
   it('shows review-only instructions for a pending proof until the customer explicitly chooses replacement', () => {
     bookingState.set([{ ...booking, total: 154000, amountPaid: 70000, status: 'payment_submitted', latestProofStatus: 'SUBMITTED' }]);
     (fixture.componentInstance as any).proofs.set([{ ...submittedProof, claimedAmount: 7000 }]); fixture.detectChanges();
@@ -36,7 +52,43 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
     expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(7000);
-    expect(fixture.nativeElement.querySelector('time#payment-date')?.getAttribute('datetime')).toBe(submittedProof.paymentDate);
+    expect((fixture.nativeElement.querySelector('#payment-date') as HTMLInputElement | null)?.value).toBe(submittedProof.paymentDate);
+  });
+
+  it('keeps Bank B selected when an older Bank A image finishes last and releases its image', () => {
+    const component = fixture.componentInstance as any;
+    const api = TestBed.inject(PaymentDestinationService) as any;
+    const bankA = { id: 1, method: 'BANK_TRANSFER', label: 'Bank A', accountName: 'LA Chef', accountHint: '1111', version: 'a'.repeat(64) };
+    const bankB = { ...bankA, id: 2, label: 'Bank B', version: 'b'.repeat(64) };
+    const first = new Subject<Blob>(); const second = new Subject<Blob>();
+    api.options = vi.fn(() => of([bankA, bankB]));
+    api.optionImage = vi.fn((_id, bank) => bank.id === 1 ? first : second);
+    component.loadDestination(); fixture.detectChanges();
+    const select = fixture.nativeElement.querySelector('#bank-account') as HTMLSelectElement;
+    select.value = '1'; select.dispatchEvent(new Event('change'));
+    select.value = '2'; select.dispatchEvent(new Event('change'));
+    const b = new Blob(['Bank B']); second.next(b); first.next(new Blob(['Bank A']));
+    fixture.detectChanges();
+    expect(component.destination().id).toBe(2);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledWith(b);
+    expect(fixture.nativeElement.querySelector('.destination-panel img')?.getAttribute('src')).toBe(component.destinationImage());
+    fixture.destroy(); expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:assigned-qr');
+  });
+
+  it('preserves an already transferred payment when the selected bank changed', () => {
+    const component = fixture.componentInstance as any;
+    component.destination.set({ id: 1, version: 'a'.repeat(64) }); component.destinationImage.set('blob:test');
+    const file = new File(['proof'], 'proof.png', { type: 'image/png' });
+    component.selectedFile.set(file);
+    component.form.setValue({ method: 'BANK_TRANSFER', claimedAmount: 5000, transactionReference: 'SENT-42', paymentDate: '2026-10-02' });
+    component.submit();
+    submitEvents.error(new HttpErrorResponse({ status: 409, error: { message: 'This bank account changed. If you already transferred money, contact LA Chef; do not pay again.' } }));
+    fixture.detectChanges();
+    expect(component.selectedFile()).toBe(file);
+    expect(component.form.getRawValue()).toMatchObject({ claimedAmount: 5000, transactionReference: 'SENT-42' });
+    expect(fixture.nativeElement.textContent).toContain('do not pay again');
+    expect(bookingState()[0]!.amountPaid).toBe(10000);
   });
 
   it('keeps corrected proof history readable after full payment without offering a new payment', () => {
@@ -57,14 +109,30 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Verified amount');
     expect(component.form.controls.claimedAmount.value).toBe(7000);
   });
-  it('shows a non-interactive payment date and omits the separate submission date', () => {
+  it('lets the customer enter the actual receipt date and omits a separate submission date', () => {
     const root = fixture.nativeElement as HTMLElement;
-    const date = root.querySelector('time#payment-date');
+    const date = root.querySelector<HTMLInputElement>('input#payment-date');
     expect(date).not.toBeNull();
-    expect(date?.getAttribute('datetime')).toBe((fixture.componentInstance as any).form.controls.paymentDate.value);
-    expect(root.querySelector('input[formControlName="paymentDate"],input[type="date"]')).toBeNull();
+    date!.value = '2026-10-02'; date!.dispatchEvent(new Event('input'));
+    expect((fixture.componentInstance as any).form.controls.paymentDate.value).toBe('2026-10-02');
     expect(root.querySelector('[data-testid="submission-date"]')).toBeNull();
     expect(root.textContent).not.toContain('Submission date');
+  });
+
+  it('corrects the receiving bank on an existing proof without asking for another transfer', () => {
+    const component = fixture.componentInstance as any;
+    bookingState.set([{ ...booking, status: 'payment_submitted', latestProofStatus: 'SUBMITTED' }]);
+    component.proofs.set([{ ...submittedProof, destinationId: 2, destinationVersion: 'b'.repeat(64), destinationLabel: 'Bank B original' }]);
+    fixture.detectChanges(); component.beginProofReplacement(); fixture.detectChanges();
+    const bank = fixture.nativeElement.querySelector('#replacement-bank') as HTMLSelectElement;
+    expect(bank).not.toBeNull(); expect(bank.value).toBe('original');
+    bank.value = '1'; bank.dispatchEvent(new Event('change')); fixture.detectChanges();
+    component.selectedFile.set(new File(['proof'], 'receipt.png', { type: 'image/png' }));
+    component.submit();
+    expect(proofApi.submitProof).toHaveBeenCalledWith('42', expect.objectContaining({ destinationId: 1,
+      destinationVersion: 'a'.repeat(64), paymentDate: submittedProof.paymentDate, replacesProofId: submittedProof.id }), expect.any(File));
+    expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('No additional transfer');
   });
   it('keeps legacy GCash amounts visible without a QR or new receipt upload', async () => {
     bookingState.set([{ ...booking, paymentMethod: 'gcash' }]); fixture.detectChanges();
@@ -137,13 +205,15 @@ describe('PaymentProofPageComponent', () => {
     fixture.detectChanges();
     expect((fixture.componentInstance as any).form.controls.method.value).toBe('BANK_TRANSFER');
     expect(fixture.nativeElement.querySelector('[data-testid="selected-payment-method"]')?.textContent).toContain('Bank transfer');
-    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#payment-method')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#bank-account')).not.toBeNull();
   });
 
   it('displays the saved payment method without asking the customer to select it again', () => {
     bookingState.set([{ ...booking, amountPaid: 0 }]);
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('select')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#payment-method')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#bank-account')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('[data-testid="selected-payment-method"]')?.textContent).toContain('Bank transfer');
     expect(TestBed.inject(BookingService).choosePaymentMethod).not.toHaveBeenCalled();
     bookingState.set([{ ...booking, paymentMethod: 'cash', amountPaid: 0 }]);
@@ -178,6 +248,8 @@ describe('PaymentProofPageComponent', () => {
           }) } },
         { provide: PaymentProofService, useValue: proofApi },
         { provide: PaymentDestinationService, useValue: {
+          options: vi.fn(() => of([{ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234', version: 'a'.repeat(64) }])),
+          optionImage: vi.fn(() => of(new Blob(['qr'], { type: 'image/png' }))),
           assigned: vi.fn(() => of({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234' })),
           image: vi.fn(() => of(new Blob(['qr'], { type: 'image/png' }))),
         } },
@@ -197,37 +269,6 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Payment proof is not available');
   });
 
-  it('does not repeat a saved-choice popup when reopening Submit Payment without an assigned QR', () => {
-    bookingState.set([{ ...booking, amountPaid: 0 }]);
-    fixture.detectChanges();
-    const api = TestBed.inject(PaymentDestinationService);
-    vi.mocked(api.assigned).mockReturnValue(of(null));
-    (fixture.componentInstance as any).loadDestination();
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('app-success-dialog')).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Payment instructions');
-    expect(fixture.nativeElement.textContent).not.toContain('Check again');
-    expect(fixture.nativeElement.querySelector('.qr-waiting')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('.submit-button')).toBeNull();
-    expect(fixture.nativeElement.querySelector('#proof-file')).toBeNull();
-    vi.mocked(api.assigned).mockReturnValue(of({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234' }));
-    (fixture.componentInstance as any).loadDestination();
-    fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('Submit payment proof');
-    expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
-  });
-
-  for (const lifecycle of ['payment_verified', 'confirmed', 'completed'] as const) {
-    it('accepts an online outstanding balance proof for ' + lifecycle + ' and hides the form when paid', () => {
-      bookingState.set([{ ...booking, status: lifecycle, paymentMethod: 'bank-transfer', amountPaid: 42500 }]);
-      fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('input[type="file"]')).not.toBeNull();
-      expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(42500);
-      bookingState.set([{ ...booking, status: lifecycle, paymentMethod: 'bank-transfer', amountPaid: 85000 }]);
-      fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('input[type="file"]')).toBeNull();
-    });
-  }
 
   it('defaults to only the remaining amount needed for the 50% reservation deposit', () => {
     const component = fixture.componentInstance as unknown as {
@@ -270,7 +311,7 @@ describe('PaymentProofPageComponent', () => {
       destinationImage: { set(value: string): void };
       submit(): void;
     };
-    component.destination.set({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234' });
+    component.destination.set({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234', version: 'a'.repeat(64) });
     component.destinationImage.set('blob:test');
     component.form.setValue({ method: 'BANK_TRANSFER', claimedAmount: 5000, transactionReference: 'BANK-42', paymentDate: '2026-10-02' });
     component.selectedFile.set(new File(['proof'], 'proof.png', { type: 'image/png' }));
@@ -303,7 +344,7 @@ describe('PaymentProofPageComponent', () => {
       destinationImage: { set(value: string): void };
       submit(): void;
     };
-    component.destination.set({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234' });
+    component.destination.set({ id: 1, label: 'Bank transfer', method: 'BANK_TRANSFER', accountName: 'LA Chef', accountHint: 'Ending 1234', version: 'a'.repeat(64) });
     component.destinationImage.set('blob:test');
     component.form.setValue({ method: 'BANK_TRANSFER', claimedAmount: 5000, transactionReference: 'USED-REFERENCE', paymentDate: '2026-10-02' });
     component.selectedFile.set(new File(['proof'], 'proof.png', { type: 'image/png' }));

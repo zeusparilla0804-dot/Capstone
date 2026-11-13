@@ -1,3 +1,4 @@
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 import { Component, Input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -14,6 +15,22 @@ class ShellStub {
 }
 
 describe('AdminPaymentsPage payment-proof queue', () => {
+  it('offers account refresh after a stale bank conflict without clearing entered payment details', async () => {
+    const bank = { id: 8, reservationId: 43, bookingReference: 'BK-43', customerName: 'Customer', amountDue: 10000, amountPaid: 5000,
+      paymentMethod: 'BANK_TRANSFER', status: 'PARTIALLY_PAID', bookingStatus: 'CONFIRMED' };
+    const recordPayment = vi.fn(() => throwError(() => ({ error: { message: 'The selected bank account or QR has changed.' } })));
+    TestBed.configureTestingModule({ imports: [AdminPaymentsPage], providers: [provideRouter([]), { provide: AdminService, useValue: {
+      payments: () => of({ data: { items: [bank] } }), paymentProofs: () => of({ data: { items: [] } }), recordPayment } }] })
+      .overrideComponent(AdminPaymentsPage, { remove: { imports: [AdminShellComponent] }, add: { imports: [ShellStub] } });
+    const fixture = TestBed.createComponent(AdminPaymentsPage); const component = fixture.componentInstance as any;
+    component.recordCash(bank); component.receivingBank.setValue(2); component.form.controls.amount.setValue(2000); component.transactionReference.setValue('SENT-BANK');
+    component.save(); fixture.detectChanges();
+    const refresh = [...fixture.nativeElement.querySelectorAll('button')].find((button: any) => button.textContent.includes('Refresh accounts')) as HTMLButtonElement;
+    expect(refresh).toBeDefined(); refresh.click(); fixture.detectChanges();
+    expect(component.form.controls.amount.value).toBe(2000); expect(component.transactionReference.value).toBe('SENT-BANK');
+    expect(recordPayment).toHaveBeenCalledOnce();
+  });
+  beforeEach(() => TestBed.configureTestingModule({ providers: [{ provide: PaymentDestinationService, useValue: { adminOptions: () => of([{ id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: '2222', version: 'b'.repeat(64) }]) } }] }));
   it.each(['CASH', 'BANK_TRANSFER'])('records a %s balance after a deposit by the other method using the actual received date', async method => {
     const bank = { id: 8, reservationId: 43, bookingReference: 'BK-BANK-43', customerName: 'Bank Customer', amountDue: 10000, amountPaid: 5000,
       paymentMethod: method === 'CASH' ? 'BANK_TRANSFER' : 'CASH', paymentDestinationLabel: 'BPI LA Chef', status: 'PARTIALLY_PAID', bookingStatus: 'PAYMENT_VERIFIED' };
@@ -23,7 +40,7 @@ describe('AdminPaymentsPage payment-proof queue', () => {
         paymentProofs: () => of({ data: { items: [], page: 1, totalPages: 0 } }) } }] })
       .overrideComponent(AdminPaymentsPage, { remove: { imports: [AdminShellComponent] }, add: { imports: [ShellStub] } }).compileComponents();
     const fixture = TestBed.createComponent(AdminPaymentsPage); const component = fixture.componentInstance as any;
-    component.recordCash(bank); fixture.detectChanges();
+    component.recordCash(bank); component.receivingBank.setValue(2); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('select[formControlName="method"]')).not.toBeNull();
     component.form.controls.method.setValue(method);
     component.form.controls.amount.setValue(5000);
@@ -41,7 +58,7 @@ describe('AdminPaymentsPage payment-proof queue', () => {
     expect(feedback.confirmation()?.message).not.toContain('BPI LA Chef');
     feedback.decide(true);
     expect(recordPayment.mock.calls[0]?.[0]).toMatchObject({ reservationId: 43, method, amount: 5000, paymentDate: '2026-10-31',
-      ...(method === 'BANK_TRANSFER' ? { reference: 'BANK-INSTALLMENT' } : {}) });
+      ...(method === 'BANK_TRANSFER' ? { reference: 'BANK-INSTALLMENT', destinationId: 2, destinationVersion: 'b'.repeat(64) } : {}) });
     expect(bank.paymentMethod).toBe(method === 'CASH' ? 'BANK_TRANSFER' : 'CASH');
   });
   it.each(['CASH', 'BANK_TRANSFER'])('records a new %s payment on a legacy booking while keeping the original row intact', async method => {
@@ -53,7 +70,7 @@ describe('AdminPaymentsPage payment-proof queue', () => {
         paymentProofs: () => of({ data: { items: [], page: 1, totalPages: 0 } }) } }] })
       .overrideComponent(AdminPaymentsPage, { remove: { imports: [AdminShellComponent] }, add: { imports: [ShellStub] } }).compileComponents();
     const fixture = TestBed.createComponent(AdminPaymentsPage); const component = fixture.componentInstance as any;
-    component.recordCash(old); fixture.detectChanges();
+    component.recordCash(old); component.receivingBank.setValue(2); fixture.detectChanges();
     const choices = [...fixture.nativeElement.querySelectorAll('select[formControlName="method"] option')].map((option: any) => option.value);
     expect(choices).toEqual(['', 'CASH', 'BANK_TRANSFER']);
     component.form.controls.amount.setValue(2000);
@@ -85,7 +102,7 @@ describe('AdminPaymentsPage payment-proof queue', () => {
     component.form.controls.amount.setValue(5000);
     component.requestSave();
     expect(recordPayment).not.toHaveBeenCalled();
-    component.transactionReference.setValue('BANK-FINAL-43');
+    component.transactionReference.setValue('BANK-FINAL-43'); component.receivingBank.setValue(2);
     component.requestSave();
     const feedback = TestBed.inject(ActionFeedbackService);
     expect(feedback.confirmation()?.message).toContain('BANK-FINAL-43');

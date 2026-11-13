@@ -11,12 +11,27 @@ process.env.DB_PASSWORD ??= 'test';
 
 const { recordPayment } = await import('./admin.repository.js');
 const { closeDatabase } = await import('../config/database.js');
+const { paymentBankVersion } = await import('../services/payment-bank.service.js');
+const bank = { id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: 'Ending 2222', isAvailable: true, mime: 'image/png', image: Buffer.from('bank-b') };
+const bankChoice = { destinationId: bank.id, destinationVersion: paymentBankVersion(bank) };
+
+test('staff bank installments store the selected receiving bank and reject changed-bank reference replays', async t => {
+  const db = installDatabase(t, 'CONFIRMED', { amountPaid: 50, paymentMethod: 'BANK_TRANSFER' });
+  try {
+    const input = { reservationId: 5, amount: 20, method: 'BANK_TRANSFER' as const, ...bankChoice, reference: 'BANK-B-20', paymentDate: '2026-10-02', ...bankChoice };
+    await recordPayment(2, input);
+    assert.equal(db.credits[0]!['destinationLabel'], 'Bank B');
+    assert.equal(db.credits[0]!['destinationAccountHint'], 'Ending 2222');
+    await recordPayment(2, input); assert.equal(db.credits.length, 1);
+    await assert.rejects(recordPayment(2, { ...input, destinationId: 3 }), /PAYMENT_REFERENCE_CONFLICT/);
+  } finally { await closeDatabase(); }
+});
 
 for (const [previousMethod, method] of [['BANK_TRANSFER', 'CASH'], ['CASH', 'BANK_TRANSFER']] as const) {
   test(`the first ${method} payment cannot bypass the selected ${previousMethod} method`, async t => {
     const db = installDatabase(t, 'AWAITING_PAYMENT', { amountPaid: 0, paymentMethod: previousMethod });
     try {
-      await assert.rejects(recordPayment(2, { reservationId: 5, amount: 50, method, reference: `FIRST-${method}`, paymentDate: '2026-10-02' }), /PAYMENT_METHOD_NOT_SELECTED/);
+      await assert.rejects(recordPayment(2, { reservationId: 5, amount: 50, method, ...(method === 'BANK_TRANSFER' ? bankChoice : {}), reference: `FIRST-${method}`, paymentDate: '2026-10-02' }), /PAYMENT_METHOD_NOT_SELECTED/);
       assert.equal(db.credits.length, 0);
       assert.deepEqual(db.events, ['begin', 'rollback']);
     } finally { await closeDatabase(); }
@@ -24,7 +39,7 @@ for (const [previousMethod, method] of [['BANK_TRANSFER', 'CASH'], ['CASH', 'BAN
   test(`an additional ${method} installment preserves earlier ${previousMethod} transactions`, async t => {
     const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountPaid: 50, paymentMethod: previousMethod });
     try {
-      assert.equal(await recordPayment(2, { reservationId: 5, amount: 50, method, reference: `BALANCE-${method}`, paymentDate: '2026-10-02' }), true);
+      assert.equal(await recordPayment(2, { reservationId: 5, amount: 50, method, ...(method === 'BANK_TRANSFER' ? bankChoice : {}), reference: `BALANCE-${method}`, paymentDate: '2026-10-02' }), true);
       assert.equal(db.credits.length, 1);
       assert.equal(db.credits[0]!['method'], method);
       assert.equal(db.status(), 'PAYMENT_VERIFIED');
@@ -37,7 +52,7 @@ for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
   test(`a retired GCash booking can receive only a new ${method} payment without rewriting earlier transactions`, async t => {
     const db = installDatabase(t, 'PAYMENT_SUBMITTED', { amountDue: 100, amountPaid: 10, paymentMethod: 'E-WALLET' });
     try {
-      const input = { reservationId: 5, amount: 20, method, reference: `RECOVERY-${method}`, paymentDate: '2026-11-08' };
+      const input = { reservationId: 5, amount: 20, method, ...(method === 'BANK_TRANSFER' ? bankChoice : {}), reference: `RECOVERY-${method}`, paymentDate: '2026-11-08' };
       assert.equal(await recordPayment(2, input), true);
       assert.equal(db.amountPaid(), 30);
       assert.equal(db.credits.length, 1);
@@ -53,7 +68,7 @@ for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
 test('an additional verified bank transfer pays the balance without completing an unfinished event or duplicating retries', async t => {
   const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER' });
   try {
-    const input = { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER' as const, reference: 'BANK-FINAL-42', paymentDate: '2026-11-08' };
+    const input = { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER' as const, ...bankChoice, reference: 'BANK-FINAL-42', paymentDate: '2026-11-08' };
     assert.equal(await recordPayment(2, input), true);
     assert.equal(db.amountPaid(), 80000);
     assert.equal(db.status(), 'PAYMENT_VERIFIED');
@@ -66,7 +81,7 @@ test('an additional verified bank transfer pays the balance without completing a
 test('verified final bank payment and event completion commit together', async t => {
   const db = installDatabase(t, 'PAYMENT_VERIFIED', { amountDue: 80000, amountPaid: 40000, paymentMethod: 'BANK_TRANSFER', eventDate: '2026-01-01' });
   try {
-    await recordPayment(2, { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER', reference: 'BANK-EVENT-42', paymentDate: '2026-11-08' }, { completeEvent: true });
+    await recordPayment(2, { reservationId: 5, amount: 40000, method: 'BANK_TRANSFER', ...bankChoice, reference: 'BANK-EVENT-42', paymentDate: '2026-11-08' }, { completeEvent: true });
     assert.equal(db.amountPaid(), 80000);
     assert.equal(db.status(), 'COMPLETED');
     assert.equal(db.credits.length, 1);
@@ -139,6 +154,7 @@ function installDatabase(
     queries.push(command);
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, value]) => [key, value.value]));
     const result = (recordset: Record<string, unknown>[] = [], rows = 1) => ({ recordset, rowsAffected: [rows] });
+    if (/FROM dbo\.PAYMENT_DESTINATION d/i.test(command)) return result([bank]);
     if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return result(amounts.policy ? [amounts.policy] : []);
     if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
       for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'UpdatedAt']) {
@@ -162,7 +178,7 @@ function installDatabase(
       return result(amounts.previous ? [amounts.previous] : credits.filter(credit => credit.method === values['method'] && credit.reference === values['reference']));
     }
     if (/INSERT dbo\.PAYMENT_TRANSACTION/i.test(command)) {
-      credits.push({ payment_id: values['paymentId'], amount: values['amount'], payment_date: (values['date'] as Date).toISOString().slice(0, 10), actual_payment_at: values['date'], method: values['method'], reference: values['reference'] });
+      credits.push({ ...values, destination_id: values['destinationId'], destination_version: values['destinationVersion'], payment_id: values['paymentId'], amount: values['amount'], payment_date: (values['date'] as Date).toISOString().slice(0, 10), actual_payment_at: values['date'], method: values['method'], reference: values['reference'] });
       return result();
     }
     if (/UPDATE dbo\.PAYMENT SET amount_paid/i.test(command)) { amountPaid = (Math.round(amountPaid * 100) + Math.round(Number(values['amount']) * 100)) / 100; return result(); }
@@ -219,7 +235,7 @@ test('manual payment uses cumulative paid amount and advances at the exact half-
   const db = installDatabase(t, 'AWAITING_PAYMENT', { amountPaid: 30, paymentMethod: 'BANK_TRANSFER' });
   try {
     assert.equal(await recordPayment(2, {
-      reservationId: 5, amount: 20, method: 'BANK_TRANSFER', reference: 'BANK-1', paymentDate: '2026-10-02'
+      reservationId: 5, amount: 20, method: 'BANK_TRANSFER', ...bankChoice, reference: 'BANK-1', paymentDate: '2026-10-02'
     }), true);
     assert.equal(db.status(), 'PAYMENT_VERIFIED');
   } finally { await closeDatabase(); }
@@ -281,7 +297,7 @@ test('exact committed payment retry succeeds without repeating any side effects 
 for (const method of ['CASH', 'BANK_TRANSFER'] as const) {
   test(`lost-response ${method} retry records one credit and one set of side effects`, async t => {
     const db = installDatabase(t, 'AWAITING_PAYMENT', { paymentMethod: method });
-    const input = { reservationId: 5, amount: 90, method, reference: 'RETRY-1', paymentDate: '2026-10-02' };
+    const input = { reservationId: 5, amount: 90, method, ...(method === 'BANK_TRANSFER' ? bankChoice : {}), reference: 'RETRY-1', paymentDate: '2026-10-02' };
     try {
       await recordPayment(2, input);
       const mutations = db.queries.filter(query => /\b(INSERT|UPDATE)\b/i.test(query)).length;

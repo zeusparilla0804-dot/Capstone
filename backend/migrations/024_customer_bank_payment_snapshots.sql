@@ -1,0 +1,25 @@
+SET XACT_ABORT ON;
+IF COL_LENGTH('dbo.PAYMENT_PROOF','destination_id') IS NULL
+  ALTER TABLE dbo.PAYMENT_PROOF ADD destination_id int NULL;
+IF COL_LENGTH('dbo.PAYMENT_PROOF','destination_label') IS NULL
+  ALTER TABLE dbo.PAYMENT_PROOF ADD destination_label nvarchar(100) NULL;
+IF COL_LENGTH('dbo.PAYMENT_PROOF','destination_account_name') IS NULL
+  ALTER TABLE dbo.PAYMENT_PROOF ADD destination_account_name nvarchar(200) NULL;
+IF COL_LENGTH('dbo.PAYMENT_PROOF','destination_account_hint') IS NULL
+  ALTER TABLE dbo.PAYMENT_PROOF ADD destination_account_hint nvarchar(50) NULL;
+IF COL_LENGTH('dbo.PAYMENT_PROOF','destination_version') IS NULL
+  ALTER TABLE dbo.PAYMENT_PROOF ADD destination_version nvarchar(64) NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.foreign_keys WHERE name='FK_PAYMENT_PROOF_DESTINATION')
+  ALTER TABLE dbo.PAYMENT_PROOF ADD CONSTRAINT FK_PAYMENT_PROOF_DESTINATION FOREIGN KEY(destination_id) REFERENCES dbo.PAYMENT_DESTINATION(destination_id);
+IF COL_LENGTH('dbo.PAYMENT_TRANSACTION','destination_id') IS NULL
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD destination_id int NULL;
+IF COL_LENGTH('dbo.PAYMENT_TRANSACTION','destination_label') IS NULL
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD destination_label nvarchar(100) NULL;
+IF COL_LENGTH('dbo.PAYMENT_TRANSACTION','destination_account_name') IS NULL
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD destination_account_name nvarchar(200) NULL;
+IF COL_LENGTH('dbo.PAYMENT_TRANSACTION','destination_account_hint') IS NULL
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD destination_account_hint nvarchar(50) NULL;
+IF COL_LENGTH('dbo.PAYMENT_TRANSACTION','destination_version') IS NULL
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD destination_version nvarchar(64) NULL;
+IF NOT EXISTS(SELECT 1 FROM sys.foreign_keys WHERE name='FK_PAYMENT_TRANSACTION_DESTINATION')
+  ALTER TABLE dbo.PAYMENT_TRANSACTION ADD CONSTRAINT FK_PAYMENT_TRANSACTION_DESTINATION FOREIGN KEY(destination_id) REFERENCES dbo.PAYMENT_DESTINATION(destination_id);

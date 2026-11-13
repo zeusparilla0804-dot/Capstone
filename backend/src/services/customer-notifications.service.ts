@@ -6,7 +6,7 @@ const copy: Record<string, readonly [string, string]> = {
   BOOKING_RECEIVED: ['Booking received', 'Your booking has been submitted for review.'],
   BOOKING_APPROVED: ['Booking approved', 'LA Chef has approved your booking.'],
   PAYMENT_REQUESTED: ['Choose your payment method', 'Your booking is ready for the payment step.'],
-  PAYMENT_QR_READY: ['Your payment QR is ready', 'View your assigned QR and payment instructions.'],
+  PAYMENT_QR_READY: ['Your payment QR is ready', 'Choose an available bank and view its QR and payment instructions.'],
   BOOKING_REJECTED: ['Booking update', 'Your booking was not approved. View your reservations for details.'],
   INVOICE_ISSUED: ['Invoice available', 'Your booking invoice is ready to view.'],
   PAYMENT_PROOF_SUBMITTED: ['Payment proof submitted', 'Your payment proof is awaiting review.'],

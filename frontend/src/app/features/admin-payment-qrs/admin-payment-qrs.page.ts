@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject, OnDestroy, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
-import { PaymentDestination, PaymentDestinationService, PaymentQrWaitingBooking } from '../../core/services/payment-destination.service';
+import { PaymentDestination, PaymentDestinationService } from '../../core/services/payment-destination.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 
@@ -16,13 +16,10 @@ export class AdminPaymentQrsPage implements OnDestroy {
   private readonly api = inject(PaymentDestinationService);
   private readonly feedbackDialog = inject(ActionFeedbackService);
   protected readonly destinations = signal<PaymentDestination[]>([]);
-  protected readonly waitingBookings = signal<PaymentQrWaitingBooking[]>([]);
   protected readonly images = signal<Record<number, string>>({});
   protected readonly error = signal('');
   protected readonly notice = signal('');
   protected readonly busy = signal(false);
-  protected readonly selectedBooking = signal<PaymentQrWaitingBooking | null>(null);
-  protected readonly selectedId = signal<number | null>(null);
   protected readonly editingId = signal<number | null>(null);
   protected method: 'BANK_TRANSFER' | 'E-WALLET' = 'BANK_TRANSFER';
   protected label = '';
@@ -35,10 +32,8 @@ export class AdminPaymentQrsPage implements OnDestroy {
 
   protected async load(): Promise<void> {
     try {
-      const [items, waiting] = await Promise.all([firstValueFrom(this.api.list()), firstValueFrom(this.api.waitingBookings())]);
+      const items = await firstValueFrom(this.api.list());
       this.destinations.set(items.filter(item => item.method === 'BANK_TRANSFER'));
-      this.waitingBookings.set(waiting.filter(item => item.paymentMethod === 'BANK_TRANSFER'));
-      if (this.selectedBooking() && !this.waitingBookings().some(item => item.id === this.selectedBooking()?.id)) this.selectedBooking.set(null);
       for (const item of this.destinations()) {
         if (this.images()[item.id]) continue;
         try {
@@ -79,49 +74,14 @@ export class AdminPaymentQrsPage implements OnDestroy {
   protected requestToggle(item: PaymentDestination): void {
     if (this.busy()) return;
     this.feedbackDialog.confirm({ title: item.isAvailable ? 'Make this QR unavailable?' : 'Make this QR available?',
-      message: `${item.label}\n${item.isAvailable ? 'Customers will no longer be able to use this QR account while it is unavailable.' : 'This QR account will be available for customer assignments.'}`,
+      message: `${item.label}\n${item.isAvailable ? 'Customers will no longer be able to use this QR account while it is unavailable.' : 'This QR account will be available for customers to select.'}`,
       confirmLabel: 'Confirm availability', destructive: !!item.isAvailable,
     }, () => { void this.toggle(item); });
   }
   protected async toggle(item: PaymentDestination): Promise<void> {
     this.error.set(''); this.notice.set(''); this.busy.set(true);
-    try { await firstValueFrom(this.api.availability(item.id, !item.isAvailable)); await this.load(); this.notice.set('Availability updated. Assigned customers will see only available QR accounts.'); }
+    try { await firstValueFrom(this.api.availability(item.id, !item.isAvailable)); await this.load(); this.notice.set('Availability updated. Customers can select available bank accounts immediately.'); }
     catch (error) { this.error.set(this.message(error, 'Unable to update availability.')); }
-    finally { this.busy.set(false); }
-  }
-  protected selectBooking(item: PaymentQrWaitingBooking): void {
-    this.selectedBooking.set(item);
-    this.selectedId.set(null);
-    this.error.set('');
-    this.notice.set('');
-  }
-  protected compatible(item: PaymentDestination): boolean {
-    return !!item.isAvailable && item.method === 'BANK_TRANSFER' && item.method === this.selectedBooking()?.paymentMethod;
-  }
-  protected availableForSelected(): PaymentDestination[] {
-    return this.destinations().filter(item => this.compatible(item));
-  }
-  protected requestAssignment(): void {
-    if (this.busy()) return;
-    const booking = this.selectedBooking();
-    const destination = this.destinations().find(item => item.id === this.selectedId() && this.compatible(item));
-    if (!booking || !destination) return;
-    this.feedbackDialog.confirm({ title: 'Send payment QR?', confirmLabel: 'Confirm and send QR',
-      message: `${booking.customerName} · ${booking.reference}\nQR account: ${destination.label}\n\nThe customer will be able to use this account for their payment.`,
-    }, () => { if (this.selectedBooking() === booking && this.selectedId() === destination.id) void this.assign(); });
-  }
-  protected async assign(): Promise<void> {
-    const booking = this.selectedBooking(); const id = this.selectedId();
-    if (!booking || !id) return;
-    this.error.set(''); this.notice.set(''); this.busy.set(true);
-    try {
-      await firstValueFrom(this.api.assign(booking.id, id));
-      this.selectedBooking.set(null); this.selectedId.set(null);
-      this.waitingBookings.update(items => items.filter(item => item.id !== booking.id));
-      this.notice.set(`QR account assigned to ${booking.reference}. The customer can now view it on Submit Payment.`);
-      await this.load();
-    }
-    catch (error) { this.error.set(this.message(error, 'Unable to assign this QR account.')); }
     finally { this.busy.set(false); }
   }
   private message(error: unknown, fallback: string): string {

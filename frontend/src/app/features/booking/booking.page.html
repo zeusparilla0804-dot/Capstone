@@ -53,7 +53,7 @@
                 @for (method of availablePaymentMethods(); track method.value) {
                   <label class="selection-row" [class.is-selected]="approvedPaymentMethod() === method.value">
                     <input type="radio" name="approvedPaymentMethod" [value]="method.value" [checked]="approvedPaymentMethod() === method.value" [disabled]="isSubmitting()" (change)="selectApprovedPayment(method.value)" />
-                    <span><strong>{{ method.label }}</strong><small>{{ method.value === 'cash' ? 'Pay at the LA Chef office. Staff will record your payment.' : 'View your assigned QR and submit payment proof for review after continuing.' }}</small></span>
+                    <span><strong>{{ method.label }}</strong><small>{{ method.value === 'cash' ? 'Pay at the LA Chef office. Staff will record your payment.' : 'Choose a bank account, view its QR, and submit payment proof after continuing.' }}</small></span>
                   </label>
                 }
               </fieldset>

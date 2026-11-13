@@ -21,7 +21,7 @@
       </section>
       <section class="proof-facts" aria-labelledby="proof-details-title">
         <div class="section-heading"><div><h2 id="proof-details-title">Submission details</h2><p>Values declared by the customer.</p></div></div>
-        <dl><div><dt>Claimed amount</dt><dd>{{ record.proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Payment method</dt><dd>{{ methodLabel(record.proof.method) }}</dd></div><div><dt>Payment date</dt><dd>{{ record.proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Transaction reference</dt><dd>{{ record.proof.transactionReference || 'Not provided' }}</dd></div><div><dt>Uploaded file</dt><dd>{{ record.proof.originalFilename }}</dd></div><div><dt>File size</dt><dd>{{ fileSize(record.proof.byteSize) }}</dd></div></dl>
+        <dl><div><dt>Claimed amount</dt><dd>{{ record.proof.claimedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Payment method</dt><dd>{{ methodLabel(record.proof.method) }}</dd></div>@if (record.proof.method === 'BANK_TRANSFER') { <div><dt>Receiving bank</dt><dd>{{ record.proof.destinationLabel || 'Bank not recorded' }}@if (record.proof.destinationAccountName) { <br />{{ record.proof.destinationAccountName }} }@if (record.proof.destinationAccountHint) { <br />{{ record.proof.destinationAccountHint }} }</dd></div> }<div><dt>Payment date</dt><dd>{{ record.proof.paymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Transaction reference</dt><dd>{{ record.proof.transactionReference || 'Not provided' }}</dd></div><div><dt>Uploaded file</dt><dd>{{ record.proof.originalFilename }}</dd></div><div><dt>File size</dt><dd>{{ fileSize(record.proof.byteSize) }}</dd></div></dl>
       </section>
     </div>
 

@@ -30,12 +30,13 @@ const upload = multer({
   limits: {
     fileSize: MAX_PAYMENT_PROOF_BYTES,
     files: 1,
-    fields: 4,
-    parts: 5,
+    fields: 7,
+    parts: 8,
     fieldSize: 256,
     fieldNameSize: 32
   }
 }).single('proof');
+const allowedFields = new Set(['method', 'claimedAmount', 'transactionReference', 'paymentDate', 'destinationId', 'destinationVersion', 'replacesProofId']);
 
 interface OnceEmitter {
   once(event: string, listener: () => void): unknown;
@@ -78,6 +79,14 @@ export async function paymentProofUpload(
         void removeProofFileBestEffort(request.file.path, 'multipart rejection cleanup', paymentProofUploadRoot);
       }
       next(error instanceof multer.MulterError ? mapMulterError(error) : error);
+      return;
+    }
+
+    if (Object.entries(request.body ?? {}).some(([name, value]) => !allowedFields.has(name) || typeof value !== 'string')) {
+      const invalid = new AppError(400, 'Payment proof form contains an unexpected field.');
+      if (request.file?.path) {
+        void removeProofFileBestEffort(request.file.path, 'unexpected multipart field cleanup', paymentProofUploadRoot).then(() => next(invalid), () => next(invalid));
+      } else next(invalid);
       return;
     }
 

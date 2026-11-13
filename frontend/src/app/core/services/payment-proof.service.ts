@@ -24,6 +24,9 @@ export class PaymentProofService {
     body.set('claimedAmount', String(input.claimedAmount));
     if (input.transactionReference) body.set('transactionReference', input.transactionReference);
     body.set('paymentDate', input.paymentDate);
+    if (input.destinationId !== undefined) body.set('destinationId', String(input.destinationId));
+    if (input.destinationVersion) body.set('destinationVersion', input.destinationVersion);
+    if (input.replacesProofId) body.set('replacesProofId', input.replacesProofId);
     body.set('proof', file, file.name);
     return this.http.post<ApiResponse<ApiProof>>(
       `${environment.apiBaseUrl}/bookings/${bookingId}/payment-proofs`, body,

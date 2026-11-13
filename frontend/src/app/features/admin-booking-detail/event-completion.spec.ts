@@ -1,3 +1,4 @@
+import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
 import { AdminService } from '../../core/services/admin.service';
@@ -9,7 +10,7 @@ describe('Final event payment and completion', () => {
     eventDate: '2026-01-01', status: 'PAYMENT_VERIFIED', paymentMethod: 'BANK_TRANSFER', invoiceId: 8 };
   let api: { completeEvent: ReturnType<typeof vi.fn> };
   beforeEach(() => { api = { completeEvent: vi.fn((_id: number, _input: { requestId: string }) => of({ success: true, data: { status: 'COMPLETED' } })) };
-    TestBed.configureTestingModule({ imports: [EventCompletionComponent], providers: [{ provide: AdminService, useValue: api }] }); });
+    TestBed.configureTestingModule({ imports: [EventCompletionComponent], providers: [{ provide: AdminService, useValue: api }, { provide: PaymentDestinationService, useValue: { adminOptions: () => of([{ id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: '2222', version: 'b'.repeat(64) }]) } }] }); });
   function render(value = booking) { const fixture = TestBed.createComponent(EventCompletionComponent); fixture.componentRef.setInput('booking', value); fixture.detectChanges(); return fixture; }
 
   it('requires actual funds, payment method and event-finished confirmation before recording the remaining balance', () => {
@@ -25,9 +26,9 @@ describe('Final event payment and completion', () => {
     expect(component.method()).toBe('BANK_TRANSFER');
     component.fundsReceived.set(true); component.eventFinished.set(true);
     expect(component.canSubmit()).toBe(false);
-    component.reference.set('BANK-FINAL-42'); component.submit();
+    component.reference.set('BANK-FINAL-42'); component.receivingBank.set(2); component.submit();
     TestBed.inject(ActionFeedbackService).decide(true);
-    expect(api.completeEvent).toHaveBeenCalledWith(42, expect.objectContaining({ amount: 40000, method: 'BANK_TRANSFER', reference: 'BANK-FINAL-42' }));
+    expect(api.completeEvent).toHaveBeenCalledWith(42, expect.objectContaining({ amount: 40000, method: 'BANK_TRANSFER', reference: 'BANK-FINAL-42', destinationId: 2, destinationVersion: 'b'.repeat(64) }));
   });
   it('cancels without recording and blocks duplicate requests while saving', () => {
     const response = new Subject(); api.completeEvent.mockReturnValue(response);
@@ -45,7 +46,7 @@ describe('Final event payment and completion', () => {
     const fixture = render({ ...booking, eventDate: '2099-12-01' }); const component = fixture.componentInstance as any;
     component.method.set('CASH'); component.fundsReceived.set(true); component.eventFinished.set(true); expect(component.canSubmit()).toBe(false);
     fixture.componentRef.setInput('booking', booking); fixture.detectChanges(); component.method.set('BANK_TRANSFER');
-    expect(component.canSubmit()).toBe(false); component.reference.set('ACTUAL-BANK-42'); expect(component.canSubmit()).toBe(true);
+    expect(component.canSubmit()).toBe(false); component.reference.set('ACTUAL-BANK-42'); component.receivingBank.set(2); expect(component.canSubmit()).toBe(true);
   });
   it('retains a completion key after a failed response so retry cannot duplicate the payment', () => {
     api.completeEvent.mockReturnValue(throwError(() => ({ error: { message: 'Network unavailable.' } })));

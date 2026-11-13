@@ -1,3 +1,4 @@
+export interface PaymentBankDetails { readonly destinationId?: number; readonly destinationLabel?: string; readonly destinationAccountName?: string; readonly destinationAccountHint?: string; readonly destinationVersion?: string; }
 export const MAX_PAYMENT_PROOF_BYTES = 5 * 1024 * 1024;
 
 export type PaymentProofMethod = 'CASH' | 'BANK_TRANSFER' | 'E_WALLET';
@@ -8,9 +9,15 @@ export interface PaymentProofSubmission {
   readonly claimedAmount: number;
   readonly transactionReference?: string;
   readonly paymentDate: string;
+  readonly destinationId?: number;
+  readonly destinationVersion?: string;
+  readonly replacesProofId?: string;
 }
 
 export interface PaymentProof extends PaymentProofSubmission {
+  readonly destinationLabel?: string;
+  readonly destinationAccountName?: string;
+  readonly destinationAccountHint?: string;
   readonly id: string;
   readonly reservationId: number;
   readonly customerId: number;

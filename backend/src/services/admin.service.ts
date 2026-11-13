@@ -1,3 +1,4 @@
+import { staffBankChoice } from './payment-bank.service.js';
 import * as repo from '../repositories/admin.repository.js';import type {AddOnInput,AdminDashboard,AuditLogQuery,CustomerHistoryQuery,EmailOutboxQuery,BookingStatus,PackageInput,PageQuery,PageResult,PaymentInput,ReportingPeriod} from '../types/admin.types.js';import {AppError} from '../utils/app-error.js';import {finiteMoney,isoDate,text} from '../utils/validation.js';
 import {writeAdminAudit} from '../repositories/audit.repository.js';
 import {transitionBooking} from './booking-status.service.js';
@@ -95,6 +96,7 @@ export const adminService={dashboard:adminOperationsService.dashboard,bookings:r
    v.reference=`CASH-${v.requestId.replace(/-/g,'').toUpperCase()}`;
   }else if(typeof v.reference!=='string'||!v.reference.trim())throw new AppError(400,'A receipt/transaction reference is required before recording a payment.');
   v.amount=finiteMoney(v.amount,'Payment amount');
+  staffBankChoice(v.method,v.amount,v.destinationId,v.destinationVersion);
   v.paymentDate=isoDate(v.paymentDate,'Payment date');
   v.reference=text(v.reference,'Payment reference',{max:150});
   try{if(!(await repo.recordPayment(adminId,v)))throw new AppError(404,'Booking payment record not found.');}

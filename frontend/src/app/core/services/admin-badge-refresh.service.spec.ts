@@ -17,7 +17,7 @@ describe('AdminBadgeRefreshService', () => {
       pendingBookingReviews: 1, proofsAwaitingVerification: 2, failedEmailNotifications: 0, qrAssignmentsWaiting: 3
     } } });
     const badges = TestBed.inject(PortalBadgeStateService);
-    expect(badges.adminBadges().qrAssignments).toBe(3);
+    expect(badges.adminBadges().qrAssignments).toBe(0);
     window.dispatchEvent(new Event('focus'));
     http.expectOne(request => request.url.endsWith('/admin/dashboard')).flush({ data: { priority: {
       pendingBookingReviews: 0, proofsAwaitingVerification: 0, failedEmailNotifications: 0, qrAssignmentsWaiting: 0

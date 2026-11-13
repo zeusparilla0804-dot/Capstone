@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -25,7 +25,9 @@ const { downloadProof, safeProofFilename } = await import('../controllers/paymen
 const { hashSessionToken } = await import('../utils/session.js');
 const { closeDatabase } = await import('../config/database.js');
 
+const { paymentBankVersion } = await import('../services/payment-bank.service.js');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=', 'base64');
+const bank = { id: 1, method: 'BANK_TRANSFER', label: 'Legacy Bank', accountName: 'LA Chef', accountHint: '1234', isAvailable: true, mime: 'image/png', image: Buffer.from('qr') };
 const ownerCookie = 'la_chef_session=owner';
 const otherCookie = 'la_chef_session=other';
 const adminCookie = 'la_chef_admin_session=admin';
@@ -58,8 +60,9 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
           if (params['reservationId'] === 5 && params['customerId'] === 7) recordset = [{ id: 5 }];
         } else if (/FROM dbo\.PAYMENT\b/i.test(command)) {
           recordset = [{ paymentId: 3, amountDue: 100, amountPaid: 10, paymentMethod: 'BANK_TRANSFER' }];
+        } else if (/FROM dbo\.PAYMENT_DESTINATION d/i.test(command)) { recordset = [bank];
         } else if (/FROM dbo\.BOOKING_PAYMENT_DESTINATION/i.test(command)) {
-          recordset = [{ destination_id: 1 }];
+          recordset = [{ id: 1, method: 'BANK_TRANSFER', label: 'Legacy Bank', accountName: 'LA Chef', accountHint: '1234', isAvailable: true, mime: 'image/png', image: Buffer.from('qr') }];
         } else if (/INSERT dbo\.PAYMENT_PROOF/i.test(command)) {
           const row = { ...params, id: rows.length + 1, status: 'SUBMITTED', createdAt: new Date(), updatedAt: new Date() };
           rows.push(row); recordset = [row];
@@ -102,10 +105,11 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const base = `http://127.0.0.1:${address.port}`;
-  const post = (cookie: string, options: { field?: string; withFile?: boolean; amount?: string } = {}) => {
+  const post = (cookie: string, options: { field?: string; withFile?: boolean; amount?: string; bank?: boolean } = {}) => {
     const body = new FormData();
     body.set('method', 'BANK_TRANSFER'); body.set('claimedAmount', options.amount ?? '50.25');
     body.set('transactionReference', ' TX-HTTP '); body.set('paymentDate', '2026-10-02');
+    if (options.bank) { body.set('destinationId', '1'); body.set('destinationVersion', paymentBankVersion(bank)); body.set('replacesProofId', '1'); }
     if (options.withFile !== false) body.set(options.field ?? 'proof', new Blob([png], { type: 'image/png' }), 'receipt.png');
     return fetch(`${base}/api/bookings/5/payment-proofs`, { method: 'POST', headers: { cookie, 'x-la-chef-request': '1' }, body });
   };
@@ -127,6 +131,14 @@ test('mounted proof routes integrate sessions, multipart, private storage and au
       assert.equal(JSON.stringify(json).includes(uploadRoot), false);
       assert.deepEqual(await readFile(path.join(uploadRoot, String(rows[0]!['storageKey']))), png);
       assert.equal(bookingStatus, 'PAYMENT_SUBMITTED');
+    });
+    await t.test('accepts the bank selection fields in the real multipart upload', async () => {
+      const response = await post(ownerCookie, { bank: true });
+      assert.equal(response.status, 201);
+      const json = await response.json() as { data: Record<string, unknown> };
+      assert.equal(json.data['destinationLabel'], 'Legacy Bank');
+      const extra = rows.pop()!; await rm(path.join(uploadRoot, String(extra['storageKey'])), { force: true });
+      rows[0]!['status'] = 'SUBMITTED';
     });
     await t.test('listing is customer-owned and does not disclose storage keys', async () => {
       const response = await fetch(`${base}/api/bookings/5/payment-proofs`, { headers: { cookie: ownerCookie } });

@@ -72,6 +72,7 @@ export const EXPECTED_MIGRATIONS = [
   '022_payment_destinations.sql',
   '022_payment_destinations_seed',
   '023_customer_updates_package_images.sql',
+  '024_customer_bank_payment_snapshots.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -110,6 +111,11 @@ function datetime2(table: string, name: string, nullable = false, scale = 7): Co
 }
 
 const columns: ColumnShape[] = [
+  ...['PAYMENT_PROOF', 'PAYMENT_TRANSACTION'].flatMap(table => [
+    integer(table, 'destination_id', true), nvarchar(table, 'destination_label', 100, true),
+    nvarchar(table, 'destination_account_name', 200, true), nvarchar(table, 'destination_account_hint', 50, true),
+    nvarchar(table, 'destination_version', 64, true),
+  ]),
   integer('PAYMENT_DESTINATION', 'destination_id', false, true),
   nvarchar('PAYMENT_DESTINATION', 'method', 30), nvarchar('PAYMENT_DESTINATION', 'label', 100),
   nvarchar('PAYMENT_DESTINATION', 'account_name', 200), nvarchar('PAYMENT_DESTINATION', 'account_hint', 50),
@@ -365,7 +371,7 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('AUTH_SECURITY_EVENT', 'C', ['CK_AUTH_SECURITY_EVENT_role', 'CK_AUTH_SECURITY_EVENT_type']),
   ...constraints('AUTH_SECURITY_EVENT', 'D', ['DF_AUTH_SECURITY_EVENT_created']),
   ...constraints('PAYMENT_TRANSACTION', 'PK', ['PK_PAYMENT_TRANSACTION']),
-  ...constraints('PAYMENT_TRANSACTION', 'F', ['FK_PAYMENT_TRANSACTION_PAYMENT', 'FK_PAYMENT_TRANSACTION_ADMIN']),
+  ...constraints('PAYMENT_TRANSACTION', 'F', ['FK_PAYMENT_TRANSACTION_DESTINATION', 'FK_PAYMENT_TRANSACTION_PAYMENT', 'FK_PAYMENT_TRANSACTION_ADMIN']),
   ...constraints('PAYMENT_TRANSACTION', 'D', ['DF_PAYMENT_TRANSACTION_created']),
   ...constraints('PAYMENT_TRANSACTION', 'C', ['CK_PAYMENT_TRANSACTION_amount']),
   ...constraints('INVOICE', 'PK', ['PK_INVOICE']), ...constraints('INVOICE', 'UQ', ['UQ_INVOICE_reservation', 'UQ_INVOICE_number']),
@@ -378,7 +384,7 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('ADMIN_AUDIT_LOG', 'D', ['DF_ADMIN_AUDIT_LOG_created']),
   ...constraints('ADMIN_AUDIT_LOG', 'C', ['CK_ADMIN_AUDIT_LOG_old_json', 'CK_ADMIN_AUDIT_LOG_new_json']),
   ...constraints('PAYMENT_PROOF', 'PK', ['PK_PAYMENT_PROOF']),
-  ...constraints('PAYMENT_PROOF', 'F', ['FK_PAYMENT_PROOF_RESERVATION', 'FK_PAYMENT_PROOF_CUSTOMER', 'FK_PAYMENT_PROOF_PAYMENT', 'FK_PAYMENT_PROOF_TRANSACTION', 'FK_PAYMENT_PROOF_INVOICE', 'FK_PAYMENT_PROOF_REVIEWER']),
+  ...constraints('PAYMENT_PROOF', 'F', ['FK_PAYMENT_PROOF_DESTINATION', 'FK_PAYMENT_PROOF_RESERVATION', 'FK_PAYMENT_PROOF_CUSTOMER', 'FK_PAYMENT_PROOF_PAYMENT', 'FK_PAYMENT_PROOF_TRANSACTION', 'FK_PAYMENT_PROOF_INVOICE', 'FK_PAYMENT_PROOF_REVIEWER']),
   ...constraints('PAYMENT_PROOF', 'D', ['DF_PAYMENT_PROOF_status', 'DF_PAYMENT_PROOF_created', 'DF_PAYMENT_PROOF_updated']),
   ...constraints('PAYMENT_PROOF', 'C', ['CK_PAYMENT_PROOF_method', 'CK_PAYMENT_PROOF_status', 'CK_PAYMENT_PROOF_amount', 'CK_PAYMENT_PROOF_byte_size', 'CK_PAYMENT_PROOF_reference', 'CK_PAYMENT_PROOF_review']),
   ...constraints('BOOKING_STATUS_HISTORY', 'PK', ['PK_BOOKING_STATUS_HISTORY']),

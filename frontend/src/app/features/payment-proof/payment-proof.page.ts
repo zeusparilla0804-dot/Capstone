@@ -2,7 +2,8 @@ import { hasCashPaymentAction, hasOnlinePaymentAction, bookingTotal, depositProg
 import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse, HttpEventType, HttpResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, OnDestroy, signal, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, OnDestroy, signal, ViewChild } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
@@ -15,7 +16,7 @@ import { DashboardNavItem, DashboardSidebarComponent } from '../../shared/compon
 import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 import { customerNavItems } from '../../shared/navigation/customer-navigation';
 import { cashDepositDeadline } from '../../core/utils/cash-payment-policy';
-import { PaymentDestination, PaymentDestinationService } from '../../core/services/payment-destination.service';
+import { PaymentBankOption, PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 @Component({
   selector: 'app-payment-proof-page',
@@ -32,6 +33,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly bookingService = inject(BookingService);
   private readonly proofService = inject(PaymentProofService);
   private readonly destinationService = inject(PaymentDestinationService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly badgeState = inject(PortalBadgeStateService);
   protected readonly bookingId = this.route.snapshot.paramMap.get('id') ?? '';
   protected readonly booking = computed(() => this.bookingService.bookings().find(item => item.id === this.bookingId));
@@ -50,7 +52,6 @@ export class PaymentProofPageComponent implements OnDestroy {
   }
   protected readonly cashInstructionsAvailable = computed(() => !!this.booking() && hasCashPaymentAction(this.booking()!));
   protected readonly eligible = computed(() => !!this.booking() && hasOnlinePaymentAction(this.booking()!));
-  protected readonly waitingForQr = computed(() => this.eligible() && !this.destinationImage() && !this.proofPending());
   protected readonly estimatedTotal = computed(() => this.booking() ? bookingTotal(this.booking()!) : 0);
   protected readonly requiredDeposit = computed(() => depositProgress(this.estimatedTotal(), this.booking()?.amountPaid ?? 0).requiredDeposit);
   protected readonly remainingDeposit = computed(() => depositProgress(this.estimatedTotal(), this.booking()?.amountPaid ?? 0).remainingDeposit);
@@ -58,6 +59,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly incompleteDeposit = computed(() => !!this.booking() && hasIncompleteDownPayment(this.booking()!));
   protected readonly proofPending = computed(() => this.booking()?.status === 'payment_submitted' || this.booking()?.latestProofStatus?.toUpperCase() === 'SUBMITTED' || this.proofs().some(proof => proof.status === 'submitted'));
   protected readonly replacingProof = signal(false);
+  protected readonly replacementBankId = signal('original');
   protected readonly pendingProof = computed(() => this.proofs().find(proof => proof.status === 'submitted'));
 
   protected beginProofReplacement(): void {
@@ -65,10 +67,13 @@ export class PaymentProofPageComponent implements OnDestroy {
     if (!proof || this.submitting() || this.historyLoading() || this.historyError()) return;
     this.form.patchValue({ claimedAmount: proof.claimedAmount, paymentDate: proof.paymentDate, transactionReference: proof.transactionReference ?? '' });
     this.replacingProof.set(true);
+    this.replacementBankId.set('original');
   }
   protected readonly paymentAmountChoice = signal<'deposit' | 'full' | 'custom'>('deposit');
   protected readonly proofs = signal<readonly PaymentProof[]>([]);
-  protected readonly destination = signal<PaymentDestination | null>(null);
+  protected readonly bankOptions = signal<readonly PaymentBankOption[]>([]);
+  protected readonly destination = signal<PaymentBankOption | null>(null);
+  protected readonly qrLoading = signal(false);
   protected readonly destinationLoading = signal(true);
   protected readonly destinationError = signal('');
   protected readonly destinationImage = signal('');
@@ -87,7 +92,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly successMessage = signal('');
   protected readonly submitting = signal(false);
   protected readonly uploadProgress = signal(0);
-  private readonly initialPaymentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  protected readonly initialPaymentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   protected readonly form = new FormGroup({
     method: new FormControl<PaymentProofMethod>('BANK_TRANSFER', { nonNullable: true, validators: Validators.required }),
     claimedAmount: new FormControl<number | null>(null, { validators: [Validators.required, Validators.min(0.01)] }),
@@ -97,7 +102,7 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   private initializedBookingKey: string | null = null;
   private destinationRequest = 0;
-  private readonly qrRefreshTimer: ReturnType<typeof setInterval>;
+  private readonly refreshTimer: ReturnType<typeof setInterval>;
 
   constructor() {
     effect(() => this.badgeState.setCustomerBookings(this.bookingService.bookings()));
@@ -119,33 +124,57 @@ export class PaymentProofPageComponent implements OnDestroy {
     if (!this.booking()) this.bookingService.loadMine();
     this.loadProofs();
     this.form.controls.method.valueChanges.subscribe(method => this.configureReference(method));
-    this.qrRefreshTimer = setInterval(() => {
-      if (this.eligible() && !this.destinationImage() && !this.destinationLoading()) this.loadDestination();
-    }, 15_000);
+    this.refreshTimer = setInterval(() => this.refreshPayments(), 30_000);
   }
 
-  ngOnDestroy(): void { clearInterval(this.qrRefreshTimer); if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage()); }
+  ngOnDestroy(): void { clearInterval(this.refreshTimer); this.destinationRequest++; if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage()); }
+
+  @HostListener('window:focus')
+  protected refreshPayments(): void {
+    if (this.submitting()) return;
+    this.bookingService.loadMine();
+    if (!this.historyLoading()) this.loadProofs();
+  }
 
 
 
   protected loadDestination(): void {
     const request = ++this.destinationRequest;
-    this.destinationLoading.set(true); this.destinationError.set(''); this.destination.set(null);
+    this.destinationLoading.set(true); this.destinationError.set(''); this.destination.set(null); this.bankOptions.set([]); this.qrLoading.set(false);
     if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage());
     this.destinationImage.set('');
-    if (this.booking()?.paymentMethod !== 'bank-transfer') { this.destinationLoading.set(false); return; }
-    this.destinationService.assigned(this.bookingId).subscribe({
-      next: item => {
+    if (!this.eligible()) { this.destinationLoading.set(false); return; }
+    this.destinationService.options(this.bookingId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: items => {
         if (request !== this.destinationRequest) return;
-        const supported = item?.method === 'BANK_TRANSFER' ? item : null;
-        this.destination.set(supported); this.destinationLoading.set(false);
-        if (supported) this.destinationService.image(supported.id).subscribe({
-          next: blob => { if (request === this.destinationRequest) this.destinationImage.set(URL.createObjectURL(blob)); },
-          error: () => { if (request === this.destinationRequest) this.destinationError.set('Unable to load the assigned QR image.'); },
-        });
+        this.bankOptions.set(items.filter(item => item.method === 'BANK_TRANSFER')); this.destinationLoading.set(false);
       },
-      error: () => { if (request === this.destinationRequest) { this.destinationLoading.set(false); this.destinationError.set('Unable to check payment instructions.'); } },
+      error: () => { if (request === this.destinationRequest) { this.destinationLoading.set(false); this.destinationError.set('Unable to load bank accounts. Refresh to try again.'); } },
     });
+  }
+
+  protected chooseDestination(event: Event): void {
+    const id = (event.target as HTMLSelectElement).value;
+    const account = this.bankOptions().find(item => String(item.id) === id) ?? null;
+    const request = ++this.destinationRequest;
+    this.destination.set(account); this.destinationError.set('');
+    if (this.destinationImage()) URL.revokeObjectURL(this.destinationImage());
+    this.destinationImage.set(''); this.qrLoading.set(!!account);
+    if (!account) return;
+    this.destinationService.optionImage(this.bookingId, account).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: blob => {
+        if (request !== this.destinationRequest) return;
+        this.destinationImage.set(URL.createObjectURL(blob)); this.qrLoading.set(false);
+      },
+      error: () => {
+        if (request !== this.destinationRequest) return;
+        this.qrLoading.set(false); this.destinationError.set('Unable to load this bank QR. Refresh the accounts and select a bank again. If you already transferred money, contact LA Chef; do not pay again.');
+      },
+    });
+  }
+
+  protected chooseReplacementBank(event: Event): void {
+    this.replacementBankId.set((event.target as HTMLSelectElement).value);
   }
 
   protected async choosePayment(method: PaymentMethod): Promise<void> {
@@ -221,7 +250,18 @@ export class PaymentProofPageComponent implements OnDestroy {
   }
 
   protected submit(): void {
-    if (this.submitting() || this.choosingPayment() || !this.eligible() || this.form.controls.method.value === 'CASH' || !this.destination() || !this.destinationImage()) return;
+    if (this.submitting() || this.choosingPayment() || !this.eligible() || this.form.controls.method.value === 'CASH'
+      || (this.proofPending() && !this.replacingProof())) return;
+    const originalProof = this.replacingProof() ? this.pendingProof() : undefined;
+    if (this.replacingProof() && !originalProof) { this.replacingProof.set(false); return; }
+    const correctedBank = this.replacingProof() && this.replacementBankId() !== 'original'
+      ? this.bankOptions().find(bank => String(bank.id) === this.replacementBankId()) : undefined;
+    if (this.replacingProof() && this.replacementBankId() !== 'original' && !correctedBank) {
+      this.submitError.set('Select the bank shown on your receipt, or keep the original receiving account.'); return;
+    }
+    if (!this.replacingProof() && (!this.destination()?.version || !this.destinationImage())) {
+      this.submitError.set('Select a bank account and load its QR before submitting payment proof.'); return;
+    }
     this.configureReference(this.form.controls.method.value);
     this.form.markAllAsTouched();
     const file = this.selectedFile();
@@ -233,6 +273,9 @@ export class PaymentProofPageComponent implements OnDestroy {
       claimedAmount: value.claimedAmount!,
       paymentDate: value.paymentDate,
       ...(value.method === 'CASH' ? {} : { transactionReference: value.transactionReference.trim() }),
+      ...(originalProof ? { destinationId: correctedBank?.id ?? originalProof.destinationId,
+        destinationVersion: correctedBank?.version ?? originalProof.destinationVersion, replacesProofId: originalProof.id }
+        : { destinationId: this.destination()!.id, destinationVersion: this.destination()!.version }),
     };
     this.submitting.set(true);
     this.uploadProgress.set(0);

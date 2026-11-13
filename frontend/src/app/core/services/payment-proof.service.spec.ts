@@ -33,7 +33,8 @@ describe('PaymentProofService', () => {
     const file = new File(['proof'], 'bank.png', { type: 'image/png' });
     const events: number[] = [];
     service.submitProof('42', {
-      method: 'BANK_TRANSFER', claimedAmount: 1250.5, transactionReference: 'BANK-42', paymentDate: '2026-10-02'
+      method: 'BANK_TRANSFER', claimedAmount: 1250.5, transactionReference: 'BANK-42', paymentDate: '2026-10-02',
+      destinationId: 2, destinationVersion: 'b'.repeat(64),
     }, file).subscribe(event => events.push(event.type));
 
     const request = http.expectOne(`${environment.apiBaseUrl}/bookings/42/payment-proofs`);
@@ -44,6 +45,8 @@ describe('PaymentProofService', () => {
     expect(body.get('claimedAmount')).toBe('1250.5');
     expect(body.get('transactionReference')).toBe('BANK-42');
     expect(body.get('paymentDate')).toBe('2026-10-02');
+    expect(body.get('destinationId')).toBe('2');
+    expect(body.get('destinationVersion')).toBe('b'.repeat(64));
     const uploaded = body.get('proof') as File;
     expect(uploaded).toBeInstanceOf(File);
     expect(uploaded.name).toBe('bank.png');

@@ -43,8 +43,10 @@ export function hasOnlinePaymentAction(booking: Booking): boolean {
     && Math.round(booking.amountPaid * 100) < Math.round(bookingTotal(booking) * 100);
 }
 
-export function isWaitingForPaymentQr(booking: Booking): boolean {
-  return hasOnlinePaymentAction(booking) && booking.status !== 'payment_submitted' && !booking.paymentQrReady;
+export function customerPaymentActionLabel(booking: Booking): string {
+  if (booking.status === 'payment_submitted' || booking.latestProofStatus?.toUpperCase() === 'SUBMITTED') return 'View Payment';
+  if (hasIncompleteDownPayment(booking)) return 'Pay remaining down payment';
+  return booking.amountPaid > 0 ? 'Pay remaining balance' : 'Submit Payment';
 }
 
 export function needsPaymentMethodChoice(booking: Booking): boolean {

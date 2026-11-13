@@ -3,6 +3,7 @@ import { getDbPool } from '../config/database.js';
 import type { InvoiceDetails } from '../types/invoice.types.js';
 import { queueBookingNotification } from '../services/notification.service.js';
 import { writeAdminAudit } from './audit.repository.js';
+import { bankSnapshotColumns, mapBankSnapshot } from './payment-bank.repository.js';
 
 const dateValue = (value: Date | string | undefined) => value ? new Date(value).toISOString() : undefined;
 
@@ -134,7 +135,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const items = await pool.request().input('invoiceId', sql.Int, invoiceId)
     .query('SELECT description,quantity,unit_price,line_total FROM dbo.INVOICE_ITEM WHERE invoice_id=@invoiceId ORDER BY invoice_item_id');
   const payments = await pool.request().input('reservationId', sql.Int, row.reservation_id)
-    .query(`SELECT pt.payment_transaction_id id,pt.payment_date,pt.transaction_ref,pt.payment_method,pt.amount,
+    .query(`SELECT pt.payment_transaction_id id,pt.payment_date,pt.transaction_ref,pt.payment_method,pt.amount,${bankSnapshotColumns('pt')},
         'RECORDED' status FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT p ON p.payment_id=pt.payment_id
       WHERE p.reservation_id=@reservationId ORDER BY pt.payment_date DESC,pt.payment_transaction_id DESC`);
   const paid = Number(row.amount_paid);
@@ -154,7 +155,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
     remainingBalance: Math.max(total - paid, 0),
     payments: payments.recordset.map((payment) => ({
       id: Number(payment.id), date: dateValue(payment.payment_date)!, reference: payment.transaction_ref ?? undefined,
-      method: payment.payment_method, amount: Number(payment.amount), status: payment.status,
+      method: payment.payment_method, amount: Number(payment.amount), status: payment.status, ...mapBankSnapshot(payment),
     })),
   };
 }

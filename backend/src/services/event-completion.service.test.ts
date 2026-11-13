@@ -18,7 +18,7 @@ test('completion cash references are generated from the retry key', () => {
 });
 test('online final payments require a transaction reference and supported method', () => {
   assert.throws(() => completionPaymentInput(42, { ...value, method: 'BANK_TRANSFER' }), /reference/i);
-  assert.equal(completionPaymentInput(42, { ...value, method: 'BANK_TRANSFER', reference: 'BANK-ACTUAL-1' }).reference, 'BANK-ACTUAL-1');
+  assert.equal(completionPaymentInput(42, { ...value, method: 'BANK_TRANSFER', reference: 'BANK-ACTUAL-1', destinationId: 2, destinationVersion: 'b'.repeat(64) }).reference, 'BANK-ACTUAL-1');
   assert.throws(() => completionPaymentInput(42, { ...value, method: 'UNKNOWN' }), /method/i);
 });
 test('already-paid completion accepts zero without creating a new receipt reference', () => {

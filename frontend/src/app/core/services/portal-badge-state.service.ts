@@ -42,7 +42,7 @@ export class PortalBadgeStateService {
       bookings: this.count(summary.priority.pendingBookingReviews),
       payments: this.count(summary.priority.proofsAwaitingVerification),
       emails: this.count(summary.priority.failedEmailNotifications),
-      qrAssignments: this.count(summary.priority.qrAssignmentsWaiting ?? 0),
+      qrAssignments: 0,
     });
   }
 

@@ -8,6 +8,7 @@ import { AppError } from '../utils/app-error.js';
 import { identifier, text } from '../utils/validation.js';
 import { availableOnlinePaymentMethods } from '../repositories/payment-methods.repository.js';
 import { assertSupportedOnlineMethod } from '../services/payment-method-policy.js';
+import { listAdminBankOptions, listCustomerBankOptions, openCustomerBankQr } from '../services/payment-bank.service.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1_048_576, files: 1, fields: 5, parts: 6 } }).single('qr');
 const allowedMime = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -45,6 +46,10 @@ function metadata(req: Request) {
 }
 
 export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
+  .get('/options', run(async (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data: await listAdminBankOptions() });
+  }))
   .get('/', run(async (_req, res) => {
     const rows = await (await getDbPool()).request().query(`SELECT d.destination_id id,d.method,d.label,d.account_name accountName,
       d.account_hint accountHint,d.is_available isAvailable,d.updated_at updatedAt,
@@ -133,6 +138,15 @@ export const adminPaymentDestinationRoutes = Router().use(requireAdmin)
   }));
 
 export const paymentDestinationRoutes = Router()
+  .get('/bookings/:id/options', requireCustomer, run(async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ success: true, data: await listCustomerBankOptions(req.customer!.id, identifier(req.params['id'])) });
+  }))
+  .get('/bookings/:bookingId/options/:destinationId/image', requireCustomer, run(async (req, res) => {
+    const image = await openCustomerBankQr(req.customer!.id, identifier(req.params['bookingId']),
+      identifier(req.params['destinationId']), text(req.query['version'], 'Bank account version', { max: 64 }));
+    res.setHeader('Cache-Control', 'no-store'); res.type(image.mime).send(image.bytes);
+  }))
   .get('/methods', requireCustomer, run(async (_req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ success: true, data: await availableOnlinePaymentMethods() });

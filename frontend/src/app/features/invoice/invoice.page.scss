@@ -254,6 +254,14 @@
   text-align: center;
 }
 
+.receiving-bank {
+  display: grid;
+  gap: .15rem;
+  margin-top: .3rem;
+  font-size: .8em;
+  overflow-wrap: anywhere;
+}
+
 .payment-history {
   padding-top: 24px;
   border-top: 1px solid var(--color-border);

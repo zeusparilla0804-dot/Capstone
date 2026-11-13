@@ -64,12 +64,15 @@ async function api(base: string, path: string, init: RequestInit = {}, expected 
   return { response, body };
 }
 
+let selectedBank: { id: number; label: string; version: string } | undefined;
+
 async function proofForm(reference: string, amount: number, paymentDate: string): Promise<FormData> {
   const form = new FormData();
   form.set('method', 'BANK_TRANSFER');
   form.set('claimedAmount', amount.toFixed(2));
   form.set('transactionReference', reference);
   form.set('paymentDate', paymentDate);
+  if (selectedBank) { form.set('destinationId', String(selectedBank.id)); form.set('destinationVersion', selectedBank.version); }
   form.set('proof', new Blob([receiptJpeg], { type: 'image/jpeg' }), 'payment-proof.jpg');
   return form;
 }
@@ -284,7 +287,7 @@ try {
   });
   await api(base, `/bookings/${created.booking}/payment-method`, { method: 'PATCH', headers: { cookie: customerACookie }, body: JSON.stringify({ method: 'bank-transfer' }) });
   const activityOverview = await api(base, '/admin/dashboard', { headers: { cookie: adminCookie } });
-  assert.ok(activityOverview.body.data.priority.qrAssignmentsWaiting >= 1);
+  assert.equal(activityOverview.body.data.priority.qrAssignmentsWaiting, 0);
   assert.ok(activityOverview.body.data.recentActivity.some((entry: any) => entry.reservationId === created.booking && entry.title === 'Payment method selected' && entry.detail.includes('Bank transfer')));
   const createdActivity = activityOverview.body.data.recentActivity.find((entry: any) => entry.reservationId === created.booking && entry.title === 'Reservation submitted');
   assert.ok(createdActivity && Math.abs(Date.now() - Date.parse(createdActivity.updatedAt)) < 120_000, 'Creation activity must be returned in UTC before PHT display.');
@@ -298,12 +301,14 @@ try {
   }, 201);
   created.invoice = Number(issued.body.data.invoiceId);
   await api(base, `/invoices/${created.invoice}`, { headers: { cookie: customerBCookie } }, 404);
-  const destinations = await api(base, '/admin/payment-destinations', { headers: { cookie: adminCookie } });
-  const destination = destinations.body.data.find((item: {method: string; isAvailable: boolean}) => item.method === 'BANK_TRANSFER' && item.isAvailable);
-  assert.ok(destination, 'An available bank QR is required.');
-  await api(base, `/admin/payment-destinations/bookings/${created.booking}/assignment`, {
-    method: 'PUT', headers: { cookie: adminCookie }, body: JSON.stringify({ destinationId: destination.id })
-  });
+  const destinations = await api(base, `/payment-destinations/bookings/${created.booking}/options`, { headers: { cookie: customerACookie } });
+  assert.ok(destinations.body.data.length >= 2, 'Customer must be able to choose among available banks without assignment.');
+  selectedBank = destinations.body.data[0];
+  const originalBank = selectedBank!;
+  await api(base, `/payment-destinations/bookings/${created.booking}/options`, { headers: { cookie: customerBCookie } }, 404);
+  await api(base, `/payment-destinations/bookings/${created.booking}/options/${originalBank.id}/image?version=${originalBank.version}`, { headers: { cookie: customerACookie } });
+  const assignedCount = await pool.request().input('id', sql.Int, created.booking).query('SELECT COUNT(*) count FROM dbo.BOOKING_PAYMENT_DESTINATION WHERE reservation_id=@id');
+  assert.equal(assignedCount.recordset[0].count, 0);
 
   const firstSubmission = await api(base, `/bookings/${created.booking}/payment-proofs`, {
     method: 'POST', headers: { cookie: customerACookie }, body: await proofForm(`${marker}-FIRST`, 300, eventDate)
@@ -324,9 +329,17 @@ try {
   const secondSubmission = await api(base, `/bookings/${created.booking}/payment-proofs`, {
     method: 'POST', headers: { cookie: customerACookie }, body: await proofForm(`${marker}-FIRST`, requiredDeposit, eventDate)
   }, 201);
-  const secondProofId = Number(secondSubmission.body.data.id);
+  let secondProofId = Number(secondSubmission.body.data.id);
   await api(base, `/admin/payment-proofs/${secondProofId}`, { headers: { cookie: adminCookie } });
 
+  assert.equal(secondSubmission.body.data.destinationLabel, originalBank.label);
+  // Account edits after upload must never rewrite the submitted proof or prevent its review.
+  await pool.request().input('id', sql.Int, originalBank.id).query("UPDATE dbo.PAYMENT_DESTINATION SET is_available=0,label=CONCAT('Edited ',label) WHERE destination_id=@id");
+  const replacementForm = await proofForm(`${marker}-FIRST`, requiredDeposit, eventDate);
+  replacementForm.set('replacesProofId', String(secondProofId));
+  const imageReplacement = await api(base, `/bookings/${created.booking}/payment-proofs`, { method: 'POST', headers: { cookie: customerACookie }, body: replacementForm }, 201);
+  assert.equal(imageReplacement.body.data.destinationLabel, originalBank.label);
+  secondProofId = Number(imageReplacement.body.data.id);
   const partialDeposit = requiredDeposit - 250;
   const verifyRequest = () => api(base, `/admin/payment-proofs/${secondProofId}/verify`, {
     method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: partialDeposit, reason: 'Bank statement confirms a smaller transfer.' })
@@ -338,6 +351,10 @@ try {
   assert.equal(rejected.length, 1, 'Exactly one concurrent verification must be rejected.');
   assert.match(String((rejected[0] as PromiseRejectedResult).reason), /409/);
 
+  const creditedBank = await pool.request().input('proofId', sql.BigInt, secondProofId).query('SELECT pt.destination_label label FROM dbo.PAYMENT_TRANSACTION pt JOIN dbo.PAYMENT_PROOF pp ON pp.payment_transaction_id=pt.payment_transaction_id WHERE pp.payment_proof_id=@proofId');
+  assert.equal(creditedBank.recordset[0].label, originalBank.label);
+  await pool.request().input('id', sql.Int, originalBank.id).input('label', sql.NVarChar(100), originalBank.label).query('UPDATE dbo.PAYMENT_DESTINATION SET is_available=1,label=@label WHERE destination_id=@id');
+  selectedBank = destinations.body.data[1];
   const incomplete = await api(base, `/admin/bookings/${created.booking}`, { headers: { cookie: adminCookie } });
   assert.equal(incomplete.body.data.status, 'AWAITING_PAYMENT');
   assert.equal(incomplete.body.data.amountPaid, partialDeposit);
@@ -367,7 +384,7 @@ try {
   const customerBooking = await api(base, `/bookings/${created.booking}`, { headers: { cookie: customerACookie } });
   assert.equal(customerBooking.body.data.status, 'confirmed');
   const customerProofs = await api(base, `/bookings/${created.booking}/payment-proofs`, { headers: { cookie: customerACookie } });
-  assert.deepEqual(customerProofs.body.data.map((proof: { status: string }) => proof.status).sort(), ['REJECTED', 'VERIFIED', 'VERIFIED']);
+  assert.deepEqual(customerProofs.body.data.map((proof: { status: string }) => proof.status).sort(), ['REJECTED', 'SUPERSEDED', 'VERIFIED', 'VERIFIED']);
 
   const state = await pool.request().input('bookingId', sql.Int, created.booking)
     .input('proofId', sql.BigInt, secondProofId)
@@ -457,10 +474,11 @@ try {
     body: JSON.stringify({ email: customerAUpdatedEmail }),
   }, 202);
   await verifyFixtureEmail(base, customerAUpdatedEmail);
-  await api(base, '/auth/login', {
+  const restoredLogin = await api(base, '/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email: customerAUpdatedEmail, password }),
   });
+  const restoredCustomerCookie = cookie(restoredLogin.response);
 
   const reportFixture = await pool.request()
     .input('bookingId', sql.Int, created.booking)
@@ -521,7 +539,16 @@ try {
     assert.ok(customerAuditActions.includes(expected), `Missing customer audit action: ${expected}`);
   }
 
-  console.log('Admin operations SQL-backed E2E verification passed.');
+  const remaining = 2500 - requiredDeposit - 100;
+  const finalProof = await api(base, `/bookings/${created.booking}/payment-proofs`, { method: 'POST', headers: { cookie: restoredCustomerCookie }, body: await proofForm(`${marker}-FULL-BALANCE`, remaining, new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })) }, 201);
+  await api(base, `/admin/payment-proofs/${finalProof.body.data.id}/verify`, { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: remaining }) });
+  const settled = await api(base, `/invoices/${created.invoice}`, { headers: { cookie: restoredCustomerCookie } });
+  assert.equal(settled.body.data.amountPaid, 2500); assert.equal(settled.body.data.remainingBalance, 0);
+  assert.equal(settled.body.data.booking.status, 'CONFIRMED');
+  assert.ok(settled.body.data.payments.some((row: any) => row.destinationLabel === originalBank.label));
+  assert.ok(settled.body.data.payments.some((row: any) => row.destinationId === selectedBank!.id && row.amount === remaining));
+  await api(base, `/payment-destinations/bookings/${created.booking}/options`, { headers: { cookie: restoredCustomerCookie } }, 409);
+  console.log('Admin operations SQL-backed E2E verification passed, including customer-selected banks and full balance receipt.');
 } finally {
   if (server) await new Promise<void>(resolve => server!.close(() => resolve()));
   await cleanup();

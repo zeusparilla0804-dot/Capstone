@@ -90,7 +90,7 @@ describe('CustomerBillingPageComponent', () => {
       .toEqual(['Down Payment Incomplete', 'Pending Payment Verification', 'Cancelled']);
   });
 
-  it('hides Submit Payment for a completed booking with a verified down payment', async () => {
+  it('offers remaining balance payment after the verified deposit, including completed events', async () => {
     const bookingService = {
       bookings: signal<readonly Booking[]>([{
         ...booking, status: 'completed', paymentMethod: 'bank-transfer', amountPaid: 5000,
@@ -115,6 +115,9 @@ describe('CustomerBillingPageComponent', () => {
     const side = record.querySelector('.billing-record__side') as HTMLElement;
     expect(side.firstElementChild?.tagName).toBe('APP-STATUS-BADGE');
     expect(side.querySelector('a[href="/invoice/9"]')).not.toBeNull();
+    expect(record.querySelector('a[href="/my-bookings/17/payment"]')?.textContent).toContain('Pay remaining balance');
+    bookingService.bookings.set([{ ...bookingService.bookings()[0]!, amountPaid: 10000 }]);
+    fixture.detectChanges();
     expect(record.querySelector('a[href="/my-bookings/17/payment"]')).toBeNull();
   });
 

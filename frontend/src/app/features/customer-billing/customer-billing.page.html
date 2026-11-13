@@ -63,13 +63,9 @@
                       <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', record.invoiceId]">{{ record.paid > 0 ? 'View Receipt' : 'View Invoice' }}</a>
                     }
                     @if (record.acceptsPayment && record.balance > 0) {
-                      @if (record.waitingForPaymentQr) {
-                        <button class="btn btn-primary btn-sm" type="button" disabled data-testid="waiting-payment-qr">Waiting for Payment QR</button>
-                      } @else {
                       <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', record.id, 'payment']">
-                        {{ record.cashPayment ? 'View Cash Instructions' : record.proofPending ? 'View Payment' : record.incompleteDeposit ? 'Pay remaining down payment' : 'Submit Payment' }}
+                        {{ record.cashPayment ? 'View Cash Instructions' : record.paymentActionLabel }}
                       </a>
-                      }
                     }
                     @if (record.needsPaymentChoice) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: record.id, step: 4 }">{{ record.retiredPaymentMethod ? 'Change payment method' : 'Choose Payment Method' }}</a> }
                   </div>

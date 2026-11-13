@@ -31,6 +31,7 @@ describe('BookingCardComponent pending actions', () => {
     expect(fixture.nativeElement.textContent).toContain('View Payment');
     fixture.componentRef.setInput('booking', { ...partial, status: 'payment_verified', amountPaid: 77000 }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-testid="deposit-shortfall"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')?.textContent).toContain('Pay remaining balance');
   });
   it('shows both Completed and Fully Paid with a receipt link after final payment', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
@@ -42,19 +43,11 @@ describe('BookingCardComponent pending actions', () => {
     expect(fixture.nativeElement.textContent).toContain('View Receipt');
     expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
   });
-  it('disables online payment until a QR is assigned, then enables submission after refresh', async () => {
+  it('offers bank selection even when no administrator QR was assigned', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);
     fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'bank-transfer', paymentQrReady: false });
     fixture.detectChanges();
-    const waiting = fixture.nativeElement.querySelector('button[data-testid="waiting-payment-qr"]') as HTMLButtonElement;
-    expect(waiting?.disabled).toBe(true);
-    expect(waiting?.textContent).toContain('Waiting for Payment QR');
-    expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
-    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
-    fixture.componentRef.setInput('booking', { ...booking, status: 'awaiting_payment', paymentMethod: 'bank-transfer', paymentQrReady: true });
-    fixture.detectChanges();
-    await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('[data-testid="waiting-payment-qr"]')).toBeNull();
     expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')?.textContent).toContain('Submit Payment');
   });
@@ -87,7 +80,7 @@ describe('BookingCardComponent pending actions', () => {
     expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).not.toBeNull();
   });
 
-  it('removes Submit Payment after a verified payment is recorded', () => {
+  it('keeps a remaining balance action after a verified deposit and removes it at full payment', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);
     fixture.componentRef.setInput('booking', { ...booking, invoiceId: 8, paymentMethod: 'bank-transfer', status: 'awaiting_payment', paymentQrReady: true });
@@ -98,6 +91,9 @@ describe('BookingCardComponent pending actions', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('Submit Payment');
     expect(fixture.nativeElement.textContent).toContain('View Receipt');
+    expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')?.textContent).toContain('Pay remaining balance');
+    fixture.componentRef.setInput('booking', { ...booking, paymentMethod: 'bank-transfer', status: 'confirmed', amountPaid: 54000 });
+    fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('a[href="/my-bookings/27/payment"]')).toBeNull();
   });
 

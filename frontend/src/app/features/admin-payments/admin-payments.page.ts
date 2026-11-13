@@ -11,6 +11,7 @@ import { AdminShellComponent } from '../../shared/components/admin-shell/admin-s
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 import { PaymentMethodLabelPipe, paymentMethodLabel } from '../../shared/pipes/payment-method-label.pipe';
 import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
+import { PaymentBankOption, PaymentDestinationService } from '../../core/services/payment-destination.service';
 
 @Component({
   selector: 'app-admin-payments',
@@ -25,6 +26,10 @@ export class AdminPaymentsPage {
     latestProofStatus: item.latestProofStatus,
   }) ?? item.status;
   private readonly api = inject(AdminService);
+  private readonly bankApi = inject(PaymentDestinationService);
+  protected readonly bankOptions = signal<readonly PaymentBankOption[]>([]);
+  protected readonly bankError = signal('');
+  protected readonly receivingBank = new FormControl<number | null>(null);
   private readonly feedback = inject(ActionFeedbackService);
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
@@ -97,8 +102,20 @@ export class AdminPaymentsPage {
     this.error.set('');
     this.message.set('');
     this.recordedCashReference.set('');
+    this.receivingBank.reset(null);
+    this.loadBanks();
     this.showForm.set(true);
     afterNextRender(() => this.element.nativeElement.querySelector<HTMLInputElement>('input[formControlName="amount"]')?.focus(), { injector: this.injector });
+  }
+
+  protected loadBanks(): void {
+    this.bankError.set('');
+    this.bankApi.adminOptions().subscribe({ next: banks => this.bankOptions.set(banks),
+      error: () => this.bankError.set('Unable to load receiving banks. Refresh the accounts before recording a bank payment.') });
+  }
+
+  protected selectedBank(): PaymentBankOption | undefined {
+    return this.bankOptions().find(bank => bank.id === this.receivingBank.value);
   }
 
   protected cancelCashPayment(): void {
@@ -120,8 +137,8 @@ export class AdminPaymentsPage {
     if (this.saving() || !booking || !this.canRecordPayment(booking)) return;
     this.form.markAllAsTouched();
     this.transactionReference.markAsTouched();
-    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && this.transactionReference.invalid)) {
-      this.feedback.show({ tone: 'error', title: 'Review the payment details', message: 'Enter an amount within the outstanding balance, a payment date, and the actual transaction reference for bank or online payments.' });
+    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && (this.transactionReference.invalid || !this.selectedBank()))) {
+      this.feedback.show({ tone: 'error', title: 'Review the payment details', message: 'Enter an amount within the outstanding balance and a payment date. For bank payments, select the receiving account and enter the actual transaction reference.' });
       return;
     }
     const amount = this.form.controls.amount.value;
@@ -129,11 +146,12 @@ export class AdminPaymentsPage {
     const reference = this.transactionReference.value.trim();
     const method = this.form.controls.method.value;
     const cash = method === 'CASH';
+    const bank = cash ? undefined : this.selectedBank();
     const formattedAmount = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(amount);
     this.feedback.confirm({ title: cash ? 'Record cash payment?' : 'Record verified bank payment?', confirmLabel: cash ? 'Confirm cash received' : 'Confirm payment received',
-      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment method: ${paymentMethodLabel(method)}\nPayment date: ${date}\n${cash ? '' : `Account: ${booking.paymentMethod === 'BANK_TRANSFER' && booking.paymentDestinationLabel ? booking.paymentDestinationLabel : 'Bank transfer (verified by staff)'}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
+      message: `${booking.customerName} · ${booking.bookingReference}\nAmount received: ${formattedAmount}\nPayment method: ${paymentMethodLabel(method)}\nPayment date: ${date}\n${cash ? '' : `Account: ${bank?.label + ' · ' + bank?.accountHint}\nTransaction reference: ${reference}\n`}\n${cash ? 'Confirm only cash actually received at the LA Chef office. A receipt reference will be generated after recording.' : 'Confirm only after checking that the money reached the LA Chef account. This records an additional payment and updates the receipt; it does not mark the event completed.'}`,
     }, () => {
-      if (this.selectedCashBooking() !== booking || this.form.controls.method.value !== method || this.form.controls.amount.value !== amount || this.form.controls.paymentDate.value !== date || (!cash && this.transactionReference.value.trim() !== reference)) return;
+      if (this.selectedCashBooking() !== booking || this.form.controls.method.value !== method || this.form.controls.amount.value !== amount || this.form.controls.paymentDate.value !== date || (!cash && (this.transactionReference.value.trim() !== reference || this.selectedBank() !== bank))) return;
       this.save();
     });
   }
@@ -143,16 +161,18 @@ export class AdminPaymentsPage {
     const selected = this.selectedCashBooking();
     if (!selected || !this.canRecordPayment(selected)) return;
     this.form.markAllAsTouched();
-    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && this.transactionReference.invalid)) return;
+    if (this.form.invalid || !['CASH', 'BANK_TRANSFER'].includes(this.form.controls.method.value) || (this.form.controls.method.value !== 'CASH' && (this.transactionReference.invalid || !this.selectedBank()))) return;
     const value = { ...this.form.getRawValue(), requestId: this.cashRequestId,
-      ...(this.form.controls.method.value !== 'CASH' ? { reference: this.transactionReference.value.trim() } : {}) };
+      ...(this.form.controls.method.value !== 'CASH' ? { reference: this.transactionReference.value.trim(), destinationId: this.selectedBank()!.id, destinationVersion: this.selectedBank()!.version } : {}) };
     if (value.reservationId !== selected.reservationId || (value.method !== selected.paymentMethod && selected.paymentMethod !== 'E-WALLET' && selected.amountPaid <= 0)) return;
     this.saving.set(true);
     this.error.set('');
     this.message.set('');
     this.form.disable({ emitEvent: false });
+    this.receivingBank.disable({ emitEvent: false });
     this.api.recordPayment(value).pipe(finalize(() => {
       this.form.enable({ emitEvent: false });
+      this.receivingBank.enable({ emitEvent: false });
       this.saving.set(false);
     })).subscribe({
       next: response => {

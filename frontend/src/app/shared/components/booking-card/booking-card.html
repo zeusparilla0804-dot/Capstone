@@ -20,12 +20,8 @@
       @if (booking().invoiceId) { <a class="btn btn-secondary btn-sm" [routerLink]="['/invoice', booking().invoiceId]">{{ booking().amountPaid > 0 ? 'View Receipt' : 'View Invoice' }}</a> }
       @if (needsPaymentChoice()) { <a class="btn btn-primary btn-sm" routerLink="/book-event" [queryParams]="{ paymentBooking: booking().id, step: 4 }">{{ booking().paymentMethod === 'gcash' ? 'Change payment method' : 'Choose Payment Method' }}</a> }
       @if (cashPaymentAction()) { <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', booking().id, 'payment']">View Cash Instructions</a> }
-      @else if (onlinePaymentAction() && (booking().amountPaid === 0 || incompleteDeposit())) {
-        @if (waitingForPaymentQr()) {
-          <button class="btn btn-primary btn-sm" type="button" disabled data-testid="waiting-payment-qr">Waiting for Payment QR</button>
-        } @else {
-          <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', booking().id, 'payment']">{{ proofPending() ? 'View Payment' : incompleteDeposit() ? 'Pay remaining down payment' : 'Submit Payment' }}</a>
-        }
+      @else if (onlinePaymentAction()) {
+        <a class="btn btn-primary btn-sm" [routerLink]="['/my-bookings', booking().id, 'payment']">{{ paymentActionLabel() }}</a>
       }
       @if (booking().status === 'pending') { <a class="btn btn-secondary btn-sm" data-testid="edit-booking" routerLink="/book-event" [queryParams]="{ booking: booking().id }">Edit Booking</a><button class="btn btn-tertiary booking-card__cancel" type="button" (click)="requestCancellation($event)">Cancel Booking</button> }
     </div>

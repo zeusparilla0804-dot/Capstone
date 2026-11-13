@@ -676,3 +676,15 @@ test('expired historical booking cannot credit a proof without saved payment app
   assert.equal(db.proofs[0]!.status, 'SUBMITTED');
   assert.equal(db.booking!.status, 'EXPIRED');
 });
+
+test('verification retains the submitted receiving bank snapshot in the credit and public proof', async () => {
+  const db = new ReviewDb();
+  Object.assign(db.proofs[0]!, { destinationId: 2, destinationLabel: 'Original Bank B', destinationAccountName: 'LA Chef', destinationAccountHint: '1234', destinationVersion: 'b'.repeat(64) });
+  const result = await db.service().verifyProof(1, proof.id, 90);
+  assert.equal(result.destinationLabel, 'Original Bank B');
+  assert.equal(result.destinationAccountHint, '1234');
+  const credit = db.queries.find(row => /INSERT dbo.PAYMENT_TRANSACTION/.test(row.command));
+  assert.ok(credit?.command.includes('destination_label'));
+  assert.equal(credit?.params['destinationLabel'], 'Original Bank B');
+  assert.equal(db.credits.length, 1); assert.equal(db.payment!.amountPaid, 100);
+});

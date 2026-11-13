@@ -73,6 +73,8 @@ function queryInput(raw: unknown): ProofReviewQuery {
 
 function publicProof(proof: PaymentProofRecord): PublicPaymentProof {
   return { id: proof.id, reservationId: proof.reservationId, customerId: proof.customerId, paymentId: proof.paymentId,
+    destinationId: proof.destinationId, destinationLabel: proof.destinationLabel, destinationAccountName: proof.destinationAccountName,
+    destinationAccountHint: proof.destinationAccountHint, destinationVersion: proof.destinationVersion,
     paymentTransactionId: proof.paymentTransactionId, invoiceId: proof.invoiceId, method: proof.method,
     claimedAmount: proof.claimedAmount, transactionReference: proof.transactionReference, paymentDate: proof.paymentDate,
     originalFilename: (proof.originalFilename.split(/[\\/]/).at(-1) || 'payment-proof').replace(/[\x00-\x1f\x7f]/g, '_'),

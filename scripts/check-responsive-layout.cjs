@@ -34,7 +34,7 @@ const server = http.createServer(async (req, res) => {
 (async () => {
   await fs.mkdir(output, { recursive: true });
   const dashboard = await fixture('admin-dashboard', 'dashboard');
-  dashboard.priority.qrAssignmentsWaiting = 3;
+  dashboard.priority.qrAssignmentsWaiting = 0;
   dashboard.recentActivity = [
     { id: 'H-1', reservationId: 42, title: 'Payment method selected', detail: 'BK-2026-12345678 · Alexandra Dela Cruz Santos · Bank transfer', updatedAt: '2026-11-12T04:30:00Z' },
     { id: 'A-1', reservationId: 42, title: 'Event time adjusted by admin', detail: 'BK-2026-12345678 · 18:00 → 22:00', updatedAt: '2026-11-12T04:00:00Z' },
@@ -43,6 +43,8 @@ const server = http.createServer(async (req, res) => {
   const review = await fixture('admin-payment-review', 'review');
   review.proof.fileUrl = '/assets/images/packages/premium-package.webp';
   const invoice = await fixture('invoice', 'invoice');
+  invoice.payments = invoice.payments.map(row => ({ ...row, method: 'BANK_TRANSFER', destinationLabel: 'Bank B', destinationAccountName: 'LA Chef Event Catering Services', destinationAccountHint: 'Ending 2222' }));
+  review.proof.destinationLabel = 'Bank B'; review.proof.destinationAccountName = 'LA Chef Event Catering Services'; review.proof.destinationAccountHint = 'Ending 2222';
   const reservationReport = await fixture('admin-reports', 'reservationReport');
   const paymentReport = await fixture('admin-reports', 'paymentReport');
   const booking = await fixture('customer-billing', 'booking');
@@ -53,7 +55,7 @@ const server = http.createServer(async (req, res) => {
   const adminBookings = [detail, { ...detail, id: 43, reference: 'BK-2026-12345678', status: 'AWAITING_PAYMENT', invoiceId: 8, packageName: 'Wedding Silver Package for 100 Guests' }];
   const addon = { id: 5, name: 'Coffee Bar for 100 Guests', description: 'Coffee service, cookies, and light snacks for 100 guests.', price: 22000, isActive: true };
   const payment = { id: 5, reservationId: 42, bookingId: 42, bookingStatus: 'AWAITING_PAYMENT', bookingReference: 'BK-2026-12345678', customerName: profile.fullName, amountDue: 85000, amountPaid: 10000, amount: 10000, paymentMethod: 'CASH', method: 'CASH', paymentDate: '2026-10-01', status: 'PARTIALLY_PAID' };
-  const destination = { id: 1, method: 'BANK_TRANSFER', label: 'Bank transfer receiving account for catering reservations', accountName: profile.fullName, accountHint: 'Ending 4567', isAvailable: true, assignmentCount: 3 };
+  const destination = { id: 1, method: 'BANK_TRANSFER', label: 'Bank transfer receiving account for catering reservations', accountName: profile.fullName, accountHint: 'Ending 4567', isAvailable: true, version: 'a'.repeat(64) };
   let role = 'customer';
   let currentLayout = '';
   const unhandledEndpoints = new Set();
@@ -61,7 +63,7 @@ const server = http.createServer(async (req, res) => {
   const results = [];
   pages.push('/login?layout=register', '/admin/packages?layout=create', '/admin/add-ons?layout=create', '/admin/customers/7?layout=deactivate', '/admin/reports?layout=payments', '/book-event?layout=calendar', '/reset-password?token=local-layout-test', '/admin/reset-password?token=local-layout-test', '/admin/login?layout=mfa');
   pages.push('/book-event?booking=42&layout=addons', '/book-event?booking=42&layout=review', '/my-bookings?layout=cancel', '/book-event?paymentBooking=42&step=4&layout=payment');
-  pages.push('/book-event?paymentBooking=42&step=4&layout=payment-confirm', '/admin/payment-qrs?layout=assignment');
+  pages.push('/book-event?paymentBooking=42&step=4&layout=payment-confirm', '/admin/payment-qrs?layout=accounts');
   pages.push('/admin/payments?layout=legacy-cash', '/admin/payments?layout=legacy-bank', '/admin/payments/proofs/1?layout=legacy-proof',
     '/my-bookings/42/payment?layout=legacy-proof', '/my-bookings?layout=legacy-choice', '/billing?layout=legacy-choice');
   pages.push('/admin/reports?layout=no-upcoming');
@@ -69,7 +71,8 @@ const server = http.createServer(async (req, res) => {
   pages.push('/admin/bookings/42?layout=edit-time');
   const depositRoutes = ['/my-bookings', '/billing', '/my-bookings/42/payment', '/invoice/8', '/admin/invoices/8'];
   pages.push(...depositRoutes.map(route => `${route}?layout=deposit-shortfall`), '/my-bookings?layout=deposit-pending', '/billing?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-complete');
-  const selectedPages = process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
+  const selectedPages = process.argv.includes('--banks-only') ? ['/my-bookings/42/payment', '/billing', '/my-bookings', '/admin/payment-qrs?layout=accounts', '/admin/payments?layout=installment-bank', '/admin/payments/proofs/1', '/invoice/8']
+    : process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
     : process.argv.includes('--deposits-only') ? pages.filter(route => route.includes('layout=deposit-'))
     : process.argv.includes('--operations-only') ? ['/admin/dashboard', '/admin/bookings/42', '/admin/bookings/42?layout=edit-time', '/my-bookings/42/payment', '/admin/payment-qrs']
     : process.argv.includes('--installments-only') ? pages.filter(route => route.includes('layout=installment-'))
@@ -139,7 +142,7 @@ const server = http.createServer(async (req, res) => {
         originalFilename: 'receipt.png', mimeType: 'image/png', byteSize: 100, createdAt: '2026-11-12T02:00:00Z', reviewedAt: '2026-11-12T03:00:00Z', updatedAt: '2026-11-12T03:00:00Z',
       }, ...(currentLayout === 'deposit-pending' ? [{ id: 2, reservationId: 42, customerId: 7, claimedAmount: 7000, method: 'BANK_TRANSFER', status: 'SUBMITTED', paymentDate: '2026-11-12', createdAt: '2026-11-12T04:00:00Z', updatedAt: '2026-11-12T04:00:00Z' }] : [])] : [];
       else if (p.endsWith('/methods')) data = ['BANK_TRANSFER'];
-      else if (p === '/admin/payment-destinations') data = [destination];
+      else if (p === '/admin/payment-destinations' || p === '/admin/payment-destinations/options' || /^\/payment-destinations\/bookings\/\d+\/options$/.test(p)) data = [destination];
       else if (p.endsWith('/waiting-bookings')) data = [{ ...detail, customerName: profile.fullName, paymentMethod: 'BANK_TRANSFER', amountDue: 85000, amountPaid: 0 }];
       else if (p.includes('/payment-destinations/bookings/')) data = destination;
       else if (p.includes('/availability')) data = p.includes('month') ? [] : { ...detail.capacity, date: url.searchParams.get('date') || '2027-02-12', guestCount: Number(url.searchParams.get('guestCount') || 100) };
@@ -212,17 +215,20 @@ const server = http.createServer(async (req, res) => {
           await page.locator('select[formControlName="method"]').selectOption(layout === 'installment-cash' ? 'CASH' : 'BANK_TRANSFER');
           await page.locator('input[formControlName="amount"]').fill('42500');
           await page.locator('input[formControlName="paymentDate"]').fill('2026-11-01');
-          if (layout === 'installment-bank') await page.locator('input[maxlength="150"]').fill('BANK-INSTALLMENT-QA');
+          if (layout === 'installment-bank') { await page.locator('input[maxlength="150"]').fill('BANK-INSTALLMENT-QA'); await page.locator('select').filter({ has: page.locator('option', { hasText: 'Select the receiving account' }) }).selectOption({ label: destination.label + ' · ' + destination.accountName + ' · ' + destination.accountHint }); }
           else if (await page.locator('input[maxlength="150"]').count()) throw Error('Cash installment must not require a bank reference');
           if (!await page.locator('.admin-form button[type="submit"]').isEnabled()) throw Error('Valid installment must be recordable');
         }
         if (layout === 'legacy-choice') await page.getByRole('link', { name: 'Change payment method', exact: true }).waitFor();
         if (layout === 'legacy-proof' && await page.locator('#proof-file,[data-testid="verify-proof"]').count()) throw Error('Legacy GCash must not accept new proof or credit');
-        if (layout === 'assignment') await page.getByRole('button', { name: 'Choose customer', exact: true }).click();
+        if (layout === 'accounts' && await page.locator('#qr-assign-title').count()) throw Error('Account management must not require customer assignments');
         if (layout === 'mfa') {
           await page.locator('#identity').fill('local@example.test'); await page.locator('#adminPassword').fill('LocalTestPassword!');
           await page.getByRole('button', { name: 'Sign in', exact: true }).click();
           await page.locator('img.mfa-qr').waitFor();
+        }
+        if (new URL(route, 'http://localhost').pathname.endsWith('/payment') && await page.locator('#bank-account').count()) {
+          await page.locator('#bank-account').selectOption('1'); await page.locator('.destination-panel img').waitFor();
         }
         if (layout) await page.waitForTimeout(100);
         const blockedActions = await page.evaluate(async () => {
@@ -310,7 +316,7 @@ const server = http.createServer(async (req, res) => {
           const qrAlignment = qr ? (() => { const box = qr.getBoundingClientRect(), panel = qr.closest('.destination-panel').getBoundingClientRect(); return { width: box.width, centerOffset: Math.abs((box.left + box.right - panel.left - panel.right) / 2) }; })() : null;
           if (qrAlignment && (qrAlignment.centerOffset > 2 || (viewport >= 768 && qrAlignment.width < 350))) textOverflow.push({ cls: 'destination-panel', text: 'Payment QR must be larger and centered' });
           const proofDate = document.querySelector('.payment-layout .proof-tool form #payment-date');
-          if (proofDate && (proofDate.tagName !== 'TIME' || proofDate.closest('form').querySelector('input[type="date"]'))) textOverflow.push({ cls: 'payment-date', text: 'Payment date must be non-interactive text' });
+          if (proofDate && (proofDate.tagName !== 'INPUT' || proofDate.type !== 'date' || proofDate.readOnly)) textOverflow.push({ cls: 'payment-date', text: 'The actual receipt payment date must be editable' });
           if (document.querySelector('[data-testid="submission-date"]')) textOverflow.push({ cls: 'submission-date', text: 'Separate submission date must not be shown' });
           return { scrollWidth: document.documentElement.scrollWidth, overflowing, actionOffsets, textOverflow, dialogOverflow, headerGap, numericHeaderAlignment, overlappingControls, splitTokens, qrAlignment, fonts: [...document.fonts].filter(font => font.status === 'loaded').map(font => font.family), heading: document.querySelector('h1')?.textContent.trim() };
         });

@@ -20,8 +20,30 @@ const file = { path: 'temp', originalFilename: 'receipt.png', declaredMimeType: 
   extension: 'png', mimeType: 'image/png', bytes: Buffer.from('data'), privateRoot: 'root' } as ValidatedProofFile;
 const input = { method: 'BANK_TRANSFER', claimedAmount: 50.25, transactionReference: ' TX-1 ', paymentDate: '2026-10-02' };
 
+test('image-only replacement preserves the locked submitted bank snapshot after account changes', async () => {
+  const db = new FakeDb(); const { paymentBankVersion } = await import('./payment-bank.service.js');
+  const selected = { destinationId: db.bank.id, destinationVersion: paymentBankVersion(db.bank) };
+  const original = await db.service.submitCustomerProof(7, 5, { ...input, ...selected }, file);
+  db.bank.label = 'Renamed bank'; db.bank.isAvailable = false;
+  const replacement = await db.service.submitCustomerProof(7, 5, { ...input, ...selected, replacesProofId: String(original.id) }, file);
+  assert.equal(replacement.destinationLabel, 'Bank B'); assert.equal(replacement.destinationVersion, selected.destinationVersion);
+  assert.equal(db.payment?.paid, 10); assert.equal(db.proofs[0]!['status'], 'SUPERSEDED');
+  await assert.rejects(db.service.submitCustomerProof(7, 5, { ...input, ...selected, replacesProofId: String(original.id) }, file), status(409));
+});
+
+test('explicit replacement can correct the receiving bank without crediting another payment', async () => {
+  const db = new FakeDb(); const { paymentBankVersion } = await import('./payment-bank.service.js');
+  const original = await db.service.submitCustomerProof(7, 5, { ...input, destinationId: db.bank.id, destinationVersion: paymentBankVersion(db.bank) }, file);
+  db.bank = { ...db.bank, id: 3, label: 'Actual Bank C', accountHint: '3333' };
+  const corrected = await db.service.submitCustomerProof(7, 5, { ...input, transactionReference: 'CORRECTED-REF', replacesProofId: String(original.id),
+    destinationId: 3, destinationVersion: paymentBankVersion(db.bank) }, file);
+  assert.equal(corrected.destinationLabel, 'Actual Bank C'); assert.equal(corrected.destinationAccountHint, '3333');
+  assert.equal(db.proofs[0]!['status'], 'SUPERSEDED'); assert.equal(db.payment?.paid, 10);
+});
+
 class FakeDb {
   destinationAvailable = true;
+  bank = { id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: '1234', isAvailable: true, mime: 'image/png', image: Buffer.from('qr-b') };
   policy?: Record<string, unknown>;
   status = 'AWAITING_PAYMENT';
   owner = 7;
@@ -77,7 +99,8 @@ class FakeRequest {
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
   async query(command: string) {
     const p = this.params; this.db.queries.push(command);
-    if (/FROM dbo\.BOOKING_PAYMENT_DESTINATION/i.test(command)) return { recordset: this.db.destinationAvailable ? [{ destination_id: 1 }] : [], rowsAffected: [1] };
+    if (/FROM dbo\.BOOKING_PAYMENT_DESTINATION/i.test(command)) return { recordset: this.db.destinationAvailable ? [this.db.bank] : [], rowsAffected: [1] };
+    if (/FROM dbo\.PAYMENT_DESTINATION d/i.test(command)) return { recordset: [this.db.bank], rowsAffected: [1] };
     if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return { recordset: this.db.policy ? [this.db.policy] : [], rowsAffected: [0] };
     if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
       for (const field of ['Stage', 'HoldStatus', 'ReviewRequired', 'ReviewReason', 'VerificationDueAt', 'UpdatedAt']) {
@@ -101,12 +124,13 @@ class FakeRequest {
     }
     if (/FROM dbo\.RESERVATION.*UPDLOCK/is.test(command)) return { recordset: this.db.exists ? [{ status: this.db.status, customerId: this.db.owner }] : [], rowsAffected: [1] };
     if (/FROM dbo\.PAYMENT\b/is.test(command)) return { recordset: this.db.payment ? [{ paymentId: this.db.payment.id, amountDue: this.db.payment.due, amountPaid: this.db.payment.paid, paymentMethod: this.db.payment.method }] : [], rowsAffected: [1] };
-    if (/UPDATE dbo\.PAYMENT_PROOF/is.test(command)) { for (const proof of this.db.proofs) if (proof.status === 'SUBMITTED' && proof.reservationId === p['reservationId'] && proof.customerId === p['customerId']) proof.status = 'SUPERSEDED'; return { recordset: [], rowsAffected: [1] }; }
+    if (/UPDATE dbo\.PAYMENT_PROOF/is.test(command)) { for (const proof of this.db.proofs) if (proof.status === 'SUBMITTED' && proof.reservationId === p['reservationId'] && proof.customerId === p['customerId']) { proof.archivedTransactionReference = proof.transactionReference; proof.transactionReference = null; proof.status = 'SUPERSEDED'; } return { recordset: [], rowsAffected: [1] }; }
     if (/INSERT dbo\.PAYMENT_PROOF/is.test(command)) {
       if (this.db.duplicateError) throw this.db.duplicateError;
       if (this.db.failOn === 'insert') throw new Error('insert failed');
       if (p['transactionReference'] && this.db.proofs.some(proof => proof.transactionReference === p['transactionReference'])) throw Object.assign(new Error('duplicate'), { number: 2601 });
       const record = { id: this.db.proofs.length + 1, reservationId: p['reservationId'], customerId: p['customerId'], paymentId: p['paymentId'],
+        destinationId: p['destinationId'], destinationLabel: p['destinationLabel'], destinationAccountName: p['destinationAccountName'], destinationAccountHint: p['destinationAccountHint'], destinationVersion: p['destinationVersion'],
         method: p['method'], claimedAmount: p['claimedAmount'], transactionReference: p['transactionReference'], paymentDate: p['paymentDate'],
         storageKey: p['storageKey'], originalFilename: p['originalFilename'], mimeType: p['mimeType'], byteSize: p['byteSize'], status: 'SUBMITTED',
         rejectionReason: null, createdAt: new Date(), updatedAt: new Date() };
@@ -116,6 +140,7 @@ class FakeRequest {
     if (/INSERT dbo\.BOOKING_STATUS_HISTORY/is.test(command)) { if (this.db.failOn === 'history') throw new Error('history failed'); this.db.history.push({ ...p }); return { recordset: [], rowsAffected: [1] }; }
     if (/FROM dbo\.PAYMENT_PROOF/is.test(command)) {
       let rows = this.db.proofs;
+      if (command.includes("AND status='SUBMITTED'")) rows = rows.filter(proof => proof.status === 'SUBMITTED');
       if (p['proofId'] !== undefined) rows = rows.filter(proof => proof.id === p['proofId']);
       else rows = rows.filter(proof => proof.reservationId === p['reservationId'] && proof.customerId === p['customerId']);
       return { recordset: [...rows].reverse(), rowsAffected: [rows.length] };
@@ -461,4 +486,25 @@ test('expired historical booking cannot acquire a new payment claim without save
   assert.equal(db.proofs.length, 0);
   assert.equal(db.status, 'EXPIRED');
   assert.deepEqual(db.deleted, db.saved);
+});
+
+test('a customer-selected bank proof needs no assignment and stores server-read account details', async () => {
+  const { paymentBankVersion } = await import('./payment-bank.service.js');
+  const db = new FakeDb(); db.destinationAvailable = false;
+  const version = paymentBankVersion(db.bank);
+  const result = await db.service.submitCustomerProof(7, 5, { ...input, destinationId: 2, destinationVersion: version, destinationLabel: 'Forged bank' }, file);
+  assert.equal(result.destinationId, 2); assert.equal(result.destinationLabel, 'Bank B');
+  assert.equal(result.destinationVersion, version); assert.equal(result.destinationAccountHint, '1234');
+  assert.ok(db.queries.some(query => /INSERT dbo.PAYMENT_PROOF/.test(query) && query.includes('destination_label')));
+  assert.ok(!db.queries.some(query => query.includes('BOOKING_PAYMENT_DESTINATION')));
+  assert.equal(db.payment!.paid, 10);
+});
+
+test('stale or disabled bank choices do not create a proof or credit', async () => {
+  const db = new FakeDb();
+  await assert.rejects(db.service.submitCustomerProof(7, 5, { ...input, destinationId: 2, destinationVersion: 'a'.repeat(64) }, file), status(409));
+  db.bank.isAvailable = false;
+  const { paymentBankVersion } = await import('./payment-bank.service.js');
+  await assert.rejects(db.service.submitCustomerProof(7, 5, { ...input, destinationId: 2, destinationVersion: paymentBankVersion(db.bank) }, file), status(409));
+  assert.equal(db.proofs.length, 0); assert.equal(db.payment!.paid, 10);
 });
