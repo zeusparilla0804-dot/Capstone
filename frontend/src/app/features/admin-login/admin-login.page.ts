@@ -54,9 +54,13 @@ export class AdminLoginPage {
       }
       await this.openDashboard();
     } catch (error) {
-      this.error.set(error instanceof HttpErrorResponse && error.status === 0
-        ? 'Cannot connect to the server. Please try again shortly.'
-        : 'Invalid administrator credentials.');
+      let message = 'Invalid administrator credentials.';
+      if (error instanceof HttpErrorResponse) {
+        if (error.status === 0) message = 'Cannot connect to the server. Please try again shortly.';
+        else if (error.status === 429) message = 'Too many sign-in attempts. Please try again in 15 minutes.';
+        else if (error.status >= 500) message = 'The server could not complete sign-in. Please try again shortly.';
+      }
+      this.error.set(message);
     } finally {
       this.busy.set(false);
     }

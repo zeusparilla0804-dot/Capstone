@@ -79,6 +79,19 @@ describe('AdminLoginPage', () => {
     expect(component.error()).toBe('Cannot connect to the server. Please try again shortly.');
   });
 
+  it.each([
+    [429, 'Too many sign-in attempts. Please try again in 15 minutes.'],
+    [503, 'The server could not complete sign-in. Please try again shortly.'],
+  ])('explains HTTP %s sign-in failures without blaming the credentials', async (status, message) => {
+    vi.mocked(TestBed.inject(AdminAuthService).login).mockRejectedValueOnce(new HttpErrorResponse({ status }));
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ identity: 'admin@example.test', password: 'password' });
+    await component.submit();
+    expect(component.error()).toBe(message);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
   it('holds navigation for MFA and shows setup instructions', async () => {
     vi.mocked(TestBed.inject(AdminAuthService).login).mockResolvedValueOnce({
       requiresMfa: true, challenge: 'pending', setupSecret: 'SECRETKEY',
