@@ -15,7 +15,6 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
   private readonly cleanups: (() => void)[] = [];
   private observer?: MutationObserver;
   private resizeObserver?: ResizeObserver;
-  private touchPointer?: MediaQueryList;
   private initialized = false;
 
   ngAfterViewChecked(): void {
@@ -26,12 +25,6 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
       }
       const view = this.document.defaultView;
       if (view) {
-        this.touchPointer = view.matchMedia?.('(pointer: coarse)');
-        if (this.touchPointer) {
-          const pointerChanged = () => this.sync();
-          this.touchPointer.addEventListener?.('change', pointerChanged);
-          this.cleanups.push(() => this.touchPointer?.removeEventListener?.('change', pointerChanged));
-        }
         this.cleanups.push(this.renderer.listen(view, 'resize', () => this.sync()));
         this.observer = new view.MutationObserver(() => this.sync());
         this.observer.observe(this.element, { attributes: true, attributeFilter: ['type', 'value'] });
@@ -47,8 +40,7 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
   private sync(): void {
     const input = this.element;
     const view = this.document.defaultView;
-    // Mobile browsers must draw the mask and caret together; custom asterisks can have a different advance width.
-    if (!view || this.touchPointer?.matches || !this.enabled() || input.type !== 'password' || !input.value) {
+    if (!view || !this.enabled() || input.type !== 'password' || !input.value) {
       this.clearMask();
       return;
     }
@@ -65,6 +57,8 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
       this.renderer.appendChild(input.parentElement, this.mask);
       // Only native masking glyphs are made transparent; the real value stays in type=password.
       for (const [property, value] of [
+        // Matching fixed-width glyphs keep the native caret and visible asterisks aligned on phones too.
+        ['font-family', 'monospace'],
         ['color', 'transparent'], ['-webkit-text-fill-color', 'transparent'],
         ['text-shadow', 'none'], ['caret-color', style.caretColor === 'auto' ? this.foreground : style.caretColor],
       ]) {
@@ -78,8 +72,9 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
     this.mask.style.width = `${Math.max(0, input.clientWidth - paddingLeft - paddingRight)}px`;
     this.mask.style.top = `${input.offsetTop + input.offsetHeight / 2}px`;
     this.mask.style.color = this.foreground;
+    const maskStyle = view.getComputedStyle(input);
     for (const property of ['font-family', 'font-size', 'font-weight', 'font-style', 'line-height', 'letter-spacing']) {
-      this.mask.style.setProperty(property, style.getPropertyValue(property));
+      this.mask.style.setProperty(property, maskStyle.getPropertyValue(property));
     }
     // The extra DOM text contains asterisks only, never the password or a value attribute.
     this.text!.textContent = '*'.repeat(Array.from(input.value).length);
