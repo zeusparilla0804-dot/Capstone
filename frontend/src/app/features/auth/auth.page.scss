@@ -150,6 +150,7 @@
 
 .auth-panel {
   display: flex;
+  min-width: 0;
   width: calc(100% - 96px);
   max-width: 620px;
   flex-direction: column;
@@ -277,10 +278,13 @@ form {
 }
 
 .form-grid {
+  min-width: 0;
   gap: 14px;
 }
 
 .form-field {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
 }
 
@@ -310,6 +314,7 @@ form {
 .auth-input,
 .password-field {
   position: relative;
+  min-width: 0;
 }
 
 .auth-input > svg,
@@ -329,6 +334,8 @@ form {
 }
 
 .form-field input {
+  min-width: 0;
+  max-width: 100%;
   min-height: 54px;
   border-color: var(--auth-border);
   border-radius: 10px;
@@ -336,6 +343,10 @@ form {
   padding: 12px 52px;
   color: var(--auth-text);
   font-size: 1rem;
+}
+
+.form-grid .form-field input {
+  padding-inline: 14px;
 }
 
 input[type='password']::-ms-reveal,
@@ -547,6 +558,11 @@ form > .btn:focus-visible,
     width: calc(100% - 40px);
     max-width: 430px;
     padding-block: 46px 56px;
+  }
+
+  .auth-shell--register .form-field input,
+  .auth-shell--register .form-field input::placeholder {
+    font-size: 16px;
   }
 }
 
