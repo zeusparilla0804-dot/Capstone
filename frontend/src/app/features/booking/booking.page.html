@@ -188,7 +188,7 @@
                   @if (controlInvalid('packageId')) { @if (eventForm.controls.packageId.hasError('packageEvent')) { <small>Choose a package that matches the selected event type.</small> } @else { <small>Please select a package.</small> } }
                 </div>
               </div>
-              <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons <span aria-hidden="true">&rarr;</span></button></div>
+              <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons</button></div>
             </form>
           }
           @case (2) {
