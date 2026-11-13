@@ -164,6 +164,11 @@
   text-align: right;
 }
 
+.invoice-table--items th:nth-child(2),
+.invoice-table--items td:nth-child(2) {
+  text-align: center;
+}
+
 .invoice-totals {
   display: flex;
   flex-direction: column;
