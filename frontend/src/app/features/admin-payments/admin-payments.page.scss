@@ -35,6 +35,10 @@ button[admin-actions] { font-family: var(--font-admin); font-size: 13px; font-we
 .admin-pagination .btn { font-size: 12px; font-weight: 500; }
 
 @media (min-width: 768px) {
+  .payment-proof-records td[data-label='Review'] > .btn {
+    margin-inline-start: 16px;
+  }
+
   .payment-records .admin-table--payments :is(th, td):nth-child(5) {
     padding-left: 37px;
   }
