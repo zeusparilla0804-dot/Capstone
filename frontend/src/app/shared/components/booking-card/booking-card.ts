@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../pipes/event-time.pipe';
 import { CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, input, output, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -7,7 +8,7 @@ import { StatusBadgeComponent } from '../status-badge/status-badge';
 
 @Component({
   selector: 'app-booking-card',
-  imports: [CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent],
+  imports: [EventTimePipe, CurrencyPipe, DatePipe, DecimalPipe, RouterLink, StatusBadgeComponent],
   templateUrl: './booking-card.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './booking-card.scss',

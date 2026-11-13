@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -9,7 +10,7 @@ import { bookingSubmissionMessage } from '../booking/booking-submission-error';
 
 @Component({
   selector: 'app-checkout-page',
-  imports: [CurrencyPipe, DatePipe, PublicHeaderComponent, RouterLink],
+  imports: [EventTimePipe, CurrencyPipe, DatePipe, PublicHeaderComponent, RouterLink],
   templateUrl: './checkout.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './checkout.page.scss',

@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
@@ -24,7 +25,7 @@ function currentMonth(now = new Date()): { dateFrom: string; dateTo: string } {
 
 @Component({
   selector: 'app-admin-reports',
-  imports: [PaymentMethodLabelPipe, AdminShellComponent, CurrencyPipe, DatePipe, ReactiveFormsModule, StatusBadgeComponent],
+  imports: [EventTimePipe, PaymentMethodLabelPipe, AdminShellComponent, CurrencyPipe, DatePipe, ReactiveFormsModule, StatusBadgeComponent],
   templateUrl: './admin-reports.page.html',
   styleUrl: './admin-reports.page.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

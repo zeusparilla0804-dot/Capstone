@@ -1,3 +1,4 @@
+import { eventTime24, formatEventTime } from '../../shared/pipes/event-time.pipe';
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -84,21 +85,21 @@ export class AdminBookingDetailPage {
 
   protected editEventTime(): void {
     if (!this.canEditTime() || this.mutationPending()) return;
-    this.editedEventTime = this.booking()?.eventTime ?? '';
+    this.editedEventTime = this.booking()?.eventTime ? formatEventTime(this.booking()!.eventTime) : '';
     this.editingTime.set(true);
     this.actionError.set('');
   }
 
   protected requestTimeUpdate(): void {
     const booking = this.booking();
-    const time = this.editedEventTime;
+    const time = eventTime24(this.editedEventTime);
     if (!booking || !this.canEditTime() || this.mutationPending()) return;
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) { this.actionError.set('Enter a valid event time.'); return; }
+    if (!time) { this.actionError.set('Enter a valid event time, for example 7:00 PM.'); return; }
     if (time === booking.eventTime) { this.editingTime.set(false); return; }
     this.feedbackDialog.confirm({ title: 'Adjust event time?', confirmLabel: 'Save event time',
       message: `${booking.reference}\nFrom ${this.eventTimeLabel(booking.eventTime)} to ${this.eventTimeLabel(time)}.\nConfirm that this time has been agreed with the client.`,
     }, () => {
-      if (this.mutationPending() || this.booking() !== booking || this.editedEventTime !== time) return;
+      if (this.mutationPending() || this.booking() !== booking || eventTime24(this.editedEventTime) !== time) return;
       this.mutationPending.set(true);
       this.actionError.set('');
       this.api.updateBookingTime(this.bookingId, time, booking.eventTime ?? null)
@@ -288,9 +289,9 @@ export class AdminBookingDetailPage {
     return labels[status];
   }
 
-  protected eventTimeLabel(value?: string): string {
-    if (!value || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return value || 'Time not provided';
-    const hour = Number(value.slice(0, 2));
-    return `${hour % 12 || 12}:${value.slice(3)} ${hour < 12 ? 'AM' : 'PM'}`;
+  protected normalizeEditedEventTime(): void {
+    if (eventTime24(this.editedEventTime)) this.editedEventTime = formatEventTime(this.editedEventTime);
   }
+
+  protected eventTimeLabel(value?: string): string { return formatEventTime(value); }
 }

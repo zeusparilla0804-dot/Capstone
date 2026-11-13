@@ -6,7 +6,7 @@
       <h3>{{ booking().eventName }}</h3>
     </div>
     <dl>
-      <div><dt>{{ reservationLayout() ? 'Date & Time' : 'Date' }}</dt><dd>{{ booking().eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &bull; {{ booking().eventTime }}</dd></div>
+      <div><dt>{{ reservationLayout() ? 'Date & Time' : 'Date' }}</dt><dd>{{ booking().eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} &bull; {{ booking().eventTime | eventTime }}</dd></div>
       <div><dt>Venue</dt><dd>{{ booking().venue }}</dd></div>
       <div><dt>Package</dt><dd>@if (reservationLayout() && booking().package.pricingType === 'PER_HEAD' && booking().package.pricePerGuest !== null) { PHP {{ booking().package.pricePerGuest | number:'1.0-2' }} per head } @else { {{ booking().package.packageName }}@if (!reservationLayout()) { &bull; {{ booking().guestCount }} guests } }</dd></div>
       @if (reservationLayout()) { <div><dt>Guests</dt><dd>{{ booking().guestCount | number }} guests</dd></div> }

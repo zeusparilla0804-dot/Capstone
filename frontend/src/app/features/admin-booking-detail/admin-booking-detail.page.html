@@ -51,7 +51,7 @@
             @if (editingTime()) {
               <form class="event-time-form" (ngSubmit)="requestTimeUpdate()">
                 <label for="admin-event-time">Agreed event time</label>
-                <input id="admin-event-time" name="eventTime" type="time" step="60" required [(ngModel)]="editedEventTime" [disabled]="mutationPending()" />
+                <input id="admin-event-time" name="eventTime" type="text" placeholder="7:00 PM" (blur)="normalizeEditedEventTime()" required [(ngModel)]="editedEventTime" [disabled]="mutationPending()" />
                 <small>Use the time agreed with the client, including evening events.</small>
                 <div><button class="btn btn-primary btn-sm" type="submit" [disabled]="mutationPending() || !editedEventTime">Save time</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="mutationPending()" (click)="editingTime.set(false)">Cancel</button></div>
               </form>

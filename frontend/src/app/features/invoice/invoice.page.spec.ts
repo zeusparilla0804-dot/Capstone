@@ -46,6 +46,11 @@ const invoice: Invoice = {
 };
 
 describe('InvoicePageComponent', () => {
+  it('prints the event time in AM/PM format on invoices and receipts', () => {
+    (fixture.componentInstance as any).invoice.set(invoice); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.invoice-document').textContent).toContain('6:00 PM');
+    expect(fixture.nativeElement.querySelector('.invoice-document').textContent).not.toContain('18:00');
+  });
   it('keeps the receiving bank on every verified installment and identifies unknown historical banks', () => {
     const component = fixture.componentInstance as any;
     component.invoice.set({ ...invoice, amountPaid: 100000, remainingBalance: 0, status: 'PAID', payments: [

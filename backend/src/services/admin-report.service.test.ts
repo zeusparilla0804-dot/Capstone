@@ -72,6 +72,8 @@ test('CSV exports use stable safe UTF-8 CRLF output without credential fields', 
   assert.match(reservations, /'\+cmd/);
   assert.match(reservations, /'@Package/);
   assert.doesNotMatch(reservations, /password|token|session/i);
+  assert.match(reservations, /2:00 PM/);
+  assert.doesNotMatch(reservations, /14:00/);
 
   const payments = await service.paymentCsv({});
   assert.match(payments, /'-INV/);

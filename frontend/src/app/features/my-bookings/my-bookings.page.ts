@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { AfterViewChecked, ChangeDetectionStrategy, Component, computed, effect, ElementRef, HostListener, inject, OnDestroy, signal, ViewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -11,7 +12,7 @@ import { customerNavItems } from '../../shared/navigation/customer-navigation';
 
 @Component({
   selector: 'app-my-bookings-page',
-  imports: [BookingCardComponent, DashboardSidebarComponent, RouterLink, FormsModule],
+  imports: [EventTimePipe, BookingCardComponent, DashboardSidebarComponent, RouterLink, FormsModule],
   templateUrl: './my-bookings.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './my-bookings.page.scss',

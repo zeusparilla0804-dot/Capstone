@@ -271,6 +271,11 @@
   color: var(--color-text-muted);
 }
 
+.payment-history .invoice-table th:nth-last-child(-n + 2),
+.payment-history .invoice-table td:nth-last-child(-n + 2) {
+  white-space: nowrap;
+}
+
 .invoice-document footer {
   break-inside: avoid;
   margin-top: 34px;

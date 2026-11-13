@@ -1,3 +1,4 @@
+import { formatEventTime } from '../utils/event-time.js';
 import type { AdminPaymentReport, AdminReservationReport, PaymentReportMethod, PaymentReportQuery, PaymentReportStatus, ReservationReportQuery } from '../types/admin-report.types.js';
 import type { BookingStatus } from '../types/admin.types.js';
 import { adminReportRepository } from '../repositories/admin-report.repository.js';
@@ -84,7 +85,7 @@ export function createAdminReportService(repository: Repository, clock: () => Da
     paymentReport(raw: unknown) { return repository.payments(parsePaymentReportQuery(raw, clock)); },
     async reservationCsv(raw: unknown) {
       const report = await repository.reservations(parseReservationReportQuery(raw, clock));
-      return csv(['Reference', 'Customer', 'Event date', 'Event time', 'Event type', 'Guests', 'Venue', 'Package', 'Status'], report.items.map(item => [item.reference, item.customer, item.eventDate, item.eventTime, item.eventType, item.guestCount, item.venue, item.packageName, item.status]));
+      return csv(['Reference', 'Customer', 'Event date', 'Event time', 'Event type', 'Guests', 'Venue', 'Package', 'Status'], report.items.map(item => [item.reference, item.customer, item.eventDate, formatEventTime(item.eventTime, ''), item.eventType, item.guestCount, item.venue, item.packageName, item.status]));
     },
     async paymentCsv(raw: unknown) {
       const report = await repository.payments(parsePaymentReportQuery(raw, clock));

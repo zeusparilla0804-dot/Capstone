@@ -119,11 +119,14 @@ test('admin attention uses activity timestamps before limiting results, with sta
 test('overview retains recent activity without treating bank selection as an administrator assignment', async () => {
   const recorder = new RequestRecorder(() => ({ recordsets: [[{ qrAssignmentsWaiting: 0 }], [], [{
     id: 'H-15', reservationId: 42, title: 'Payment method selected', detail: 'Customer chose Bank transfer', updatedAt: new Date('2026-11-12T04:00:00Z')
+  }, {
+    id: 'A-16', reservationId: 42, title: 'Event time adjusted by admin', detail: 'BK-42 18:00 -> 22:00', updatedAt: new Date('2026-11-12T04:05:00Z')
   }]] }));
   const result = await repositoryWith(recorder)['dashboard']({ key: '2026-11', start: new Date('2026-11-01'), end: new Date('2026-12-01') }) as any;
   assert.equal(result.priority.qrAssignmentsWaiting, 0);
   assert.equal(result.recentActivity[0].reservationId, 42);
   assert.equal(result.recentActivity[0].updatedAt, '2026-11-12T04:00:00.000Z');
+  assert.equal(result.recentActivity[1].detail, 'BK-42 6:00 PM -> 10:00 PM');
   assert.doesNotMatch(recorder.calls[0]!.command, /BOOKING_PAYMENT_DESTINATION/);
   assert.match(recorder.calls[0]!.command, /actor_type='CUSTOMER'/);
   assert.match(recorder.calls[0]!.command, /BOOKING_TIME_UPDATED/);

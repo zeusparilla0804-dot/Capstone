@@ -13,6 +13,13 @@ const booking: Booking = {
 };
 
 describe('BookingCardComponent pending actions', () => {
+  it('shows a saved afternoon booking time in AM/PM format', () => {
+    TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
+    const fixture = TestBed.createComponent(BookingCardComponent);
+    fixture.componentRef.setInput('booking', booking); fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('3:00 PM');
+    expect(fixture.nativeElement.textContent).not.toContain('15:00');
+  });
   it('lets the customer pay only the missing deposit after a smaller verified bank payment', () => {
     TestBed.configureTestingModule({ imports: [BookingCardComponent], providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(BookingCardComponent);

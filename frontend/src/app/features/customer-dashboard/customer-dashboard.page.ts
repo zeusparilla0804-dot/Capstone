@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { Booking, BookingStatus } from '../../core/models';
@@ -17,7 +18,7 @@ interface PlanningProgress {
 
 @Component({
   selector: 'app-customer-dashboard-page',
-  imports: [DashboardSidebarComponent, RouterLink, StatusBadgeComponent, SuccessDialogComponent],
+  imports: [EventTimePipe, DashboardSidebarComponent, RouterLink, StatusBadgeComponent, SuccessDialogComponent],
   templateUrl: './customer-dashboard.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './customer-dashboard.page.scss',

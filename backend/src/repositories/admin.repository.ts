@@ -1,3 +1,4 @@
+import { formatEventTimeChange } from '../utils/event-time.js';
 import { bindBankSnapshot, bankSnapshotColumns } from './payment-bank.repository.js';
 import { resolvePaymentBankSnapshot, staffBankChoice } from '../services/payment-bank.service.js';
 import sql from 'mssql';
@@ -281,7 +282,7 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
         ],
         attention,
         recentActivity: (sets[2] ?? []).map(row => ({ id: String(row['id']), reservationId: numberValue(row['reservationId']),
-          title: String(row['title']), detail: String(row['detail'] ?? ''), updatedAt: dateValue(row['updatedAt']) }))
+          title: String(row['title']), detail: row['title'] === 'Event time adjusted by admin' ? formatEventTimeChange(String(row['detail'] ?? '')) : String(row['detail'] ?? ''), updatedAt: dateValue(row['updatedAt']) }))
       };
     },
 

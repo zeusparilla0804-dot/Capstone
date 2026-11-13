@@ -24,7 +24,7 @@
       <p class="page-kicker">Reservation cancellation</p>
       <h2 id="cancel-title">Cancel this reservation?</h2>
       <strong>{{ booking.eventName }}</strong>
-      <p>{{ booking.eventDate }} &bull; {{ booking.eventTime }}</p>
+      <p>{{ booking.eventDate }} &bull; {{ booking.eventTime | eventTime }}</p>
       <p id="cancel-policy" class="cancel-dialog__policy">This request may be subject to LA Chef's cancellation policy.</p>
       <div class="cancel-dialog__field">
         <label for="cancel-reason">Cancellation reason</label>

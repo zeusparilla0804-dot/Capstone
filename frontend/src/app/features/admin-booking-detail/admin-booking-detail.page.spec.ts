@@ -31,7 +31,10 @@ describe('AdminBookingDetailPage', () => {
     api.booking.mockReturnValue(of({ success: true, data: { ...detail, eventTime: '22:00' } }));
     const component = fixture.componentInstance as any;
     component.editEventTime();
-    component.editedEventTime = '22:00';
+    fixture.detectChanges();
+    expect(component.editedEventTime).toBe('6:00 PM');
+    expect(fixture.nativeElement.querySelector('#admin-event-time')?.getAttribute('type')).toBe('text');
+    component.editedEventTime = '10:00 PM';
     component.requestTimeUpdate();
     expect(updateTime).not.toHaveBeenCalled();
     const feedback = TestBed.inject(ActionFeedbackService);

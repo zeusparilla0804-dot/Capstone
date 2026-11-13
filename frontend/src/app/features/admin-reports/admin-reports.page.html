@@ -50,7 +50,7 @@
 
           @if (report.items.length) {
             <div class="report-table-wrap"><table class="report-table report-table--reservations"><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date & time</th><th class="is-number">Guests</th><th>Venue</th><th>Package</th><th>Status</th></tr></thead><tbody>
-              @for (item of report.items; track item.reference) { <tr><td data-label="Reference"><strong>{{ item.reference }}</strong></td><td data-label="Customer">{{ item.customer }}</td><td data-label="Event">{{ item.eventType }}</td><td data-label="Date & time">{{ item.eventDate | date:'mediumDate':'UTC' }}<small>{{ item.eventTime }}</small></td><td data-label="Guests" class="is-number">{{ item.guestCount }}</td><td data-label="Venue">{{ item.venue }}</td><td data-label="Package">{{ item.packageName }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
+              @for (item of report.items; track item.reference) { <tr><td data-label="Reference"><strong>{{ item.reference }}</strong></td><td data-label="Customer">{{ item.customer }}</td><td data-label="Event">{{ item.eventType }}</td><td data-label="Date & time">{{ item.eventDate | date:'mediumDate':'UTC' }}<small>{{ item.eventTime | eventTime }}</small></td><td data-label="Guests" class="is-number">{{ item.guestCount }}</td><td data-label="Venue">{{ item.venue }}</td><td data-label="Package">{{ item.packageName }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
             </tbody></table></div>
           } @else { <p class="report-state report-state--empty">No reservation records match these filters.</p> }
         }

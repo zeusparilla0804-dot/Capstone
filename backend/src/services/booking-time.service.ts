@@ -14,7 +14,7 @@ export function createBookingTimeService(transaction = runBookingStatusTransacti
   return {
     async update(adminId: number, reservationId: number, raw: unknown) {
       const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
-      if (!validTime(value['eventTime'])) throw new AppError(400, 'Enter a valid event time in HH:mm format.');
+      if (!validTime(value['eventTime'])) throw new AppError(400, 'Choose a valid event time.');
       if (value['expectedTime'] !== null && !validTime(value['expectedTime'])) throw new AppError(400, 'The original event time is required. Refresh this reservation.');
       if (![adminId, reservationId].every(id => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)) throw new AppError(400, 'Invalid identifier.');
       const eventTime = value['eventTime'];

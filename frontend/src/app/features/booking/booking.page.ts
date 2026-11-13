@@ -1,3 +1,4 @@
+import { EventTimePipe, formatEventTime } from '../../shared/pipes/event-time.pipe';
 import { CurrencyPipe, DatePipe, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, ElementRef, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -33,7 +34,7 @@ type AvailabilityState =
 
 @Component({
   selector: 'app-booking-page',
-  imports: [BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
+  imports: [EventTimePipe, BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './booking.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrl: './booking.page.scss',
@@ -693,14 +694,7 @@ export class BookingPageComponent {
     this.currentStep.set(1);
   }
 
-  private toDisplayTime(value: string): string {
-    const match = value.match(/^(\d{1,2}):(\d{2})/);
-    if (!match) return value;
-    const hour = Number(match[1]);
-    const suffix = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour % 12 || 12;
-    return `${displayHour}:${match[2]} ${suffix}`;
-  }
+  private toDisplayTime(value: string): string { return formatEventTime(value); }
 
   private futureDateValidator(control: FormControl<string>): ValidationErrors | null {
     return control.value && !this.isEventDateAvailable(control.value) ? { advanceDate: true } : null;

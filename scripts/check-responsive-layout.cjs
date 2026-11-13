@@ -163,7 +163,7 @@ const server = http.createServer(async (req, res) => {
         if (layout === 'payments') await page.getByRole('tab', { name: 'Payments', exact: true }).click();
         if (layout === 'edit-time') {
           await page.locator('[data-edit-event-time]').click();
-          await page.locator('#admin-event-time').fill('22:00');
+          await page.locator('#admin-event-time').fill('10:00 PM');
           await page.getByRole('button', { name: 'Save time', exact: true }).click();
           await page.getByRole('dialog').waitFor();
           if (!await page.getByRole('dialog').textContent().then(text => text.includes('10:00 PM'))) throw Error('Time adjustment must confirm 10 PM');

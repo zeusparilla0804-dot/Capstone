@@ -1,3 +1,4 @@
+import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { CurrencyPipe, DatePipe, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
@@ -14,7 +15,7 @@ import { PaymentMethodLabelPipe } from '../../shared/pipes/payment-method-label.
 @Component({
   selector: 'app-invoice-page',
   host: { '(window:focus)': 'refreshOnReturn()', '(window:beforeprint)': 'preparePrint()' },
-  imports: [AdminShellComponent, PublicHeaderComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, NgTemplateOutlet, PaymentMethodLabelPipe],
+  imports: [EventTimePipe, AdminShellComponent, PublicHeaderComponent, StatusBadgeComponent, CurrencyPipe, DatePipe, NgTemplateOutlet, PaymentMethodLabelPipe],
   templateUrl: './invoice.page.html',
   styleUrl: './invoice.page.scss',
   changeDetection: ChangeDetectionStrategy.Eager,

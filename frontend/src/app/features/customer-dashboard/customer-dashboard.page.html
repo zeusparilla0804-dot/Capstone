@@ -47,7 +47,7 @@
               <dl>
                 <div>
                   <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3m10-3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v14H4V6a1 1 0 0 1 1-1Z" /></svg>
-                  <div><dt>Date</dt><dd>{{ formatEventDate(next.eventDate) }}<span>{{ next.eventTime }}</span></dd></div>
+                  <div><dt>Date</dt><dd>{{ formatEventDate(next.eventDate) }}<span>{{ next.eventTime | eventTime }}</span></dd></div>
                 </div>
                 <div>
                   <svg class="event-detail__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12Zm0-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /></svg>
