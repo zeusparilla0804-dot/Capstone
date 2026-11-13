@@ -164,6 +164,15 @@
   text-align: right;
 }
 
+.invoice-table--items {
+  overflow-wrap: normal;
+}
+
+.invoice-table--items th,
+.invoice-table--items td:not(:first-child) {
+  white-space: nowrap;
+}
+
 .invoice-table--items th:nth-child(2),
 .invoice-table--items td:nth-child(2) {
   text-align: center;

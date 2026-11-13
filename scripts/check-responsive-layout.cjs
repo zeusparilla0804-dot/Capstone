@@ -43,7 +43,14 @@ const server = http.createServer(async (req, res) => {
   const review = await fixture('admin-payment-review', 'review');
   review.proof.fileUrl = '/assets/images/packages/premium-package.webp';
   const invoice = await fixture('invoice', 'invoice');
-  invoice.payments = invoice.payments.map(row => ({ ...row, method: 'BANK_TRANSFER', destinationLabel: 'Bank B', destinationAccountName: 'LA Chef Event Catering Services', destinationAccountHint: 'Ending 2222' }));
+  Object.assign(invoice, {
+    items: [
+      { description: 'PHP 580 Per Head - 100 guests at PHP 580.00 per guest', quantity: 100, unitPrice: 580, amount: 58000 },
+      { description: 'Coffee Bar for 100 Guests', quantity: 1, unitPrice: 22000, amount: 22000 },
+    ],
+    subtotal: 80000, totalAmount: 80000, amountPaid: 40000, remainingBalance: 40000,
+  });
+  invoice.payments = invoice.payments.map(row => ({ ...row, amount: 40000, method: 'BANK_TRANSFER', destinationLabel: 'Bank B', destinationAccountName: 'LA Chef Event Catering Services', destinationAccountHint: 'Ending 2222' }));
   review.proof.destinationLabel = 'Bank B'; review.proof.destinationAccountName = 'LA Chef Event Catering Services'; review.proof.destinationAccountHint = 'Ending 2222';
   const reservationReport = await fixture('admin-reports', 'reservationReport');
   const paymentReport = await fixture('admin-reports', 'paymentReport');
