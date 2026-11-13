@@ -46,9 +46,9 @@
     </div>
     @if (selectedBooking(); as selected) {
       <div class="booking-result">
-        <strong>QR para kay {{ selected.customerName }} ({{ selected.reference }})</strong>
-        <label>Available bank transfer QR
-          <select [ngModel]="selectedId()" (ngModelChange)="selectedId.set($event === null ? null : +$event)" name="destination"><option [ngValue]="null">Piliin ang QR account</option>@for (destination of destinations(); track destination.id) { @if (compatible(destination)) { <option [ngValue]="destination.id">{{ destination.label }} · {{ destination.accountName }} · {{ destination.accountHint }}</option> } }</select>
+        <strong>Payment QR for {{ selected.customerName }} ({{ selected.reference }})</strong>
+        <label>Available Bank Transfer Accounts
+          <select [ngModel]="selectedId()" (ngModelChange)="selectedId.set($event === null ? null : +$event)" name="destination"><option [ngValue]="null">Select a payment account</option>@for (destination of destinations(); track destination.id) { @if (compatible(destination)) { <option [ngValue]="destination.id">{{ destination.label }} · {{ destination.accountName }} · {{ destination.accountHint }}</option> } }</select>
         </label>
         @if (availableForSelected().length === 0) { <p class="qr-empty">Walang available na QR para sa napiling payment method.</p> }
         <button type="button" class="btn btn-primary" [disabled]="busy() || !selectedId()" (click)="requestAssignment()">Send selected QR to customer</button>
