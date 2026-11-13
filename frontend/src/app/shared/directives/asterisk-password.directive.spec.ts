@@ -20,9 +20,10 @@ describe('AsteriskPasswordDirective', () => {
 
   afterEach(() => {
     TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
   });
 
-  it('keeps asterisks on a phone with equal-width input text while preserving editing and visibility toggling', () => {
+  it('keeps desktop asterisks with equal-width input text while preserving editing and visibility toggling', () => {
     const fixture = TestBed.createComponent(PasswordHost);
     fixture.detectChanges();
     const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
@@ -43,7 +44,7 @@ describe('AsteriskPasswordDirective', () => {
     expect(fixture.nativeElement.querySelector('.password-field__mask')).toBeNull();
   });
 
-  it('uses matching font metrics on desktop and touch, restoring original styles when disabled', () => {
+  it('uses matching font metrics on desktop, restoring original styles when disabled', () => {
     const fixture = TestBed.createComponent(PasswordHost);
     fixture.componentInstance.password.setValue('Ab!23456');
     const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
@@ -63,4 +64,27 @@ describe('AsteriskPasswordDirective', () => {
     fixture.destroy();
     expect(input.style.fontFamily).toBe('serif');
   });
-});
+  it('uses native masking on touch devices without changing editing, styles, or visibility toggling', () => {
+    vi.stubGlobal('navigator', { userAgent: navigator.userAgent, maxTouchPoints: 5 });
+    const fixture = TestBed.createComponent(PasswordHost);
+    fixture.componentInstance.password.setValue('Ab!23456');
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    input.setSelectionRange(4, 4);
+    input.dispatchEvent(new Event('select'));
+    fixture.detectChanges();
+    expect(input.type).toBe('password');
+    expect(input.value).toBe('Ab!23456');
+    expect(input.selectionStart).toBe(4);
+    expect(input.style.color).not.toBe('transparent');
+    expect(input.style.fontFamily).not.toBe('monospace');
+    expect(fixture.nativeElement.querySelector('.password-field__mask')).toBeNull();
+    fixture.componentInstance.show.set(true);
+    fixture.detectChanges();
+    expect(input.type).toBe('text');
+    expect(input.value).toBe('Ab!23456');
+    fixture.componentInstance.show.set(false);
+    fixture.detectChanges();
+    expect(input.type).toBe('password');
+    expect(fixture.nativeElement.querySelector('.password-field__mask')).toBeNull();
+  });});

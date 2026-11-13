@@ -40,7 +40,10 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
   private sync(): void {
     const input = this.element;
     const view = this.document.defaultView;
-    if (!view || !this.enabled() || input.type !== 'password' || !input.value) {
+    // Native password glyph widths vary across mobile browsers; keep their mask and caret together.
+    const touchDevice = !!view && ((view.navigator.maxTouchPoints ?? 0) > 0
+      || view.matchMedia?.('(any-pointer: coarse)').matches === true);
+    if (!view || touchDevice || !this.enabled() || input.type !== 'password' || !input.value) {
       this.clearMask();
       return;
     }
