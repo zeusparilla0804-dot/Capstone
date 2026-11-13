@@ -52,7 +52,7 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('#proof-file')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('.destination-panel')).toBeNull();
     expect((fixture.componentInstance as any).form.controls.claimedAmount.value).toBe(7000);
-    expect((fixture.nativeElement.querySelector('#payment-date') as HTMLInputElement | null)?.value).toBe(submittedProof.paymentDate);
+    expect(fixture.nativeElement.querySelector('#payment-date')?.textContent).toContain('October 2, 2026');
   });
 
   it('keeps Bank B selected when an older Bank A image finishes last and releases its image', () => {
@@ -109,14 +109,30 @@ describe('PaymentProofPageComponent', () => {
     expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Verified amount');
     expect(component.form.controls.claimedAmount.value).toBe(7000);
   });
-  it('lets the customer enter the actual receipt date and omits a separate submission date', () => {
+  it('shows the current Philippine payment day without an editable calendar', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-13T16:00:00Z')); fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
-    const date = root.querySelector<HTMLInputElement>('input#payment-date');
-    expect(date).not.toBeNull();
-    date!.value = '2026-10-02'; date!.dispatchEvent(new Event('input'));
-    expect((fixture.componentInstance as any).form.controls.paymentDate.value).toBe('2026-10-02');
+    const date = root.querySelector('#payment-date');
+    expect(date?.tagName).toBe('OUTPUT');
+    expect(date?.textContent).toContain('November 14, 2026');
+    expect(root.querySelector('input#payment-date')).toBeNull();
     expect(root.querySelector('[data-testid="submission-date"]')).toBeNull();
-    expect(root.textContent).not.toContain('Submission date');
+    vi.useRealTimers();
+  });
+
+  it('uses the current Philippine day on submission even after midnight or a tampered form date', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-13T15:59:59Z'));
+    const component = fixture.componentInstance as any;
+    component.form.patchValue({ paymentDate: '1999-01-01', transactionReference: 'TODAY-42' });
+    component.destination.set({ id: 1, version: 'a'.repeat(64) });
+    component.destinationImage.set('blob:test');
+    component.selectedFile.set(new File(['proof'], 'receipt.png', { type: 'image/png' }));
+    vi.setSystemTime(new Date('2026-11-13T16:00:00Z'));
+    component.submit();
+    expect(proofApi.submitProof).toHaveBeenCalledWith('42', expect.objectContaining({ paymentDate: '2026-11-14' }), expect.any(File));
+    vi.useRealTimers();
   });
 
   it('corrects the receiving bank on an existing proof without asking for another transfer', () => {
@@ -230,6 +246,8 @@ describe('PaymentProofPageComponent', () => {
   let bookingState: ReturnType<typeof signal<readonly Booking[]>>;
   let submitEvents: Subject<unknown>;
   let proofApi: { listProofs: ReturnType<typeof vi.fn>; submitProof: ReturnType<typeof vi.fn> };
+
+  afterEach(() => vi.useRealTimers());
 
   beforeEach(async () => {
     URL.createObjectURL = vi.fn(() => 'blob:assigned-qr');

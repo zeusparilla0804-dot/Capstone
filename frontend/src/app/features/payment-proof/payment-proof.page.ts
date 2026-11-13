@@ -92,12 +92,17 @@ export class PaymentProofPageComponent implements OnDestroy {
   protected readonly successMessage = signal('');
   protected readonly submitting = signal(false);
   protected readonly uploadProgress = signal(0);
-  protected readonly initialPaymentDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  protected get todayPaymentDate(): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  protected get displayedPaymentDate(): string {
+    return (this.replacingProof() ? this.pendingProof()?.paymentDate : undefined) ?? this.todayPaymentDate;
+  }
   protected readonly form = new FormGroup({
     method: new FormControl<PaymentProofMethod>('BANK_TRANSFER', { nonNullable: true, validators: Validators.required }),
     claimedAmount: new FormControl<number | null>(null, { validators: [Validators.required, Validators.min(0.01)] }),
     transactionReference: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.maxLength(150)] }),
-    paymentDate: new FormControl(this.initialPaymentDate, { nonNullable: true, validators: Validators.required }),
+    paymentDate: new FormControl(this.todayPaymentDate, { nonNullable: true, validators: Validators.required }),
   });
   protected readonly navItems = computed(() => customerNavItems(this.badgeState.customerBookingCount(), this.badgeState.customerBillingCount()));
   private initializedBookingKey: string | null = null;
@@ -263,6 +268,7 @@ export class PaymentProofPageComponent implements OnDestroy {
       this.submitError.set('Select a bank account and load its QR before submitting payment proof.'); return;
     }
     this.configureReference(this.form.controls.method.value);
+    this.form.controls.paymentDate.setValue(originalProof?.paymentDate ?? this.todayPaymentDate);
     this.form.markAllAsTouched();
     const file = this.selectedFile();
     if (!file) this.fileError.set('Choose a payment proof image.');

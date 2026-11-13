@@ -123,7 +123,7 @@
               }
               <div class="form-pair">
                 <div class="form-row"><label for="claimed-amount">Amount shown on receipt</label><div class="money-input"><span aria-hidden="true">₱</span><input id="claimed-amount" type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="claimedAmount" (input)="useEnteredAmount()" /></div><p class="field-help">Edit only when your receipt shows a different amount.</p>@if(form.controls.claimedAmount.touched && form.controls.claimedAmount.invalid){<p class="field-error">Enter a valid payment amount.</p>}</div>
-                <div class="form-row"><label for="payment-date">Payment date</label><input id="payment-date" type="date" formControlName="paymentDate" [max]="initialPaymentDate" /><p class="field-help">Use the actual transfer date shown on your receipt.</p></div>
+                <div class="form-row"><label for="payment-date">Payment date</label><output id="payment-date" class="payment-date-readonly">{{ displayedPaymentDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</output><p class="field-help">{{ replacingProof() ? 'Original payment date. This cannot be changed.' : 'Automatically set to today (Philippine time).' }}</p></div>
               </div>
               @if (form.controls.method.value !== 'CASH') { <div class="form-row"><label for="transaction-reference">Transaction reference</label><input id="transaction-reference" type="text" maxlength="150" autocomplete="off" formControlName="transactionReference" />@if(form.controls.transactionReference.touched && form.controls.transactionReference.invalid){<p class="field-error">Enter the reference shown on your receipt.</p>}</div> }
               <div class="form-row proof-file">

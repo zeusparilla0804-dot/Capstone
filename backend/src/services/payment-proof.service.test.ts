@@ -42,6 +42,7 @@ test('explicit replacement can correct the receiving bank without crediting anot
 });
 
 class FakeDb {
+  now = new Date('2026-10-02T02:00:00Z');
   destinationAvailable = true;
   bank = { id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: '1234', isAvailable: true, mime: 'image/png', image: Buffer.from('qr-b') };
   policy?: Record<string, unknown>;
@@ -68,7 +69,7 @@ class FakeDb {
     open: async () => Readable.from(['data']) as never,
     delete: async key => { this.timeline.push('delete'); this.deleted.push(key); }
   };
-  service = createPaymentProofService({ storage: this.storage, readRequest: () => new FakeRequest(this, 'read') as unknown as sql.Request,
+  service = createPaymentProofService({ storage: this.storage, clock: () => this.now, readRequest: () => new FakeRequest(this, 'read') as unknown as sql.Request,
     transaction: async <T>(work: (request: sql.Request) => Promise<T>) => {
       this.timeline.push('begin');
       if (this.failOn === 'begin') throw new Error('begin failed');
@@ -152,6 +153,24 @@ class FakeRequest {
 
 function status(code: number) { return (error: unknown) => { assert.ok(error instanceof AppError); assert.equal(error.statusCode, code); return true; }; }
 
+test('customer proof dates use the server Philippine day across midnight, ignoring client dates', async () => {
+  for (const [now, expected] of [['2026-11-13T15:59:59Z', '2026-11-13'], ['2026-11-13T16:00:00Z', '2026-11-14']]) {
+    for (const paymentDate of ['1999-01-01', '2099-01-01', undefined]) {
+      const db = new FakeDb(); db.now = new Date(now!);
+      const proof = await db.service.submitCustomerProof(7, 5, { ...input, paymentDate }, file);
+      assert.equal(proof.paymentDate, expected);
+    }
+  }
+});
+
+test('replacing an image retains the original payment date even on a later day', async () => {
+  const db = new FakeDb();
+  const original = await db.service.submitCustomerProof(7, 5, input, file);
+  db.now = new Date('2026-11-14T02:00:00Z');
+  const replacement = await db.service.submitCustomerProof(7, 5, { ...input, paymentDate: '2099-01-01', replacesProofId: String(original.id) }, file);
+  assert.equal(replacement.paymentDate, original.paymentDate);
+});
+
 test('online proof requires an available QR assigned to this booking', async () => {
   const db = new FakeDb(); db.destinationAvailable = false;
   await assert.rejects(db.service.submitCustomerProof(7, 5, input, file), status(409));
@@ -213,10 +232,9 @@ test('ineligible status and payment balance conflicts reject submission', async 
   }
 });
 
-test('method, reference, date, amount, and identifiers are validated before SQL', async () => {
+test('method, reference, amount, and identifiers are validated before SQL', async () => {
   const invalid = [
     { ...input, method: 'CARD' }, { ...input, transactionReference: '  ' }, { ...input, transactionReference: 'x'.repeat(151) },
-    { ...input, paymentDate: '2026-02-30' }, { ...input, paymentDate: '10/02/2026' },
     { ...input, claimedAmount: 0 }, { ...input, claimedAmount: -1 }, { ...input, claimedAmount: 1.001 }, { ...input, claimedAmount: Number.POSITIVE_INFINITY }
   ];
   for (const item of invalid) { const db = new FakeDb(); await assert.rejects(db.service.submitCustomerProof(7, 5, item as never, file), status(400)); assert.equal(db.queries.length, 0); }
@@ -310,18 +328,18 @@ test('amount validation rejects tiny excess precision and multipart coercion tri
   }
 });
 
-test('ordinary decimal amounts, multipart strings, leap dates and trimmed references are accepted', async () => {
+test('ordinary decimal amounts, multipart strings and trimmed references use the server payment date', async () => {
   for (const claimedAmount of [0.29, 1.1, ' 50.25 ']) {
     const db = new FakeDb();
     const proof = await db.service.submitCustomerProof(7, 5, { ...input, claimedAmount, paymentDate: '2024-02-29' } as never, file);
     assert.equal(proof.claimedAmount, Number(claimedAmount));
-    assert.equal(proof.paymentDate, '2024-02-29');
+    assert.equal(proof.paymentDate, '2026-10-02');
   }
 });
 
-test('boundary validation rejects invalid methods, references, calendars and IDs without storage', async () => {
+test('boundary validation rejects invalid methods, references and IDs without storage', async () => {
   for (const raw of [null, {}, { ...input, method: ['CASH'] }, { ...input, transactionReference: 12 },
-    { ...input, transactionReference: null }, { ...input, paymentDate: '2025-02-29' }, { ...input, paymentDate: '2026-13-01' }]) {
+    { ...input, transactionReference: null }]) {
     const db = new FakeDb();
     await assert.rejects(db.service.submitCustomerProof(7, 5, raw as never, file), status(400));
     assert.deepEqual(db.saved, []);
@@ -463,13 +481,10 @@ test('failed transaction acquisition also reconciles and deletes a definitively 
   assert.deepEqual(db.deleted, db.saved);
 });
 
-test('year zero is rejected before storage or SQL while DateTime2 boundary years remain valid', async () => {
-  const invalid = new FakeDb();
-  await assert.rejects(invalid.service.submitCustomerProof(7, 5, { ...input, paymentDate: '0000-01-01' }, file), status(400));
-  assert.deepEqual(invalid.saved, []); assert.deepEqual(invalid.queries, []);
-  for (const paymentDate of ['0001-01-01', '9999-12-31']) {
+test('client calendar values never reach storage as the payment date', async () => {
+  for (const paymentDate of ['0000-01-01', '0001-01-01', '9999-12-31', '2025-02-29', '2026-13-01', '2026-02-30', '10/02/2026', undefined]) {
     const db = new FakeDb();
-    assert.equal((await db.service.submitCustomerProof(7, 5, { ...input, paymentDate }, file)).paymentDate, paymentDate);
+    assert.equal((await db.service.submitCustomerProof(7, 5, { ...input, paymentDate }, file)).paymentDate, '2026-10-02');
   }
 });
 

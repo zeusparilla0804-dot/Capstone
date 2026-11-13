@@ -4,7 +4,6 @@ import { getDbPool } from '../config/database.js';
 import { lockedBookingStatus, runBookingStatusTransaction } from '../repositories/booking-status.repository.js';
 import { customerOwnsReservation, findProof, insertPaymentProof, listProofs, lockedPayment, lockedSubmittedProof, proofReferencesStorageKey, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
 import { AppError } from '../utils/app-error.js';
-import { isoDate } from '../utils/validation.js';
 import { logger } from '../utils/logger.js';
 import { transitionBooking } from './booking-status.service.js';
 import { assertProofMatchesPayment } from './booking-payment-policy.js';
@@ -16,6 +15,7 @@ import { resolvePaymentBankSnapshot } from './payment-bank.service.js';
 
 type Actor = { type: 'CUSTOMER' | 'ADMIN'; id: number };
 type Dependencies = {
+  clock?: () => Date;
   storage: ProofStorage;
   readRequest: () => sql.Request | Promise<sql.Request>;
   transaction: <T>(work: (request: sql.Request) => Promise<T>) => Promise<T>;
@@ -30,7 +30,7 @@ function requirePossibleBooking(customerId: number, reservationId: number): void
   if (customerId > 2_147_483_647 || reservationId > 2_147_483_647) throw new AppError(404, 'Booking not found.');
 }
 
-function validateInput(value: unknown): PaymentProofSubmission {
+function validateInput(value: unknown, paymentDate: string): PaymentProofSubmission {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AppError(400, 'Payment submission is invalid.');
   const raw = value as Record<string, unknown>;
   if (typeof raw.method !== 'string' || !['CASH', 'BANK_TRANSFER', 'E_WALLET'].includes(raw.method)) throw new AppError(400, 'Payment method is invalid.');
@@ -45,9 +45,6 @@ function validateInput(value: unknown): PaymentProofSubmission {
     (!Number.isInteger(amount) && amount !== Math.round(amount * 100) / 100)) {
     throw new AppError(400, 'Claimed amount must be positive with at most two decimal places.');
   }
-  if (typeof raw.paymentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw.paymentDate)) throw new AppError(400, 'Payment date is invalid.');
-  const paymentDate = isoDate(raw.paymentDate, 'Payment date');
-  if (paymentDate.startsWith('0000-')) throw new AppError(400, 'Payment date is invalid.');
   if (raw.transactionReference !== undefined && typeof raw.transactionReference !== 'string') throw new AppError(400, 'Transaction reference is invalid.');
   const reference = raw.transactionReference?.trim();
   if (reference && reference.length > 150) throw new AppError(400, 'Transaction reference is too long.');
@@ -98,7 +95,10 @@ export function createPaymentProofService(deps: Dependencies) {
   return {
     async submitCustomerProof(customerId: number, reservationId: number, raw: unknown, file: ValidatedProofFile): Promise<PaymentProofRecord> {
       positiveId(customerId); positiveId(reservationId);
-      const input = validateInput(raw);
+      const paymentDate = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(deps.clock?.() ?? new Date());
+      const input = validateInput(raw, paymentDate);
       if (!file?.bytes || !Buffer.isBuffer(file.bytes)) throw new AppError(400, 'One payment proof file is required.');
       requirePossibleBooking(customerId, reservationId);
       const stored = await deps.storage.save(file);
@@ -127,7 +127,8 @@ export function createPaymentProofService(deps: Dependencies) {
           if (outstanding <= 0) throw new AppError(409, 'Booking has no outstanding balance.');
           if (Math.round(input.claimedAmount * 100) > outstanding) throw new AppError(409, 'Claimed amount exceeds the outstanding balance.');
           await supersedeSubmittedProofs(reservationId, customerId, request);
-          const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId, { ...input, ...bank }, stored, request);
+          const proof = await insertPaymentProof(customerId, reservationId, payment.paymentId,
+            { ...input, ...bank, paymentDate: original?.paymentDate ?? input.paymentDate }, stored, request);
           if (booking.status === 'AWAITING_PAYMENT') {
             await transitionBooking({ reservationId, nextStatus: 'PAYMENT_SUBMITTED', expectedStatus: 'AWAITING_PAYMENT', actor: { type: 'CUSTOMER', id: customerId }, request });
           }
