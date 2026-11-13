@@ -63,7 +63,7 @@ test('pending cash edit validates the stored method when the request omits payme
   try {
     await assert.rejects(updatePendingBooking(7, 42, {
       eventType: 'wedding', eventDate: '2026-11-01', eventTime: '12:00', venue: 'Venue',
-      guestCount: 500, packageId: 1, addOnIds: [],
+      guestCount: 501, packageId: 1, addOnIds: [],
     }), (error: any) => error.code === 'CASH_PAYMENT_WINDOW_UNAVAILABLE');
   } finally { await closeDatabase(); }
 });

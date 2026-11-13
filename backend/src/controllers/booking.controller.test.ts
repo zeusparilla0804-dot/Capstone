@@ -202,7 +202,7 @@ test('booking routes expose owner-only pending details updates', () => {
  });
  test('cash submissions include one deposit day before three or five preparation days', t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T04:00:00Z') });
-  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[500,'2026-11-04','2026-11-03']]) {
+  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[501,'2026-11-04','2026-11-03']]) {
     assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
     assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /at least [46] days/i);
   }
@@ -210,7 +210,7 @@ test('booking routes expose owner-only pending details updates', () => {
 
  test('cash booking allowance remains available after 6 PM Philippine time', t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-29T10:00:00Z') });
-  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[500,'2026-11-04','2026-11-03']]) {
+  for (const [guestCount, earliest, earlier] of [[499,'2026-11-02','2026-11-01'],[501,'2026-11-04','2026-11-03']]) {
     assert.equal(parseBooking({ ...validBookingBody, guestCount, eventDate: earliest }).eventDate, earliest);
     assert.throws(() => parseBooking({ ...validBookingBody, guestCount, eventDate: earlier }), /at least [46] days/i);
   }

@@ -175,7 +175,7 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
     t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T09:59:59.999Z') });
     for (const now of ['2026-11-04T09:59:59.999Z', '2026-11-04T10:00:00.000Z']) {
       t.mock.timers.setTime(Date.parse(now));
-      for (const [guestCount, eventDate] of [[499, '2026-11-07'], [500, '2026-11-09']] as const) {
+      for (const [guestCount, eventDate] of [[499, '2026-11-07'], [501, '2026-11-09']] as const) {
         const db = new BookingDb();
         Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', guestCount, eventDate });
         await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, capacityConfirmed: true, request: db.request });
@@ -187,7 +187,7 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
 
   test(`cash ${nextStatus} rejects unpaid deposits strictly after the fixed cutoff`, async t => {
     t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T10:00:00.001Z') });
-    for (const [guestCount, eventDate] of [[499, '2026-11-07'], [500, '2026-11-09']] as const) {
+    for (const [guestCount, eventDate] of [[499, '2026-11-07'], [501, '2026-11-09']] as const) {
       const db = new BookingDb();
       Object.assign(db, { status: previousStatus, paymentMethod: 'CASH', amountPaid: 49.99, guestCount, eventDate });
       await assert.rejects(

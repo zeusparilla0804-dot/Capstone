@@ -150,7 +150,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(page.querySelector('select#packageId')).toBeNull();
     expect(page.querySelector('#packageId')?.textContent).toContain(pkg.name);
     expect((fixture.componentInstance as any).eventForm.getRawValue().packageId).toBe(pkg.id);
-    expect(page.querySelector('#date-preparation-note')?.textContent).toContain('500 or more');
+    expect(page.querySelector('#date-preparation-note')?.textContent).toContain('501 or more');
     expect(page.querySelector('#venue-address-note')?.textContent).toContain('complete address');
   });
 
@@ -340,7 +340,7 @@ describe('BookingPageComponent submission validation', () => {
   });
   it('disables dates before the current size cutoff', () => {
     vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
-    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 500, eventDate: '' });
+    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 501, eventDate: '' });
     const fixture = TestBed.createComponent(BookingPageComponent);
     fixture.detectChanges();
     (fixture.componentInstance as any).openCalendar();
@@ -350,7 +350,7 @@ describe('BookingPageComponent submission validation', () => {
   });
   it('disables full dates in the calendar before selection', () => {
     vi.setSystemTime(new Date('2026-11-05T03:00:00Z'));
-    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 500, eventDate: '' });
+    draftState.set({ ...initialDraft, packageId: standardPackage.id, guestCount: 501, eventDate: '' });
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     component.openCalendar();
@@ -441,7 +441,7 @@ describe('BookingPageComponent submission validation', () => {
 
   for (const { guestCount, eventDate } of [
     { guestCount: 100, eventDate: '2026-11-02' },
-    { guestCount: 500, eventDate: '2026-11-04' },
+    { guestCount: 501, eventDate: '2026-11-04' },
   ]) {
     it(`accepts a ${guestCount}-guest cash event with one deposit day before preparation before office closing`, async () => {
       vi.setSystemTime(new Date('2026-10-29T09:59:59Z'));
@@ -463,7 +463,7 @@ describe('BookingPageComponent submission validation', () => {
 
   it('blocks cash inside its preparation cutoff and preserves all selections', async () => {
     vi.setSystemTime(new Date('2026-10-29T04:00:00Z'));
-    draftState.set({ ...initialDraft, guestCount: 500, packageId: standardPackage.id, eventDate: '2026-11-02' });
+    draftState.set({ ...initialDraft, guestCount: 501, packageId: standardPackage.id, eventDate: '2026-11-02' });
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     component.currentStep.set(4);

@@ -1,6 +1,6 @@
 export interface CashDepositDeadline { readonly date: string; readonly at: string; readonly preparationDays: number; }
 
-export function cashPreparationDays(guestCount: number): number { return guestCount >= 500 ? 5 : 3; }
+export function cashPreparationDays(guestCount: number): number { return guestCount > 500 ? 5 : 3; }
 
 function shiftDate(date: string, days: number): string {
   const value = new Date(`${date}T00:00:00Z`);

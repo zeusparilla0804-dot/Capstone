@@ -1,7 +1,7 @@
 import { AppError } from '../utils/app-error.js';
 import { isoDate } from '../utils/validation.js';
 
-export const BIG_CASH_EVENT_GUESTS = 500;
+export const BIG_CASH_EVENT_GUESTS = 501;
 export const CASH_OFFICE_HOURS = 'Daily, 8:00 AM-6:00 PM';
 
 export function cashPreparationDays(guestCount: number): number {

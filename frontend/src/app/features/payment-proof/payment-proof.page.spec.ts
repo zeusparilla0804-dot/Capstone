@@ -121,12 +121,12 @@ describe('PaymentProofPageComponent', () => {
   it('uses a five-day cutoff for big cash events and warns without cancelling an overdue deposit', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-12-05T10:00:01Z'));
-    bookingState.set([{ ...booking, guestCount: 500, paymentMethod: 'cash' }]);
+    bookingState.set([{ ...booking, guestCount: 501, paymentMethod: 'cash' }]);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('December 5, 2026');
     expect(fixture.nativeElement.textContent).toContain('The deposit deadline has passed');
     expect(bookingState()[0]!.status).toBe('awaiting_payment');
-    bookingState.set([{ ...booking, guestCount: 500, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 212500 }]);
+    bookingState.set([{ ...booking, guestCount: 501, paymentMethod: 'cash', status: 'payment_verified', amountPaid: 212500 }]);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).not.toContain('The deposit deadline has passed');
     vi.useRealTimers();

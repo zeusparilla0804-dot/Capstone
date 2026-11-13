@@ -97,7 +97,7 @@
               <div class="step-heading"><p>Step 1</p><h2>Event Details</h2><span>Required fields are marked with an asterisk.</span></div>
               <div class="form-grid booking-form-grid">
               <div id="date-preparation-note" class="booking-preparation">
-                <span>Book at least 4 calendar days ahead for fewer than 500 guests; 6 days for 500 or more. Includes 1 day for the deposit and 3 or 5 days for preparation.</span>
+                <span>Book at least 4 calendar days ahead for 500 guests or fewer; 6 days for 501 or more. Includes 1 day for the deposit and 3 or 5 days for preparation.</span>
               </div>
                 <div class="form-field booking-event-type"><label for="eventType">Event Type *</label><select id="eventType" formControlName="eventType" [attr.disabled]="selectedFormPackage() && selectedFormPackage()?.category !== 'standard' ? '' : null"><option value="">Select event type</option>@for (type of eventTypes; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select>@if (selectedFormPackage() && selectedFormPackage()?.category !== 'standard') { <small>Set by the selected package.</small> } @else if (controlInvalid('eventType')) { <small>Event type is required.</small> }</div>
                   <div class="form-field booking-date-field">
@@ -106,7 +106,7 @@
                   <span class="field-note">Earliest: {{ minimumBookingDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</span>
                   @if (calendarOpen()) {
                     <div class="booking-calendar" role="dialog" aria-label="Available event dates">
-                      <p class="booking-help">Allow 4 calendar days for fewer than 500 guests, or 6 days for 500 or more, including 1 day for the deposit. Dates before {{ minimumBookingDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} cannot be selected.</p>
+                      <p class="booking-help">Allow 4 calendar days for 500 guests or fewer, or 6 days for 501 or more, including 1 day for the deposit. Dates before {{ minimumBookingDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }} cannot be selected.</p>
                       <div class="booking-calendar__header"><button type="button" (click)="moveCalendarMonth(-1)" [disabled]="calendarMonth() <= minimumBookingDate.slice(0, 7)" aria-label="Previous month">&larr;</button><strong>{{ calendarMonth() + '-01T00:00:00Z' | date:'MMMM y':'UTC' }}</strong><button type="button" (click)="moveCalendarMonth(1)" aria-label="Next month">&rarr;</button></div>
                       <div class="booking-calendar__weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
                       @if (calendarLoading()) { <p role="status">Checking available dates...</p> }

@@ -90,7 +90,7 @@ test('extended invoice payload rejects unsupported, unsafe or malformed fields',
   assert.throws(() => validateEmailPayload('BOOKING_RECEIVED', { customerName: 'Juan', bookingReference: 'BK-42', eventDate: '2026-11-20', invoiceUrl: invoice.invoiceUrl }));
 });
 
-for (const [guestCount, cashDepositDueDate, cashPreparationDays] of [[499, '2026-11-17', '3'], [500, '2026-11-15', '5']] as const) {
+for (const [guestCount, cashDepositDueDate, cashPreparationDays] of [[499, '2026-11-17', '3'], [501, '2026-11-15', '5']] as const) {
   test(`queued invoice snapshot uses the ${cashPreparationDays}-day cash cutoff and cent-rounded remaining deposit for ${guestCount} guests`, async t => {
     const request = {} as sql.Request;
     t.mock.method(notificationService, 'bookingContext', async () => ({ customerEmail: 'juan@example.test', customerName: 'Juan',

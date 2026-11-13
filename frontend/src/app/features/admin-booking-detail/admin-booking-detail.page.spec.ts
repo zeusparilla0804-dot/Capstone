@@ -138,7 +138,7 @@ describe('AdminBookingDetailPage', () => {
     expect(payment()).toContain('24 hours after approval');
     expect(payment()).not.toContain('Suggested payment date');
 
-    component.booking.set({ ...detail, guestCount: 500, status: 'APPROVED', statusHistory: [
+    component.booking.set({ ...detail, guestCount: 501, status: 'APPROVED', statusHistory: [
       ...detail.statusHistory,
       { id: 2, previousStatus: 'PENDING', nextStatus: 'APPROVED', actorType: 'ADMIN', actorId: 1,
         reason: null, createdAt: '2026-11-06T01:00:00.000Z' },
@@ -261,7 +261,7 @@ describe('AdminBookingDetailPage', () => {
   });
 
   it('shows the cash cutoff and office hours without changing the reservation status', () => {
-    (fixture.componentInstance as any).booking.set({ ...detail, guestCount: 500, paymentMethod: 'CASH' });
+    (fixture.componentInstance as any).booking.set({ ...detail, guestCount: 501, paymentMethod: 'CASH' });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('December 5, 2026');
     expect(fixture.nativeElement.textContent).toContain('8:00 AM-6:00 PM');
@@ -273,7 +273,7 @@ describe('AdminBookingDetailPage', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-12-05T10:00:01Z'));
-      (fixture.componentInstance as any).booking.set({ ...detail, guestCount: 500, paymentMethod: 'CASH', status: 'AWAITING_PAYMENT' });
+      (fixture.componentInstance as any).booking.set({ ...detail, guestCount: 501, paymentMethod: 'CASH', status: 'AWAITING_PAYMENT' });
       fixture.detectChanges();
       expect(fixture.nativeElement.querySelector('.cash-summary [role="alert"]').textContent).toContain('Deposit overdue. Review availability before approval.');
       expect(api.updateBookingStatus).not.toHaveBeenCalled();
@@ -283,7 +283,7 @@ describe('AdminBookingDetailPage', () => {
 
   it.each([
     { guestCount: 100, eventDate: '2026-11-07' },
-    { guestCount: 500, eventDate: '2026-11-09' },
+    { guestCount: 501, eventDate: '2026-11-09' },
   ])('keeps the fixed cash deadline available during admin review through 6 PM for $guestCount guests', ({ guestCount, eventDate }) => {
     vi.useFakeTimers();
     try {

@@ -173,7 +173,7 @@ test('a new keyed request enforces calendar-day and cash windows before pricing'
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2098-06-15T00:00:00Z') });
   try {
     await assert.rejects(createBooking(7, input), /4 days|cash/i);
-    await assert.rejects(createBooking(7, { ...input, guestCount: 500, eventDate: '2098-06-19', paymentMethod: 'cash' }), /6 days|cash/i);
+    await assert.rejects(createBooking(7, { ...input, guestCount: 501, eventDate: '2098-06-19', paymentMethod: 'cash' }), /6 days|cash/i);
     assert.equal(db.committed.submissions.length, 0); assert.equal(db.committed.reservations.length, 0);
     assert.equal(db.queries.some(query => /FROM dbo\.PACKAGE/.test(query.sql)), false);
   } finally { await closeDatabase(); }

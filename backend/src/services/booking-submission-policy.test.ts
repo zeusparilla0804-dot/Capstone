@@ -5,7 +5,7 @@ import { assertCashPaymentWindow, cashDepositDeadline } from './cash-payment-pol
 
 test('new bookings reserve one deposit day plus three or five preparation days for every method', () => {
   const now = new Date('2026-11-10T12:00:00Z'); // 8 PM Manila: office is closed.
-  for (const [guests, earliest, tooSoon] of [[499, '2026-11-14', '2026-11-13'], [500, '2026-11-16', '2026-11-15']] as const) {
+  for (const [guests, earliest, tooSoon] of [[499, '2026-11-14', '2026-11-13'], [501, '2026-11-16', '2026-11-15']] as const) {
     assert.throws(() => assertCustomerBookingDate(tooSoon, guests, now), /days in advance/);
     assert.doesNotThrow(() => assertCustomerBookingDate(earliest, guests, now));
     assert.doesNotThrow(() => assertCashPaymentWindow(earliest, guests, now));
