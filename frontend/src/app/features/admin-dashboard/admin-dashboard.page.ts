@@ -2,10 +2,12 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, HostListener, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import type { AdminAttentionItem, AdminDashboard } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
+import type { AdminNotification } from '../../core/models/admin-notification.model';
+import { AdminNotificationsService } from '../../core/services/admin-notifications.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 
@@ -20,6 +22,8 @@ export class AdminDashboardPageComponent {
   private readonly api = inject(AdminService);
   private readonly badgeState = inject(PortalBadgeStateService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly router = inject(Router);
+  protected readonly notifications = inject(AdminNotificationsService);
   private requestPending = false;
   private appliedPeriod = '';
   protected readonly data = signal<AdminDashboard | null>(null);
@@ -66,6 +70,33 @@ export class AdminDashboardPageComponent {
     if (item.type === 'PAYMENT_PROOF') return `/admin/payments/proofs/${item.id}`;
     if (item.type === 'EMAIL_OUTBOX') return '/admin/email-outbox';
     return `/admin/bookings/${item.id}`;
+  }
+
+  protected notificationPath(link: string): string {
+    const path = link.split('?')[0]!;
+    return /^\/admin(?:\/[a-zA-Z0-9_-]+)*\/?$/.test(path) ? path : '/admin/dashboard';
+  }
+
+  protected notificationQuery(link: string): Record<string, string> {
+    return Object.fromEntries(new URLSearchParams(link.split('?')[1] ?? ''));
+  }
+
+  protected notificationHref(link: string): string {
+    return this.router.serializeUrl(this.router.createUrlTree([this.notificationPath(link)], { queryParams: this.notificationQuery(link) }));
+  }
+
+  protected openNotification(event: MouseEvent, item: AdminNotification): void {
+    if (event.button > 1) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button === 1) {
+      if (!item.isRead && !this.notifications.readingIds().includes(item.id))
+        this.notifications.markRead([item.id]).pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+      return;
+    }
+    event.preventDefault();
+    if (this.notifications.readingIds().includes(item.id)) return;
+    const open = () => this.router.navigate([this.notificationPath(item.link)], { queryParams: this.notificationQuery(item.link) });
+    if (item.isRead) { void open(); return; }
+    this.notifications.markRead([item.id]).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(success => { if (success) void open(); });
   }
 
   protected queueLabel(key: string): string {

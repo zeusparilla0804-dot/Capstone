@@ -2,7 +2,9 @@ import {Router} from 'express';import {adminController as c} from '../controller
 import {adminReportController} from '../controllers/admin-report.controller.js';
 import {retiredCustomQuotation} from './custom-event.routes.js';
 import {completeEvent} from '../controllers/event-completion.controller.js';
+import adminNotificationRoutes from './admin-notifications.routes.js';
 export default Router().use(requireAdmin)
+ .use('/notifications',adminNotificationRoutes)
  .patch('/bookings/:id/time',c.updateBookingTime)
  .get('/reports/reservations/export',adminReportController.reservationExport)
  .get('/reports/payments/export',adminReportController.paymentExport)

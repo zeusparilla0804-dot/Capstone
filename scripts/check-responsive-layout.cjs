@@ -63,6 +63,13 @@ const server = http.createServer(async (req, res) => {
   const addon = { id: 5, name: 'Coffee Bar for 100 Guests', description: 'Coffee service, cookies, and light snacks for 100 guests.', price: 22000, isActive: true };
   const payment = { id: 5, reservationId: 42, bookingId: 42, bookingStatus: 'AWAITING_PAYMENT', bookingReference: 'BK-2026-12345678', customerName: profile.fullName, amountDue: 85000, amountPaid: 10000, amount: 10000, paymentMethod: 'CASH', method: 'CASH', paymentDate: '2026-10-01', status: 'PARTIALLY_PAID' };
   const destination = { id: 1, method: 'BANK_TRANSFER', label: 'Bank transfer receiving account for catering reservations', accountName: profile.fullName, accountHint: 'Ending 4567', isAvailable: true, version: 'a'.repeat(64) };
+  const notificationReads = new Set();
+  const adminNotifications = [
+    { id: 'proof:1', type: 'PAYMENT_PROOF_SUBMITTED', title: 'Payment proof submitted', message: `${profile.fullName} submitted a bank-transfer receipt for review.`, reference: 'BK-2026-12345678', createdAt: '2026-11-14T03:30:00Z', isRead: false, link: '/admin/payments/proofs/1' },
+    { id: 'reservation:42', type: 'RESERVATION_SUBMITTED', title: 'Reservation submitted', message: `${profile.fullName} submitted a new catering reservation.`, reference: 'BK-2026-12345678', createdAt: '2026-11-14T03:00:00Z', isRead: true, link: '/admin/bookings/42' },
+    { id: 'email-failure:5:3', type: 'EMAIL_FAILED', title: 'Email delivery failed', message: 'A customer notification could not be delivered. Review the email queue.', reference: '', createdAt: '2026-11-14T02:30:00Z', isRead: false, link: '/admin/email-outbox?status=FAILED' },
+    { id: 'L-1', type: 'ADMIN', title: 'Admin notification', message: 'Confirm venue arrangements before the upcoming event.', reference: 'BK-2026-12345678', createdAt: null, isRead: false, link: '/admin/bookings/42' },
+  ];
   let role = 'customer';
   let currentLayout = '';
   const unhandledEndpoints = new Set();
@@ -77,9 +84,11 @@ const server = http.createServer(async (req, res) => {
   pages.push('/admin/payments?layout=installment-cash', '/admin/payments?layout=installment-bank');
   pages.push('/admin/bookings/42?layout=edit-time');
   pages.push('/admin/invoices/8?layout=fully-paid', '/invoice/8?layout=fully-paid');
+  pages.push('/admin/dashboard?layout=notifications-unread', '/admin/dashboard?layout=notifications-open');
   const depositRoutes = ['/my-bookings', '/billing', '/my-bookings/42/payment', '/invoice/8', '/admin/invoices/8'];
   pages.push(...depositRoutes.map(route => `${route}?layout=deposit-shortfall`), '/my-bookings?layout=deposit-pending', '/billing?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-pending', '/my-bookings/42/payment?layout=deposit-complete');
   const selectedPages = process.argv.includes('--banks-only') ? ['/my-bookings/42/payment', '/billing', '/my-bookings', '/admin/payment-qrs?layout=accounts', '/admin/payments?layout=installment-bank', '/admin/payments/proofs/1', '/invoice/8']
+    : process.argv.includes('--notifications-only') ? ['/admin/dashboard', '/admin/dashboard?layout=notifications-unread', '/admin/dashboard?layout=notifications-open', '/admin/bookings/42']
     : process.argv.includes('--shell-only') ? ['/', '/contact', '/login']
     : process.argv.includes('--deposits-only') ? pages.filter(route => route.includes('layout=deposit-'))
     : process.argv.includes('--operations-only') ? ['/admin/dashboard', '/admin/bookings/42', '/admin/bookings/42?layout=edit-time', '/my-bookings/42/payment', '/admin/payment-qrs']
@@ -112,12 +121,24 @@ const server = http.createServer(async (req, res) => {
     await page.route('**/api/**', async route => {
       const url = new URL(route.request().url()); const p = url.pathname.replace(/^\/api/, '');
       if (p === '/auth/admin/login' && route.request().method() === 'POST') return route.fulfill({ json: { success: true, data: { requiresMfa: true, challenge: 'local-layout-test', setupSecret: 'JBSWY3DPEHPK3PXP', setupUri: 'otpauth://totp/Local:qa?secret=JBSWY3DPEHPK3PXP&issuer=Local' } } });
+      if (p === '/admin/notifications/read' && route.request().method() === 'POST') {
+        for (const id of route.request().postDataJSON().ids || []) if (adminNotifications.some(item => item.id === id)) notificationReads.add(id);
+        return route.fulfill({ json: { success: true } });
+      }
       if (route.request().method() !== 'GET') throw new Error(`Visual audit blocked mutation: ${p}`);
       if (p.includes('/payment-destinations/') && p.endsWith('/image')) return route.fulfill({ body: '<svg xmlns="http://www.w3.org/2000/svg" width="540" height="680" viewBox="0 0 540 680"><rect width="540" height="680" fill="white"/><text x="270" y="64" text-anchor="middle" font-size="26">TEST ACCOUNT</text><path d="M70 150h140v140H70zM330 150h140v140H330zM70 410h140v140H70zM250 330h60v60h-60zM330 410h60v60h-60zM410 490h60v60h-60z" fill="black"/><path d="M90 170h100v100H90zM350 170h100v100H350zM90 430h100v100H90z" fill="white"/><path d="M110 190h60v60h-60zM370 190h60v60h-60zM110 450h60v60h-60z" fill="black"/><text x="270" y="625" text-anchor="middle" font-size="20">LAYOUT FIXTURE — NOT FOR PAYMENT</text></svg>', contentType: 'image/svg+xml' });
       if (p.endsWith('/image')) return route.fulfill({ body: await fs.readFile(path.join(publicRoot, 'assets/images/packages/premium-package.webp')), contentType: 'image/webp' });
       let data = [];
       if (p === '/auth/me' || p === '/auth/admin/me') data = { ...profile, role: p.includes('/admin/') ? 'admin' : role };
       else if (p === '/admin/dashboard') data = dashboard;
+      else if (p === '/admin/notifications') {
+        const all = adminNotifications.map(item => ({ ...item, isRead: item.isRead || notificationReads.has(item.id) }));
+        const items = url.searchParams.get('unreadOnly') === 'true' ? all.filter(item => !item.isRead) : all;
+        const currentPage = Math.max(1, Number(url.searchParams.get('page') || 1));
+        const pageSize = Math.max(1, Math.min(50, Number(url.searchParams.get('pageSize') || 20)));
+        data = { items: items.slice((currentPage - 1) * pageSize, currentPage * pageSize), page: currentPage, pageSize,
+          totalItems: items.length, totalPages: Math.ceil(items.length / pageSize), unreadCount: all.filter(item => !item.isRead).length };
+      }
       else if (p === '/admin/bookings') data = paginate(adminBookings);
       else if (/^\/admin\/bookings\/\d+$/.test(p)) data = detail;
       else if (p === '/admin/customers') data = paginate([profile]);
@@ -164,6 +185,7 @@ const server = http.createServer(async (req, res) => {
       for (const route of selectedPages) {
         role = route.startsWith('/admin') ? 'admin' : 'customer'; errors = [];
         currentLayout = new URL(route, 'http://localhost').searchParams.get('layout') || '';
+        notificationReads.clear();
         await page.goto(`http://127.0.0.1:${server.address().port}${route}`, { waitUntil: 'networkidle' });
         if (new URL(page.url()).pathname !== new URL(route, 'http://localhost').pathname) throw new Error(`Unexpected redirect from ${route} to ${page.url()}`);
         const layout = new URL(route, 'http://localhost').searchParams.get('layout');
@@ -171,6 +193,17 @@ const server = http.createServer(async (req, res) => {
         if (layout === 'create') await page.getByRole('button', { name: route.includes('add-ons') ? 'Create Add-on' : 'Create Package', exact: true }).click();
         if (layout === 'deactivate') await page.getByRole('button', { name: 'Deactivate account', exact: true }).click();
         if (layout === 'payments') await page.getByRole('tab', { name: 'Payments', exact: true }).click();
+        if (layout === 'notifications-unread') {
+          await page.locator('[data-notification-filter="unread"]').click();
+          await page.locator('.recent-activity strong').filter({ hasText: 'Reservation submitted' }).waitFor({ state: 'detached' });
+          if (await page.locator('.recent-activity li.is-unread').count() !== 3) throw Error('Unread filter must keep all unopened notifications');
+        }
+        if (layout === 'notifications-open') {
+          await page.locator('.recent-activity a[href="/admin/payments/proofs/1"]').click();
+          await page.waitForURL('**/admin/payments/proofs/1');
+          if (!notificationReads.has('proof:1')) throw Error('Opening one notification must acknowledge only that item');
+          await page.waitForFunction(() => document.querySelector('a[href="/admin/dashboard"] .dashboard-sidebar__badge')?.textContent.trim() === '2');
+        }
         if (layout === 'fully-paid') {
           const heading = await page.locator('.invoice-heading').textContent();
           if (!heading.includes('Payment complete') || !heading.includes('Nov 14, 2026') || heading.includes('Balance due')) throw Error('A fully paid receipt must show Payment complete with the final payment date');

@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { AdminAuthService } from '../../../core/services/admin-auth.service';
 import { PortalBadgeStateService } from '../../../core/services/portal-badge-state.service';
 import { AdminBadgeRefreshService } from '../../../core/services/admin-badge-refresh.service';
+import { AdminNotificationsService } from '../../../core/services/admin-notifications.service';
 import { DashboardNavItem, DashboardSidebarComponent } from '../dashboard-sidebar/dashboard-sidebar';
 
 @Component({
@@ -14,6 +15,7 @@ import { DashboardNavItem, DashboardSidebarComponent } from '../dashboard-sideba
 })
 export class AdminShellComponent {
   private readonly badgeRefresh = inject(AdminBadgeRefreshService);
+  private readonly notifications = inject(AdminNotificationsService);
   readonly title = input.required<string>();
   readonly description = input.required<string>();
   protected readonly auth = inject(AdminAuthService);
@@ -22,7 +24,7 @@ export class AdminShellComponent {
   protected readonly signingOutAll = signal(false);
   protected readonly sessionError = signal('');
   protected readonly nav = computed<readonly DashboardNavItem[]>(() => [
-    { label: 'Overview', route: '/admin/dashboard', icon: 'dashboard' },
+    { label: 'Overview', route: '/admin/dashboard', icon: 'dashboard', badge: this.notifications.unreadCount(), badgeLabel: 'unread notifications' },
     { label: 'Reservations', route: '/admin/bookings', icon: 'calendar', badge: this.badgeState.adminBadges().bookings, badgeLabel: 'pending reservation reviews' },
     { label: 'Customers', route: '/admin/customers', icon: 'profile' },
     { label: 'Billing & Payments', route: '/admin/payments', icon: 'wallet', badge: this.badgeState.adminBadges().payments, badgeLabel: 'payments awaiting review' },

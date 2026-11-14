@@ -38,13 +38,29 @@
         </dl>
       </section>
     </div>
-    <section class="attention-list recent-activity" aria-labelledby="activity-title">
-      <header class="section-header"><div><h2 id="activity-title">Recent customer activity</h2></div><span>Latest {{ summary.recentActivity?.length || 0 }} updates</span></header>
-      <ol>
-        @for (item of summary.recentActivity || []; track item.id) {
-          <li><a [routerLink]="['/admin/bookings', item.reservationId]"><span class="attention-rank">{{ $index + 1 }}</span><div><strong>{{ item.title }}</strong><p>{{ item.detail }}</p></div><time [attr.datetime]="item.updatedAt">{{ item.updatedAt | date:'MMM d, y':'+0800' }}<span>{{ item.updatedAt | date:'h:mm a':'+0800' }}</span></time><span class="attention-arrow" aria-hidden="true">&rarr;</span></a></li>
-        } @empty { <li class="empty-row">Customer reservation and payment updates will appear here.</li> }
-      </ol>
-    </section>
   }
+  <section class="attention-list recent-activity" aria-labelledby="activity-title" [attr.aria-busy]="notifications.loading()">
+    <header class="section-header"><div><h2 id="activity-title">Notifications</h2></div><span>{{ notifications.totalItems() }} {{ notifications.unreadOnly() ? 'unread' : 'total' }} updates &middot; All dates</span></header>
+    <div class="notification-toolbar" role="group" aria-label="Filter notifications">
+      <button class="btn btn-sm" type="button" data-notification-filter="all" [class.btn-secondary]="!notifications.unreadOnly()" [class.btn-tertiary]="notifications.unreadOnly()" [attr.aria-pressed]="!notifications.unreadOnly()" (click)="notifications.setUnreadOnly(false)">All</button>
+      <button class="btn btn-sm" type="button" data-notification-filter="unread" [class.btn-secondary]="notifications.unreadOnly()" [class.btn-tertiary]="!notifications.unreadOnly()" [attr.aria-pressed]="notifications.unreadOnly()" (click)="notifications.setUnreadOnly(true)">Unread</button>
+    </div>
+    @if (notifications.error()) { <p class="data-state data-state--error" role="alert">{{ notifications.error() }} <button class="btn btn-tertiary" type="button" (click)="notifications.refresh()">Try again</button></p> }
+    @if (notifications.readError()) { <p class="data-state data-state--error" role="alert">{{ notifications.readError() }}</p> }
+    @if (notifications.loading()) { <p class="notification-status" role="status">Loading notifications...</p> }
+    <ol>
+      @for (item of notifications.items(); track item.id) {
+        <li [class.is-unread]="!item.isRead"><a [href]="notificationHref(item.link)" (click)="openNotification($event, item)" (auxclick)="openNotification($event, item)" [attr.aria-busy]="notifications.readingIds().includes(item.id)">
+          <span class="attention-rank">@if (!item.isRead) { <span class="notification-unread"><span class="visually-hidden">Unread notification</span></span> } @else { <span class="visually-hidden">Read notification</span> }</span>
+          <div><strong>{{ item.title }}</strong><p>{{ item.message }}</p>@if (item.reference) { <small class="notification-reference">{{ item.reference }}</small> }</div>
+          @if (item.createdAt) { <time [attr.datetime]="item.createdAt">{{ item.createdAt | date:'MMM d, y':'+0800' }}<span>{{ item.createdAt | date:'h:mm a':'+0800' }}</span></time> } @else { <span class="notification-date-unavailable">Date unavailable</span> }
+          <span class="attention-arrow" aria-hidden="true">&rarr;</span>
+        </a></li>
+      } @empty { @if (!notifications.loading() && !notifications.error()) { <li class="empty-row">{{ notifications.unreadOnly() ? 'No unread notifications.' : 'No notifications yet. Business updates will appear here.' }}</li> } }
+    </ol>
+    <nav class="notification-pagination" aria-label="Notification pages">
+      <span aria-live="polite">Page {{ notifications.page() }} of {{ notifications.totalPages() || 1 }} &middot; {{ notifications.totalItems() }} updates</span>
+      <div><button class="btn btn-tertiary btn-sm" type="button" aria-label="Previous notification page" [disabled]="notifications.loading() || notifications.page() <= 1" (click)="notifications.setPage(notifications.page() - 1)">Previous</button><button class="btn btn-tertiary btn-sm" type="button" aria-label="Next notification page" [disabled]="notifications.loading() || notifications.page() >= notifications.totalPages()" (click)="notifications.setPage(notifications.page() + 1)">Next</button></div>
+    </nav>
+  </section>
 </app-admin-shell>

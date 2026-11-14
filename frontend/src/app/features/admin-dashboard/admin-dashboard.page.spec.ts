@@ -21,14 +21,10 @@ const dashboard: AdminDashboard = {
 };
 
 describe('AdminDashboardPageComponent', () => {
-  it('shows recent customer actions separately from urgent work without the optional average metric', () => {
-    (fixture.componentInstance as any).data.set({ ...dashboard, attention: [], recentActivity: [
-      { id: 'H-7', reservationId: 42, title: 'Payment method selected', detail: 'LC-0042 · Bank transfer', updatedAt: '2026-11-12T04:00:00Z' }
-    ] });
-    fixture.detectChanges();
+  it('offers notification history separately from urgent work without the optional average metric', () => {
     const activity = fixture.nativeElement.querySelector('.recent-activity');
-    expect(activity?.textContent).toContain('Payment method selected');
-    expect(activity?.querySelector('a').getAttribute('href')).toBe('/admin/bookings/42');
+    expect(activity?.textContent).toContain('Notifications');
+    expect(activity?.textContent).toContain('All dates');
     expect(fixture.nativeElement.textContent).not.toContain('Average confirmed booking');
   });
   let fixture: ComponentFixture<AdminDashboardPageComponent>;

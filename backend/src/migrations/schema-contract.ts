@@ -73,6 +73,7 @@ export const EXPECTED_MIGRATIONS = [
   '022_payment_destinations_seed',
   '023_customer_updates_package_images.sql',
   '024_customer_bank_payment_snapshots.sql',
+  '025_admin_notification_read.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -111,6 +112,8 @@ function datetime2(table: string, name: string, nullable = false, scale = 7): Co
 }
 
 const columns: ColumnShape[] = [
+  integer('ADMIN_NOTIFICATION_READ', 'admin_id'), nvarchar('ADMIN_NOTIFICATION_READ', 'notification_key', 120),
+  datetime2('ADMIN_NOTIFICATION_READ', 'read_at'),
   ...['PAYMENT_PROOF', 'PAYMENT_TRANSACTION'].flatMap(table => [
     integer(table, 'destination_id', true), nvarchar(table, 'destination_label', 100, true),
     nvarchar(table, 'destination_account_name', 200, true), nvarchar(table, 'destination_account_hint', 50, true),
@@ -316,6 +319,9 @@ function constraints(table: string, type: ConstraintShape['type'], names: string
 }
 
 const constraintShapes: ConstraintShape[] = [
+  ...constraints('ADMIN_NOTIFICATION_READ', 'PK', ['PK_ADMIN_NOTIFICATION_READ']),
+  ...constraints('ADMIN_NOTIFICATION_READ', 'F', ['FK_ADMIN_NOTIFICATION_READ_ADMIN']),
+  ...constraints('ADMIN_NOTIFICATION_READ', 'D', ['DF_ADMIN_NOTIFICATION_READ_read_at']),
   ...constraints('SCHEMA_MIGRATION', 'PK', ['PK_SCHEMA_MIGRATION']),
   ...constraints('SCHEMA_MIGRATION', 'D', ['DF_SCHEMA_MIGRATION_applied']),
   ...constraints('CUSTOMER', 'PK', ['PK_CUSTOMER']), ...constraints('CUSTOMER', 'UQ', ['UQ_CUSTOMER_email']),
