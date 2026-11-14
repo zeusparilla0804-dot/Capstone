@@ -14,7 +14,7 @@ export const actionFeedbackInterceptor: HttpInterceptorFn = (request, next) => {
   const mode = request.context.get(ACTION_FEEDBACK);
   const exportRequest = request.method === 'GET' && /^\/admin\/reports\/[^/]+\/export$/.test(path);
   // These writes are background bookkeeping, not a user submitting a decision.
-  if (mode === 'silent' || path === '/notifications/read'
+  if (mode === 'silent' || path === '/notifications/read' || path === '/admin/notifications/read'
     || /\/(?:refresh|heartbeat)$/.test(path)
     || (['GET', 'HEAD', 'OPTIONS'].includes(request.method) && !exportRequest)) return next(request);
   const feedback = inject(ActionFeedbackService);

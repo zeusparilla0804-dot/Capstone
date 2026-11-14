@@ -203,6 +203,7 @@ const server = http.createServer(async (req, res) => {
           await page.waitForURL('**/admin/payments/proofs/1');
           if (!notificationReads.has('proof:1')) throw Error('Opening one notification must acknowledge only that item');
           await page.waitForFunction(() => document.querySelector('a[href="/admin/dashboard"] .dashboard-sidebar__badge')?.textContent.trim() === '2');
+          if (await page.locator('[role="dialog"],[role="alertdialog"]').evaluateAll(dialogs => dialogs.some(dialog => dialog.checkVisibility()))) throw Error('Opening a notification must not show a save confirmation dialog');
         }
         if (layout === 'fully-paid') {
           const heading = await page.locator('.invoice-heading').textContent();

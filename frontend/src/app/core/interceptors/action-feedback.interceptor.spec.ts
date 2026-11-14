@@ -99,7 +99,9 @@ describe('Application action feedback', () => {
 
   it('ignores background reads, notification read markers, external URLs and explicitly silent requests', () => {
     client.get(url('/admin/payments')).subscribe(); http.expectOne(url('/admin/payments')).flush({});
-    client.post(url('/notifications/read'), {}).subscribe(); http.expectOne(url('/notifications/read')).flush({});
+    for (const path of ['/notifications/read', '/admin/notifications/read']) {
+      client.post(url(path), { ids: ['proof:1'] }).subscribe(); http.expectOne(url(path)).flush({ success: true });
+    }
     client.post(`${environment.apiBaseUrl}-external/action`, {}).subscribe(); http.expectOne(`${environment.apiBaseUrl}-external/action`).flush({});
     client.post(url('/internal'), {}, { context: new HttpContext().set(ACTION_FEEDBACK, 'silent') }).subscribe();
     http.expectOne(url('/internal')).flush({});
