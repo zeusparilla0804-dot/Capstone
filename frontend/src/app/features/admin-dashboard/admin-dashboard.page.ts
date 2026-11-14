@@ -99,6 +99,10 @@ export class AdminDashboardPageComponent {
     this.notifications.markRead([item.id]).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(success => { if (success) void open(); });
   }
 
+  protected markAllNotificationsRead(): void {
+    this.notifications.markAllRead().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+  }
+
   protected queueLabel(key: string): string {
     return ({ pendingBookings: 'Booking reviews', submittedProofs: 'Proof verification', upcomingEvents: 'Events in the next 7 days', failedEmails: 'Failed notifications' } as Record<string, string>)[key] ?? key;
   }

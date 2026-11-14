@@ -149,6 +149,15 @@ export function createAdminNotificationRepository(deps: { request(): Promise<sql
         ON target.admin_id=source.admin_id AND target.notification_key=source.notification_key
         WHEN NOT MATCHED THEN INSERT(admin_id,notification_key) VALUES(source.admin_id,source.notification_key);`);
     },
+    async markAllRead(adminId) {
+      await (await deps.request()).replaceInput('adminId', sql.Int, adminId).query(`
+        DECLARE @serverOffset int=DATEPART(TZOFFSET,SYSDATETIMEOFFSET());
+        ${feedCte}
+        MERGE dbo.ADMIN_NOTIFICATION_READ WITH(HOLDLOCK) target
+        USING (SELECT DISTINCT @adminId admin_id,id notification_key FROM feed) source
+        ON target.admin_id=source.admin_id AND target.notification_key=source.notification_key
+        WHEN NOT MATCHED THEN INSERT(admin_id,notification_key) VALUES(source.admin_id,source.notification_key);`);
+    },
   };
 }
 

@@ -27,4 +27,5 @@ export interface AdminNotificationPage {
 export interface AdminNotificationRepository {
   list(adminId: number, query: AdminNotificationQuery): Promise<AdminNotificationPage>;
   markRead(adminId: number, ids: readonly string[]): Promise<void>;
+  markAllRead(adminId: number): Promise<void>;
 }

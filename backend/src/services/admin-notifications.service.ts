@@ -26,6 +26,9 @@ export function createAdminNotificationService(repository: AdminNotificationRepo
       }
       await repository.markRead(adminId, [...new Set(ids as string[])]);
     },
+    async markAllRead(adminId: number) {
+      await repository.markAllRead(adminId);
+    },
   };
 }
 

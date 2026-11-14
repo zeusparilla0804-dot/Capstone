@@ -89,3 +89,19 @@ test('empty later pages retain global counts and read writes validate against th
   await repository.markRead(8, []);
   assert.equal(request.calls.length, 0);
 });
+
+test('mark all read captures the entire current admin feed and only inserts missing read markers', async () => {
+  const request = new Recorder();
+  const repository = await create(request);
+  await repository.markAllRead(8);
+  assert.equal(request.calls.length, 1);
+  const { command, params } = request.calls[0]!;
+  assert.deepEqual(params, { adminId: 8 });
+  assert.match(command, /WITH feed AS/);
+  assert.match(command, /n.recipient_type='ADMIN' AND n.recipient_id=@adminId/);
+  assert.match(command, /SELECT DISTINCT @adminId admin_id,id notification_key FROM feed/);
+  assert.match(command, /MERGE dbo.ADMIN_NOTIFICATION_READ WITH\(HOLDLOCK\)/);
+  assert.match(command, /target.admin_id=source.admin_id AND target.notification_key=source.notification_key/);
+  assert.match(command, /WHEN NOT MATCHED THEN INSERT\(admin_id,notification_key\)/);
+  assert.doesNotMatch(command, /\bOFFSET\b|FETCH NEXT|WHEN MATCHED|DELETE\s+FROM|UPDATE dbo\./);
+});

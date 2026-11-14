@@ -35,7 +35,8 @@
 .recent-activity { margin-top: 44px; }
 .recent-activity li a { min-width: 0; }
 .recent-activity li p { overflow-wrap: anywhere; }
-.notification-toolbar { display: flex; gap: 8px; padding-block: 14px; }
+.notification-toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 14px; }
+.notification-mark-all { margin-left: auto; }
 .notification-toolbar .btn, .notification-pagination .btn { min-height: 44px; }
 .notification-status, .notification-reference, .notification-date-unavailable { color: var(--color-text-muted); font-size: 13px; }
 .notification-unread { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--portal-gold, #a67c2e); }

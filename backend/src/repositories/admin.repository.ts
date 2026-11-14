@@ -367,14 +367,18 @@ export function createAdminOperationsRepository(deps: AdminOperationsDependencie
         .replaceInput('dateTo', sql.VarChar(10), query.dateTo)
         .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
         .replaceInput('pageSize', sql.Int, query.pageSize)
-        .query<Record<string, unknown>>(`SELECT CONVERT(varchar(20),a.audit_id) id,a.admin_id adminId,
+        .query<Record<string, unknown>>(`DECLARE @serverOffset int=DATEPART(TZOFFSET,SYSDATETIMEOFFSET());
+          DECLARE @dateFromLocal datetime2=DATEADD(minute,@serverOffset,DATEADD(hour,-8,CONVERT(datetime2,NULLIF(@dateFrom,''))));
+          DECLARE @dateToLocal datetime2=DATEADD(minute,@serverOffset,DATEADD(hour,-8,CONVERT(datetime2,NULLIF(@dateTo,''))));
+          DECLARE @dateToExclusive datetime2=DATEADD(day,1,@dateToLocal);
+          SELECT CONVERT(varchar(20),a.audit_id) id,a.admin_id adminId,
           ad.username adminUsername,a.action,a.entity_type entityType,a.entity_id entityId,a.old_values oldValues,
-          a.new_values newValues,a.created_at createdAt,COUNT(*) OVER() total_count
+          a.new_values newValues,DATEADD(minute,-@serverOffset,a.created_at) createdAt,COUNT(*) OVER() total_count
           FROM dbo.ADMIN_AUDIT_LOG a JOIN dbo.ADMIN ad ON ad.admin_id=a.admin_id
           WHERE (@adminId IS NULL OR a.admin_id=@adminId) AND (@action='' OR a.action=@action)
           AND (@entityType='' OR a.entity_type=@entityType) AND (@entityId IS NULL OR a.entity_id=@entityId)
-          AND (@dateFrom='' OR a.created_at>=CONVERT(date,@dateFrom))
-          AND (@dateTo='' OR a.created_at<DATEADD(day,1,CONVERT(date,@dateTo)))
+          AND (@dateFrom='' OR a.created_at>=@dateFromLocal)
+          AND (@dateTo='' OR a.created_at<@dateToExclusive)
           ORDER BY a.created_at DESC,a.audit_id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`);
       return paged(result.recordset.map(row => ({ ...row, id: String(row['id']), oldValues: parseJsonObject(row['oldValues']),
         newValues: parseJsonObject(row['newValues']), createdAt: dateValue(row['createdAt']) })), query);

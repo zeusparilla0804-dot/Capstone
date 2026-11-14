@@ -15,7 +15,7 @@ const { closeDatabase } = await import('../config/database.js');
 
 test('admin notification endpoints enforce admin sessions, validate selection, and never acknowledge on GET', async t => {
   let adminId = 7;
-  const lists: unknown[][] = [], writes: unknown[][] = [];
+  const lists: unknown[][] = [], writes: unknown[][] = [], bulkWrites: unknown[] = [];
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => ({ connected: true, close: async () => {}, request: () => new sql.Request() }));
   t.mock.method(sql.Request.prototype, 'query', async (command: string) => {
     assert.match(command, /FROM dbo.ADMIN_SESSION/);
@@ -25,6 +25,7 @@ test('admin notification endpoints enforce admin sessions, validate selection, a
     lists.push(args); return { items: [], page: 2, pageSize: 20, totalItems: 24, totalPages: 2, unreadCount: 99 };
   });
   t.mock.method(adminNotificationRepository, 'markRead', async (...args: unknown[]) => { writes.push(args); });
+  t.mock.method(adminNotificationRepository, 'markAllRead', async (id: number) => { bulkWrites.push(id); });
   const server = createServer(app).listen(0, '127.0.0.1'); await once(server, 'listening');
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/admin/notifications`;
   const headers = { cookie: 'la_chef_admin_session=test', 'content-type': 'application/json', 'x-la-chef-request': '1' };
@@ -48,6 +49,16 @@ test('admin notification endpoints enforce admin sessions, validate selection, a
     adminId = 8;
     assert.equal((await post({ ids: ['proof:1'] })).status, 200);
     assert.deepEqual(writes[1], [8, ['proof:1']], 'a new session writes only the new administrator state');
+    const readAll = (sentHeaders = headers) => fetch(`${url}/read-all`, { method: 'POST', headers: sentHeaders, body: JSON.stringify({ adminId: 99 }) });
+    assert.equal((await readAll({ ...headers, cookie: '' })).status, 401);
+    assert.equal((await readAll({ ...headers, 'x-la-chef-request': '' })).status, 403);
+    assert.equal((await fetch(`${url}/read-all`, { headers })).status, 404);
+    assert.deepEqual(bulkWrites, []);
+    const allRead = await readAll();
+    assert.equal(allRead.status, 200);
+    assert.equal(allRead.headers.get('cache-control'), 'no-store');
+    assert.deepEqual(await allRead.json(), { success: true });
+    assert.deepEqual(bulkWrites, [8], 'bulk acknowledgment uses the authenticated administrator, never the posted ID');
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     await closeDatabase();

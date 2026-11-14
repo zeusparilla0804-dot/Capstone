@@ -12,7 +12,7 @@ test('admin notification service validates pagination and deduplicates explicit 
   const { createAdminNotificationService } = await import('./admin-notifications.service.js');
   const calls: unknown[][] = [];
   const repository = { async list(...args: unknown[]) { calls.push(args); return { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, unreadCount: 0 }; },
-    async markRead(...args: unknown[]) { calls.push(args); } };
+    async markRead(...args: unknown[]) { calls.push(args); }, async markAllRead(...args: unknown[]) { calls.push(args); } };
   const service = createAdminNotificationService(repository);
   await service.list(7, {});
   assert.deepEqual(calls.pop(), [7, { page: 1, pageSize: 20, unreadOnly: false }]);
@@ -29,4 +29,6 @@ test('admin notification service validates pagination and deduplicates explicit 
   }
   await service.markRead(7, { ids: [] });
   assert.deepEqual(calls.pop(), [7, []]);
+  await service.markAllRead(7);
+  assert.deepEqual(calls.pop(), [7]);
 });

@@ -51,6 +51,47 @@ describe('AdminNotificationsService', () => {
     service.markRead([notification.id]).subscribe(); http.expectOne(request => request.url.endsWith('/notifications/read')).flush({ success: true });
     expect(service.readError()).toBe(''); flushFeed(26);
   });
+  it('marks all pages read only after server acknowledgment and refreshes for newer updates', () => {
+    flushFeed(158); service.refresh(); const stale = getFeed();
+    let success = false;
+    service.markAllRead().subscribe(value => { success = value; });
+    expect(stale.cancelled).toBe(true);
+    const read = http.expectOne(request => request.url.endsWith('/admin/notifications/read-all'));
+    expect(read.request.method).toBe('POST'); expect(read.request.body).toEqual({});
+    expect(service.unreadCount()).toBe(158); expect(service.markingAll()).toBe(true);
+    service.markAllRead().subscribe(); service.refresh();
+    http.expectNone(request => request.url.endsWith('/admin/notifications/read-all'));
+    http.expectNone(request => request.url.endsWith('/admin/notifications'));
+    read.flush({ success: true });
+    expect(success).toBe(true); expect(service.markingAll()).toBe(false);
+    expect(service.unreadCount()).toBe(0); expect(service.items()[0]?.isRead).toBe(true);
+    flushFeed(1); expect(service.unreadCount()).toBe(1);
+  });
+  it('preserves unread history when mark-all fails and allows a retry', () => {
+    flushFeed(158); service.markAllRead().subscribe();
+    http.expectOne(request => request.url.endsWith('/notifications/read-all')).flush({}, { status: 500, statusText: 'Error' });
+    expect(service.unreadCount()).toBe(158); expect(service.items()[0]?.isRead).toBe(false);
+    expect(service.markingAll()).toBe(false); expect(service.readError()).toBeTruthy();
+    service.markAllRead().subscribe(); http.expectOne(request => request.url.endsWith('/notifications/read-all')).flush({ success: true });
+    flushFeed(0); expect(service.readError()).toBe('');
+  });
+  it('cancels mark-all on an administrator switch and never clears the new account count', () => {
+    flushFeed(158); let success = false;
+    service.markAllRead().subscribe(value => { success = value; });
+    const pending = http.expectOne(request => request.url.endsWith('/notifications/read-all'));
+    revision++; user.set({ id: '8' }); TestBed.tick();
+    expect(pending.cancelled).toBe(true); expect(success).toBe(false); expect(service.markingAll()).toBe(false);
+    flushFeed(4); expect(service.unreadCount()).toBe(4);
+  });
+  it('recovers a pending mark-all after a failed sign-out changes only the auth revision', () => {
+    flushFeed(); service.markAllRead().subscribe();
+    const stale = http.expectOne(request => request.url.endsWith('/notifications/read-all'));
+    revision++; service.refresh();
+    expect(stale.cancelled).toBe(true); expect(service.markingAll()).toBe(false); flushFeed();
+    service.markAllRead().subscribe();
+    http.expectOne(request => request.url.endsWith('/notifications/read-all')).flush({ success: true });
+    flushFeed(0); expect(service.unreadCount()).toBe(0);
+  });
   it('retains records and global counts during a failed refresh', () => {
     flushFeed(); service.refresh(); getFeed().flush({}, { status: 500, statusText: 'Error' });
     expect(service.items()).toHaveLength(1); expect(service.unreadCount()).toBe(27); expect(service.error()).toBeTruthy();

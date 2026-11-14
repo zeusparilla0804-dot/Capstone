@@ -15,4 +15,11 @@ export default Router()
       await adminNotificationService.markRead(req.admin!.id, req.body);
       res.json({ success: true });
     } catch (error) { next(error); }
+  })
+  .post('/read-all', async (req, res, next) => {
+    try {
+      res.setHeader('Cache-Control', 'no-store');
+      await adminNotificationService.markAllRead(req.admin!.id);
+      res.json({ success: true });
+    } catch (error) { next(error); }
   });

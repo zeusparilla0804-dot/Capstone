@@ -23,6 +23,7 @@ export class AdminNotificationsService {
   private requestedPage = 1;
   private requestedUnreadOnly = false;
   private readonly reading = signal<readonly string[]>([]);
+  private readonly bulkRead = signal(false);
   private readonly scopeChanges = new Subject<void>();
   private fetch?: Subscription;
   private requestVersion = 0;
@@ -42,6 +43,7 @@ export class AdminNotificationsService {
   readonly error = computed(() => this.current() ? this.refreshFailure() : '');
   readonly readError = computed(() => this.current() ? this.readFailure() : '');
   readonly readingIds = computed(() => this.current() ? this.reading() : []);
+  readonly markingAll = computed(() => this.current() && this.bulkRead());
 
   constructor() {
     effect(onCleanup => {
@@ -49,7 +51,7 @@ export class AdminNotificationsService {
       untracked(() => {
         this.scope.set({ user, version: this.auth.sessionVersion });
         this.state.set({ ...emptyPage }); this.pending.set(false); this.refreshFailure.set('');
-        this.readFailure.set(''); this.unreadFilter.set(false); this.reading.set([]);
+        this.readFailure.set(''); this.unreadFilter.set(false); this.reading.set([]); this.bulkRead.set(false);
         this.requestedPage = 1; this.requestedUnreadOnly = false;
         if (!user || !this.http) return;
         this.refresh();
@@ -63,7 +65,7 @@ export class AdminNotificationsService {
   }
 
   refresh(): void {
-    if (!this.prepareScope() || !this.http || this.pending()) return;
+    if (!this.prepareScope() || !this.http || this.pending() || this.bulkRead()) return;
     const user = this.owner; const version = this.version; const requestVersion = ++this.requestVersion;
     const unreadOnly = this.requestedUnreadOnly;
     this.pending.set(true);
@@ -99,7 +101,7 @@ export class AdminNotificationsService {
 
   markRead(ids: readonly string[]): Observable<boolean> {
     const keys = [...new Set(ids)];
-    if (!this.prepareScope() || !this.http || !keys.length || keys.length > 50 || keys.some(id => this.reading().includes(id))) return of(false);
+    if (!this.prepareScope() || !this.http || this.bulkRead() || !keys.length || keys.length > 50 || keys.some(id => this.reading().includes(id))) return of(false);
     const user = this.owner; const version = this.version;
     this.reading.update(current => [...current, ...keys]); this.readFailure.set('');
     return this.http.post<{ success: boolean }>(`${environment.apiBaseUrl}/admin/notifications/read`, { ids: keys }, { withCredentials: true }).pipe(
@@ -127,12 +129,31 @@ export class AdminNotificationsService {
     return user !== null && this.auth.user() === user && this.auth.sessionVersion === version;
   }
 
+  markAllRead(): Observable<boolean> {
+    if (!this.prepareScope() || !this.http || this.bulkRead() || this.reading().length) return of(false);
+    const user = this.owner; const version = this.version;
+    this.cancelFetch(); this.bulkRead.set(true); this.readFailure.set('');
+    return this.http.post<{ success: boolean }>(`${environment.apiBaseUrl}/admin/notifications/read-all`, {}, { withCredentials: true }).pipe(
+      takeUntil(this.scopeChanges),
+      map(response => {
+        if (!this.isCurrent(user, version) || !response.success) throw new Error('Read not acknowledged');
+        this.state.update(state => ({ ...state, unreadCount: 0, items: state.items.map(item => ({ ...item, isRead: true })) }));
+        this.bulkRead.set(false); this.requestedPage = 1; this.refresh(); return true;
+      }),
+      catchError(() => {
+        if (this.isCurrent(user, version)) this.readFailure.set('Unable to mark notifications as read. Please try again.');
+        return of(false);
+      }),
+      finalize(() => { if (this.isCurrent(user, version)) this.bulkRead.set(false); }),
+    );
+  }
+
   private prepareScope(): boolean {
     const user = this.auth.user();
     // A failed sign-out increments the auth revision but retains the principal.
     // Cancel work from that revision and let the authenticated account recover.
     if (user !== null && user === this.owner && this.auth.sessionVersion !== this.version) {
-      this.cancelFetch(); this.scopeChanges.next(); this.reading.set([]); this.readFailure.set('');
+      this.cancelFetch(); this.scopeChanges.next(); this.reading.set([]); this.readFailure.set(''); this.bulkRead.set(false);
       this.scope.set({ user, version: this.auth.sessionVersion });
     }
     return this.isCurrent();

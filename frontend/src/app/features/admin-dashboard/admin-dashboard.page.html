@@ -44,6 +44,9 @@
     <div class="notification-toolbar" role="group" aria-label="Filter notifications">
       <button class="btn btn-sm" type="button" data-notification-filter="all" [class.btn-secondary]="!notifications.unreadOnly()" [class.btn-tertiary]="notifications.unreadOnly()" [attr.aria-pressed]="!notifications.unreadOnly()" (click)="notifications.setUnreadOnly(false)">All</button>
       <button class="btn btn-sm" type="button" data-notification-filter="unread" [class.btn-secondary]="notifications.unreadOnly()" [class.btn-tertiary]="!notifications.unreadOnly()" [attr.aria-pressed]="notifications.unreadOnly()" (click)="notifications.setUnreadOnly(true)">Unread</button>
+      @if (notifications.unreadCount() > 0) {
+        <button class="btn btn-secondary btn-sm notification-mark-all" type="button" [disabled]="notifications.loading() || notifications.markingAll() || notifications.readingIds().length > 0" (click)="markAllNotificationsRead()">{{ notifications.markingAll() ? 'Marking as read...' : 'Mark all as read' }}</button>
+      }
     </div>
     @if (notifications.error()) { <p class="data-state data-state--error" role="alert">{{ notifications.error() }} <button class="btn btn-tertiary" type="button" (click)="notifications.refresh()">Try again</button></p> }
     @if (notifications.readError()) { <p class="data-state data-state--error" role="alert">{{ notifications.readError() }}</p> }
