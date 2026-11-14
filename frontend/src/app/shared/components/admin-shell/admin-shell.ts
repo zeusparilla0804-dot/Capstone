@@ -30,6 +30,7 @@ export class AdminShellComponent {
     { label: 'Billing & Payments', route: '/admin/payments', icon: 'wallet', badge: this.badgeState.adminBadges().payments, badgeLabel: 'payments awaiting review' },
     { label: 'Payment QR Codes', route: '/admin/payment-qrs', icon: 'wallet' },
     { label: 'Reports', route: '/admin/reports', icon: 'reports' },
+    { label: 'Audit Log', route: '/admin/audit-log', icon: 'audit' },
     { label: 'Packages & Menu', route: '/admin/packages', icon: 'catalog' },
     {
       label: 'Sign out all devices',

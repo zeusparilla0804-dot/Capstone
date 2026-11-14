@@ -17,7 +17,10 @@ const debutPackage: CateringPackage = {
 };
 
 describe('PackageExperienceComponent', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it('renders service-led pricing and alternates the editorial composition', () => {
     TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
@@ -136,10 +139,7 @@ describe('PackageExperienceComponent', () => {
   });
 
   it('marks the media as reduced motion when the customer requests it', () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      value: vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
-    });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
     TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
     const fixture = TestBed.createComponent(PackageExperienceComponent);
     fixture.componentRef.setInput('cateringPackage', debutPackage);

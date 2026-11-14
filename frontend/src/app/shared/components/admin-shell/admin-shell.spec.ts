@@ -62,10 +62,10 @@ describe('AdminShellComponent session security', () => {
     const primaryLabels = Array.from(root.querySelectorAll<HTMLAnchorElement>('.dashboard-sidebar a .dashboard-sidebar__label'))
       .map(item => item.textContent?.trim());
     expect(primaryLabels).toEqual([
-      'Overview', 'Reservations', 'Customers', 'Billing & Payments', 'Payment QR Codes', 'Reports', 'Packages & Menu'
+      'Overview', 'Reservations', 'Customers', 'Billing & Payments', 'Payment QR Codes', 'Reports', 'Audit Log', 'Packages & Menu'
     ]);
     expect(root.textContent).not.toContain('Email operations');
-    expect(root.textContent).not.toContain('Audit log');
+    expect(root.querySelector('a[href="/admin/audit-log"]')?.textContent).toContain('Audit Log');
     expect(root.classList.contains('portal-surface')).toBe(false);
     expect(root.querySelector('.admin-layout')?.classList.contains('portal-surface')).toBe(true);
     const sidebar = root.querySelector('.dashboard-sidebar') as HTMLElement;
