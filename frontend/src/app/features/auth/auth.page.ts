@@ -80,7 +80,7 @@ export class AuthPageComponent {
     const digits = value.replace(/\D/g, '');
     const maximumDigits = international ? 12 : 11;
     if (digits.length > maximumDigits) {
-      return international ? 'Use +63 followed by 10 digits.' : 'Phone number must not exceed 11 digits.';
+      return international ? 'Use +63 followed by 10 digits.' : 'Mobile number must be exactly 11 digits.';
     }
     if (phone.touched && phone.invalid) {
       return 'Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).';

@@ -189,8 +189,8 @@ describe('AuthPageComponent', () => {
   });
 
   it.each([
-    ['09171234567', '091712345678', 'Phone number must not exceed 11 digits.'],
-    ['0917 123 4567', '0917 123 45678', 'Phone number must not exceed 11 digits.'],
+    ['09171234567', '091712345678', 'Mobile number must be exactly 11 digits.'],
+    ['0917 123 4567', '0917 123 45678', 'Mobile number must be exactly 11 digits.'],
     ['+639171234567', '+6391712345678', 'Use +63 followed by 10 digits.'],
   ])('shows length feedback while editing %s before blur or submission', (valid, excessive, message) => {
     const component = fixture.componentInstance as any;
