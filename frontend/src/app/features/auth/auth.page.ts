@@ -22,6 +22,7 @@ export class AuthPageComponent {
   protected readonly verificationMode = signal(this.route.snapshot.data?.['verifyEmail'] === true);
   protected readonly verificationEmail = signal(this.route.snapshot.queryParamMap.get('email') ?? '');
   protected readonly showPassword = signal(false);
+  protected readonly showConfirmation = signal(false);
   protected readonly submitting = signal(false);
   protected readonly error = signal('');
   protected readonly registrationSucceeded = signal(false);
@@ -47,13 +48,23 @@ export class AuthPageComponent {
       nonNullable: true,
       validators: [Validators.required, Validators.maxLength(128)],
     }),
+    confirmPassword: new FormControl('', { nonNullable: true }),
+  }, {
+    validators: control => {
+      if (!this.registerMode()) return null;
+      const password = control.get('password')?.value;
+      const confirmation = control.get('confirmPassword')?.value;
+      return confirmation && password !== confirmation ? { passwordMismatch: true } : null;
+    },
   });
   protected toggle() {
     if (this.submitting()) return;
     this.registerMode.update((v) => !v);
     this.form.controls.email.reset('');
     this.form.controls.password.reset('');
+    this.form.controls.confirmPassword.reset('');
     this.showPassword.set(false);
+    this.showConfirmation.set(false);
     this.updateModeValidators();
     this.error.set('');
   }
@@ -79,6 +90,9 @@ export class AuthPageComponent {
         ? [Validators.required, Validators.minLength(8), Validators.maxLength(128)]
         : [Validators.required, Validators.maxLength(128)],
     );
+    this.form.controls.confirmPassword.setValidators(
+      registrationMode ? [Validators.required, Validators.maxLength(128)] : null,
+    );
     for (const control of Object.values(this.form.controls)) {
       control.updateValueAndValidity({ emitEvent: false });
     }
@@ -95,7 +109,13 @@ export class AuthPageComponent {
     try {
       const v = this.form.getRawValue();
       if (this.registerMode()) {
-        await this.auth.register(v);
+        await this.auth.register({
+          firstName: v.firstName,
+          lastName: v.lastName,
+          email: v.email,
+          phone: v.phone,
+          password: v.password,
+        });
         this.form.reset();
         await this.showEmailVerification(v.email);
       } else {
@@ -123,7 +143,8 @@ export class AuthPageComponent {
   private async showEmailVerification(email: string): Promise<void> {
     const normalized = email.trim().toLowerCase();
     this.verificationEmail.set(normalized); this.verificationMode.set(true); this.registerMode.set(false);
-    this.form.controls.password.reset(''); this.showPassword.set(false); this.updateModeValidators();
+    this.form.controls.password.reset(''); this.form.controls.confirmPassword.reset('');
+    this.showPassword.set(false); this.showConfirmation.set(false); this.updateModeValidators();
     await this.router.navigateByUrl(`/verify-email?email=${encodeURIComponent(normalized)}`);
   }
   protected emailVerified(signedIn: boolean): void {

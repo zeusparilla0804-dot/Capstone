@@ -110,8 +110,11 @@ describe('PaymentProofPageComponent', () => {
     expect(component.form.controls.claimedAmount.value).toBe(7000);
   });
   it('shows the current Philippine payment day without an editable calendar', () => {
+    fixture.destroy();
     vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-11-13T16:00:00Z')); fixture.detectChanges();
+    vi.setSystemTime(new Date('2026-11-13T16:00:00Z'));
+    fixture = TestBed.createComponent(PaymentProofPageComponent);
+    fixture.detectChanges();
     const root = fixture.nativeElement as HTMLElement;
     const date = root.querySelector('#payment-date');
     expect(date?.tagName).toBe('OUTPUT');

@@ -22,7 +22,7 @@ describe('AuthPageComponent', () => {
   it('requires email verification before navigating directly home', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
-    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123', confirmPassword: 'new-password-123' });
     await component.submit();
     fixture.detectChanges();
     expect(auth.register).toHaveBeenCalledTimes(1);
@@ -43,10 +43,114 @@ describe('AuthPageComponent', () => {
     expect(navigate).toHaveBeenCalledWith('/login', { replaceUrl: true });
   });
 
+  it('blocks registration until the confirmation exactly matches the password', async () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    component.form.patchValue({
+      firstName: 'New', lastName: 'Customer', phone: '09171234567',
+      email: 'new@example.test', password: 'new-password-123',
+    });
+
+    await component.submit();
+    fixture.detectChanges();
+    expect(auth.register).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('#confirm-password-feedback')?.textContent)
+      .toContain('Please re-enter your password.');
+
+    const confirmation = fixture.nativeElement.querySelector('#confirmPassword') as HTMLInputElement;
+    expect(confirmation).not.toBeNull();
+    for (const value of ['different-password', 'New-password-123', 'new-password-123 ']) {
+      confirmation.value = value;
+      confirmation.dispatchEvent(new Event('input', { bubbles: true }));
+      await component.submit();
+      expect(auth.register).not.toHaveBeenCalled();
+    }
+    fixture.detectChanges();
+    expect(confirmation.getAttribute('aria-invalid')).toBe('true');
+    expect(fixture.nativeElement.querySelector('#confirm-password-feedback')?.textContent)
+      .toContain('Passwords do not match.');
+
+    confirmation.value = 'new-password-123';
+    confirmation.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(confirmation.getAttribute('aria-invalid')).toBe('false');
+    expect(fixture.nativeElement.querySelector('#confirm-password-feedback')?.textContent.trim()).toBe('');
+    await component.submit();
+    expect(auth.register).toHaveBeenCalledExactlyOnceWith({
+      firstName: 'New', lastName: 'Customer', phone: '09171234567',
+      email: 'new@example.test', password: 'new-password-123',
+    });
+    expect(navigate).toHaveBeenCalledWith('/verify-email?email=new%40example.test');
+    expect(component.form.controls.confirmPassword.value).toBe('');
+  });
+
+  it('checks confirmation again when the original password is changed', async () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    component.form.patchValue({
+      firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test',
+      password: 'new-password-123', confirmPassword: 'new-password-123',
+    });
+    component.form.controls.password.setValue('changed-password-123');
+    await component.submit();
+    fixture.detectChanges();
+    expect(auth.register).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('#confirm-password-feedback')?.textContent)
+      .toContain('Passwords do not match.');
+  });
+
+  it('masks the confirmation and lets the customer reveal it independently', () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const confirmation = fixture.nativeElement.querySelector('#confirmPassword') as HTMLInputElement;
+    expect(confirmation).not.toBeNull();
+    expect(confirmation.placeholder).toBe('Re-enter your password');
+    expect(confirmation.autocomplete).toBe('new-password');
+    confirmation.value = 'Secret123';
+    confirmation.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    const field = confirmation.closest('.password-field')!;
+    expect(confirmation.type).toBe('password');
+    expect(field.querySelector('.password-field__mask')?.textContent).toBe('*********');
+    const toggle = field.querySelector('button') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+    expect(confirmation.type).toBe('text');
+    expect(confirmation.value).toBe('Secret123');
+    expect((fixture.nativeElement.querySelector('#password') as HTMLInputElement).type).toBe('password');
+    toggle.click();
+    fixture.detectChanges();
+    expect(confirmation.type).toBe('password');
+  });
+
+  it('clears confirmation when switching modes and permits sign-in without it', async () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const confirmation = fixture.nativeElement.querySelector('#confirmPassword') as HTMLInputElement;
+    expect(confirmation).not.toBeNull();
+    confirmation.value = 'mismatched-password';
+    confirmation.dispatchEvent(new Event('input', { bubbles: true }));
+    (confirmation.closest('.password-field')!.querySelector('button') as HTMLButtonElement).click();
+    component.toggle();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#confirmPassword')).toBeNull();
+    component.form.patchValue({ email: 'customer@example.test', password: 'short123' });
+    await component.submit();
+    expect(auth.login).toHaveBeenCalledWith('customer@example.test', 'short123');
+
+    component.toggle();
+    fixture.detectChanges();
+    const freshConfirmation = fixture.nativeElement.querySelector('#confirmPassword') as HTMLInputElement;
+    expect(freshConfirmation.value).toBe('');
+    expect(freshConfirmation.type).toBe('password');
+  });
+
   it('keeps registration errors on the form without opening a success dialog', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
-    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123', confirmPassword: 'new-password-123' });
     auth.register.mockRejectedValueOnce(new Error('Registration failed'));
     await component.submit();
     fixture.detectChanges();
@@ -59,7 +163,7 @@ describe('AuthPageComponent', () => {
   it('blocks registration for invalid Philippine mobile numbers using the existing field feedback', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
-    component.form.patchValue({ firstName: 'New', lastName: 'Customer', email: 'new@example.test', password: 'new-password-123' });
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', email: 'new@example.test', password: 'new-password-123', confirmPassword: 'new-password-123' });
     for (const phone of ['09999999999999999999999', '', '0917123456', '091712345678', '08171234567', '+6391712345678', '0917abc4567', '02 8123 4567']) {
       component.form.controls.phone.setValue(phone);
       await component.submit();
@@ -87,7 +191,7 @@ describe('AuthPageComponent', () => {
   it('rejects short registration emails and obvious dummy mobile numbers before sending', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
-    component.form.patchValue({ firstName: 'New', lastName: 'Customer', email: 'q@gmail.com', phone: '09171234567', password: 'new-password-123' });
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', email: 'q@gmail.com', phone: '09171234567', password: 'new-password-123', confirmPassword: 'new-password-123' });
     await component.submit();
     expect(component.form.controls.email.invalid).toBe(true);
     expect(auth.register).not.toHaveBeenCalled();
@@ -124,7 +228,7 @@ describe('AuthPageComponent', () => {
   it('prevents duplicate submissions while registering and while confirmation is open', async () => {
     const component = fixture.componentInstance as any;
     component.toggle();
-    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123' });
+    component.form.patchValue({ firstName: 'New', lastName: 'Customer', phone: '09171234567', email: 'new@example.test', password: 'new-password-123', confirmPassword: 'new-password-123' });
     let resolve!: () => void;
     auth.register.mockImplementationOnce(() => new Promise<void>(done => { resolve = done; }));
     const pending = component.submit();
@@ -316,7 +420,7 @@ describe('AuthPageComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('at least 8 characters');
   });
 
-  it('uses asterisk masking for registration with one custom visibility toggle', () => {
+  it('uses asterisk masking with a visibility toggle for the registration password', () => {
     const component = fixture.componentInstance as unknown as {
       form: { controls: { password: { setValue(value: string): void } } };
     };
@@ -328,7 +432,7 @@ describe('AuthPageComponent', () => {
     fixture.detectChanges();
 
     const password = fixture.nativeElement.querySelector('#password') as HTMLInputElement;
-    const visibilityButtons = fixture.nativeElement.querySelectorAll('.password-field button');
+    const visibilityButtons = password.closest('.password-field')!.querySelectorAll('button');
 
     expect(password.type).toBe('password');
     expect(password.value).toBe('Secret123456');
