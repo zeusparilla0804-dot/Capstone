@@ -70,15 +70,15 @@
                 placeholder="e.g. 0912 345 6789"
                 autocomplete="tel"
                 aria-describedby="phone-feedback"
-                [attr.aria-invalid]="form.controls.phone.touched && form.controls.phone.invalid"
+                [attr.aria-invalid]="!!phoneValidationMessage()"
               />
             </div>
             <small
               id="phone-feedback"
               class="field-feedback"
-              [class.field-feedback--error]="form.controls.phone.touched && form.controls.phone.invalid"
+              [class.field-feedback--error]="!!phoneValidationMessage()"
               aria-live="polite"
-            >@if (form.controls.phone.touched && form.controls.phone.invalid) {Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).}</small>
+            >{{ phoneValidationMessage() }}</small>
           </div>
         }
         <div class="form-field">

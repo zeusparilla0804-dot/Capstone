@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -57,6 +58,9 @@ export class AuthPageComponent {
       return confirmation && password !== confirmation ? { passwordMismatch: true } : null;
     },
   });
+  private readonly phoneValue = toSignal(this.form.controls.phone.valueChanges, {
+    initialValue: this.form.controls.phone.value,
+  });
   protected toggle() {
     if (this.submitting()) return;
     this.registerMode.update((v) => !v);
@@ -67,6 +71,21 @@ export class AuthPageComponent {
     this.showConfirmation.set(false);
     this.updateModeValidators();
     this.error.set('');
+  }
+
+  protected phoneValidationMessage(): string {
+    const phone = this.form.controls.phone;
+    const value = this.phoneValue().trim();
+    const international = value.startsWith('+63');
+    const digits = value.replace(/\D/g, '');
+    const maximumDigits = international ? 12 : 11;
+    if (digits.length > maximumDigits) {
+      return international ? 'Use +63 followed by 10 digits.' : 'Phone number must not exceed 11 digits.';
+    }
+    if (phone.touched && phone.invalid) {
+      return 'Enter a valid Philippine mobile number (09XXXXXXXXX or +639XXXXXXXXX).';
+    }
+    return '';
   }
 
   private updateModeValidators(): void {

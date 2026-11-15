@@ -170,7 +170,7 @@ describe('AuthPageComponent', () => {
       fixture.detectChanges();
       expect(component.form.controls.phone.invalid, phone).toBe(true);
       expect(auth.register).not.toHaveBeenCalled();
-      expect(fixture.nativeElement.querySelector('#phone-feedback')?.textContent).toContain('Enter a valid Philippine mobile number');
+      expect(fixture.nativeElement.querySelector('#phone-feedback')?.textContent.trim()).not.toBe('');
       expect(fixture.nativeElement.querySelector('app-registration-success-dialog')).toBeNull();
     }
     component.form.controls.phone.setValue('09171234567');
@@ -186,6 +186,55 @@ describe('AuthPageComponent', () => {
       component.form.controls.phone.setValue(phone);
       expect(component.form.controls.phone.valid, phone).toBe(true);
     }
+  });
+
+  it.each([
+    ['09171234567', '091712345678', 'Phone number must not exceed 11 digits.'],
+    ['0917 123 4567', '0917 123 45678', 'Phone number must not exceed 11 digits.'],
+    ['+639171234567', '+6391712345678', 'Use +63 followed by 10 digits.'],
+  ])('shows length feedback while editing %s before blur or submission', (valid, excessive, message) => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const phone = fixture.nativeElement.querySelector('#phone') as HTMLInputElement;
+    const feedback = fixture.nativeElement.querySelector('#phone-feedback') as HTMLElement;
+
+    phone.value = valid;
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(feedback.textContent?.trim()).toBe('');
+    expect(phone.getAttribute('aria-invalid')).toBe('false');
+
+    phone.value = excessive;
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(component.form.controls.phone.touched).toBe(false);
+    expect(feedback.textContent).toContain(message);
+    expect(feedback.classList.contains('field-feedback--error')).toBe(true);
+    expect(phone.getAttribute('aria-invalid')).toBe('true');
+    expect(auth.register).not.toHaveBeenCalled();
+
+    phone.value = valid;
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(feedback.textContent?.trim()).toBe('');
+    expect(feedback.classList.contains('field-feedback--error')).toBe(false);
+    expect(phone.getAttribute('aria-invalid')).toBe('false');
+  });
+
+  it('shows incomplete phone feedback after the customer leaves the field', () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const phone = fixture.nativeElement.querySelector('#phone') as HTMLInputElement;
+    const feedback = fixture.nativeElement.querySelector('#phone-feedback') as HTMLElement;
+    phone.value = '0917';
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(feedback.textContent?.trim()).toBe('');
+    phone.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+    expect(feedback.textContent).toContain('Enter a valid Philippine mobile number');
   });
 
   it('rejects short registration emails and obvious dummy mobile numbers before sending', async () => {
