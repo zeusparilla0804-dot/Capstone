@@ -19,6 +19,7 @@ export class AuthPageComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  protected readonly currentYear = new Date().getFullYear();
   protected readonly registerMode = signal(false);
   protected readonly verificationMode = signal(this.route.snapshot.data?.['verifyEmail'] === true);
   protected readonly verificationEmail = signal(this.route.snapshot.queryParamMap.get('email') ?? '');

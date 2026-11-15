@@ -214,6 +214,14 @@
           {{ registerMode() ? 'Sign in' : 'Create an account' }}
         </button>
       </div>
+      <footer class="auth-footer">
+        <p>
+          {{ registerMode()
+            ? 'By creating an account, you agree to provide accurate customer and delivery information.'
+            : 'Keep your password private to protect your La Chef account.' }}
+        </p>
+        <p>&copy; {{ currentYear }} La Chef. All rights reserved.</p>
+      </footer>
       }
     </section>
   </section>

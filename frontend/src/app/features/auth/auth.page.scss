@@ -489,6 +489,21 @@ form > .btn:focus-visible,
   color: #fff;
 }
 
+.auth-footer {
+  display: grid;
+  gap: 28px;
+  margin-top: 28px;
+  color: var(--auth-muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.auth-footer p {
+  margin: 0;
+}
+
 .auth-admin-entry {
   align-self: center;
   margin-top: 18px;
