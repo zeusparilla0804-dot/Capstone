@@ -193,12 +193,13 @@
           }
           @case (2) {
             <div class="step-heading"><p>Step 2</p><h2>Select Add-ons</h2><span>Add optional services to complete your event setup.</span></div>
-            <fieldset class="selection-list"><legend class="visually-hidden">Available add-ons</legend>
+            <fieldset class="selection-list addon-list"><legend class="visually-hidden">Available add-ons</legend>
               @if (photoboothOptions().length) {
-                <div class="selection-row" [class.is-selected]="!!selectedPhotoboothId()">
+                <div class="selection-row addon-row has-image" [class.is-selected]="!!selectedPhotoboothId()">
                   <input id="addon-photobooth" type="checkbox" [checked]="!!selectedPhotoboothId()" (change)="togglePhotobooth($event)" [attr.aria-controls]="selectedPhotoboothId() ? 'photobooth-choice' : null" />
+                  <label class="addon-image" for="addon-photobooth"><img src="assets/images/add-ons/photobooth.webp" alt="" width="112" height="84" loading="lazy" decoding="async" /></label>
                   <label class="selection-copy" for="addon-photobooth"><strong>Photobooth (2 Hours Unlimited)</strong><small id="photobooth-help">Unlimited use for two hours. Select a photo booth set up.</small></label>
-                  <b>@if (!selectedPhotoboothId()) { From } {{ photoboothPrice() | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
+                  <b class="addon-price">@if (!selectedPhotoboothId()) { <small>From</small> } {{ photoboothPrice() | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
                   @if (selectedPhotoboothId()) {
                     <div class="photobooth-variant form-field">
                       <label for="photobooth-choice">Photo booth set up</label>
@@ -210,10 +211,14 @@
                 </div>
               }
               @for (addOn of otherAddOns(); track addOn.id) {
-                <div class="selection-row" [class.is-selected]="isAddOnSelected(addOn.id)">
+                @let image = addOnImages[addOn.name.trim().toLowerCase()];
+                <div class="selection-row addon-row" [class.has-image]="!!image" [class.is-selected]="isAddOnSelected(addOn.id)">
                   <input [id]="'addon-' + addOn.id" type="checkbox" [checked]="isAddOnSelected(addOn.id)" (change)="toggleAddOn(addOn.id)" />
+                  @if (image) {
+                    <label class="addon-image" [for]="'addon-' + addOn.id"><img [src]="image" alt="" width="112" height="84" loading="lazy" decoding="async" /></label>
+                  }
                   <label class="selection-copy" [for]="'addon-' + addOn.id"><strong>{{ addOn.name }}</strong><small>{{ addOn.description }}</small>@if (isCoffeeBar(addOn.name)) { <small class="coffee-inclusions">{{ coffeeInclusions(addOn.name) }}</small> }</label>
-                  <b>{{ addOn.price * (isAddOnSelected(addOn.id) ? draftService.addOnQuantity(addOn.id) : 1) | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
+                  <b class="addon-price">{{ addOn.price * (isAddOnSelected(addOn.id) ? draftService.addOnQuantity(addOn.id) : 1) | currency:'PHP':'symbol-narrow':'1.0-0' }}</b>
                   @if (isAddOnSelected(addOn.id) && draftService.supportsQuantity(addOn)) {
                     <div class="addon-quantity" role="group" [attr.aria-label]="addOn.name + ' quantity'">
                       <span>Quantity</span>

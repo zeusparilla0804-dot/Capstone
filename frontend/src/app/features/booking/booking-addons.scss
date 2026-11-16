@@ -1,0 +1,123 @@
+.addon-list {
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.addon-list .addon-row {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 18px 16px;
+  border: 0;
+  border-radius: 0;
+}
+
+.addon-list .addon-row + .addon-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.addon-list .addon-row.has-image {
+  grid-template-columns: 20px 112px minmax(0, 1fr) auto;
+}
+
+.addon-row > input[type='checkbox'] {
+  margin: 0;
+  justify-self: center;
+}
+
+.addon-image {
+  display: block;
+  width: 112px;
+  height: 84px;
+  overflow: hidden;
+  border-radius: 14px;
+  cursor: pointer;
+  background: #f6f3ed;
+}
+
+.addon-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.addon-image img[src$='/sound-lights.webp'],
+.addon-image img[src$='/lechon.webp'],
+.addon-image img[src$='/tiffany-chair.webp'] {
+  object-fit: contain;
+  background: #fff;
+}
+
+.addon-row .selection-copy {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.addon-row .selection-copy strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.addon-row .addon-price {
+  grid-column: auto;
+  width: auto;
+  min-width: 8ch;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.addon-row .addon-price small {
+  margin: 0 0 3px;
+  font-weight: 400;
+}
+
+.addon-row.has-image .photobooth-variant,
+.addon-row.has-image .addon-quantity {
+  grid-column: 3 / -1;
+}
+
+@media (max-width: 767px) {
+  .addon-list .addon-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 8px 10px;
+    padding: 16px 12px;
+  }
+
+  .addon-list .addon-row.has-image {
+    grid-template-columns: 20px 72px minmax(0, 1fr);
+  }
+
+  .addon-row > input[type='checkbox'],
+  .addon-row .addon-image {
+    grid-row: 1 / 3;
+    align-self: center;
+  }
+
+  .addon-row .addon-image {
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+  }
+
+  .addon-row .selection-copy,
+  .addon-row .addon-price {
+    grid-column: 2;
+  }
+
+  .addon-row.has-image .selection-copy,
+  .addon-row.has-image .addon-price {
+    grid-column: 3;
+  }
+
+  .addon-row .addon-price {
+    grid-row: 2;
+  }
+
+  .addon-row.has-image .photobooth-variant,
+  .addon-row.has-image .addon-quantity {
+    grid-column: 2 / -1;
+  }
+}

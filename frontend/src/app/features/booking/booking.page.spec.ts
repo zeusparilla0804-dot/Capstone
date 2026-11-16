@@ -190,6 +190,50 @@ describe('BookingPageComponent submission validation', () => {
     expect(page.querySelector('#photobooth-choice')).toBeNull();
   });
 
+  it('pairs every pictured add-on with its assigned photo and lets the photo toggle its checkbox', () => {
+    const { fixture, draft } = chairQuantityFixture();
+    const picturedAddOns = [
+      ['Airbrush Hair and Makeup Upgrade', 'airbrush-hair-makeup.webp'],
+      ['Basic Sound and Lights', 'sound-lights.webp'],
+      ['Coffee Bar for 100 Guests', 'coffee-bar.webp'],
+      ['Coffee Bar for 50 Guests', 'coffee-bar.webp'],
+      ['Grazing Table for 100 Guests', 'grazing-table.jpg'],
+      ['Grazing Table for 50 Guests', 'grazing-table.jpg'],
+      ['Lechon (25-30 kg Live Weight)', 'lechon.webp'],
+      ['Lechon (35-40 kg Live Weight)', 'lechon.webp'],
+      ['LED Wall', 'led-wall.webp'],
+      ['Professional Host', 'professional-host.webp'],
+      ['Same-Day Edit Video', 'same-day-edit-video.webp'],
+      ['Stage Backdrop', 'stage-backdrop.webp'],
+      ['Tiffany Chair', 'tiffany-chair.webp'],
+    ];
+    draft.addOns.set([
+      { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
+      { id: 'mirror', name: 'Mirror Photobooth (2 Hours Unlimited)', price: 10000 },
+      ...picturedAddOns.map(([name], index) => ({ id: `pictured-${index}`, name, price: 100 })),
+      { id: 'future', name: 'Future custom service', price: 500 },
+    ]);
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    const photoboothImage = page.querySelector<HTMLImageElement>('label.addon-image[for="addon-photobooth"] img');
+    expect(photoboothImage?.getAttribute('src')).toBe('assets/images/add-ons/photobooth.webp');
+    for (const [index, [, image]] of picturedAddOns.entries()) {
+      const thumbnail = page.querySelector<HTMLImageElement>(`label.addon-image[for="addon-pictured-${index}"] img`);
+      expect(thumbnail?.getAttribute('src')).toBe(`assets/images/add-ons/${image}`);
+      expect(thumbnail?.alt).toBe('');
+    }
+    expect(page.querySelector('#addon-future')?.closest('.selection-row')?.querySelector('img')).toBeNull();
+    page.querySelector<HTMLLabelElement>('label.addon-image[for="addon-photobooth"]')!.click();
+    fixture.detectChanges();
+    expect(draft.draft().selectedAddOnIds).toContain('basic');
+    expect(page.querySelector('#photobooth-choice')).not.toBeNull();
+    page.querySelector<HTMLLabelElement>('label.addon-image[for="addon-pictured-12"]')!.click();
+    fixture.detectChanges();
+    expect(draft.draft().selectedAddOnIds).toContain('pictured-12');
+    expect(page.querySelector('input[aria-label="Tiffany Chair quantity"]')).not.toBeNull();
+    TestBed.inject(HttpTestingController).verify();
+  });
+
   it('offers Cash and only online methods that have an available QR', () => {
     routeParams['paymentBooking'] = '27';
     availableMethods.mockReturnValue(of(['BANK_TRANSFER']));

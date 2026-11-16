@@ -37,7 +37,7 @@ type AvailabilityState =
   imports: [EventTimePipe, BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './booking.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrl: './booking.page.scss',
+  styleUrls: ['./booking.page.scss', './booking-addons.scss'],
 })
 export class BookingPageComponent {
   private readonly route = inject(ActivatedRoute);
@@ -52,6 +52,21 @@ export class BookingPageComponent {
   private defaultGuestCount: number | null = null;
   protected readonly draftService = inject(BookingDraftService);
   protected readonly packageService = inject(PackageService);
+  protected readonly addOnImages: Readonly<Record<string, string | undefined>> = {
+    'airbrush hair and makeup upgrade': 'assets/images/add-ons/airbrush-hair-makeup.webp',
+    'basic sound and lights': 'assets/images/add-ons/sound-lights.webp',
+    'coffee bar for 100 guests': 'assets/images/add-ons/coffee-bar.webp',
+    'coffee bar for 50 guests': 'assets/images/add-ons/coffee-bar.webp',
+    'grazing table for 100 guests': 'assets/images/add-ons/grazing-table.jpg',
+    'grazing table for 50 guests': 'assets/images/add-ons/grazing-table.jpg',
+    'lechon (25-30 kg live weight)': 'assets/images/add-ons/lechon.webp',
+    'lechon (35-40 kg live weight)': 'assets/images/add-ons/lechon.webp',
+    'led wall': 'assets/images/add-ons/led-wall.webp',
+    'professional host': 'assets/images/add-ons/professional-host.webp',
+    'same-day edit video': 'assets/images/add-ons/same-day-edit-video.webp',
+    'stage backdrop': 'assets/images/add-ons/stage-backdrop.webp',
+    'tiffany chair': 'assets/images/add-ons/tiffany-chair.webp',
+  };
 
   protected readonly currentStep = signal<BookingStep>(1);
   protected readonly furthestStep = this.draftService.unlockedStep;
