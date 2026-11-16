@@ -63,6 +63,7 @@ export class BookingPageComponent {
     'lechon (35-40 kg live weight)': 'assets/images/add-ons/lechon.webp',
     'led wall': 'assets/images/add-ons/led-wall.webp',
     'professional host': 'assets/images/add-ons/professional-host.webp',
+    'host or magician': 'assets/images/add-ons/host-magician.webp',
     'same-day edit video': 'assets/images/add-ons/same-day-edit-video.webp',
     'stage backdrop': 'assets/images/add-ons/stage-backdrop.webp',
     'tiffany chair': 'assets/images/add-ons/tiffany-chair.webp',

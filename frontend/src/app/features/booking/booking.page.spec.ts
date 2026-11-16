@@ -206,6 +206,7 @@ describe('BookingPageComponent submission validation', () => {
       ['Same-Day Edit Video', 'same-day-edit-video.webp'],
       ['Stage Backdrop', 'stage-backdrop.webp'],
       ['Tiffany Chair', 'tiffany-chair.webp'],
+      ['Host or Magician', 'host-magician.webp'],
     ];
     draft.addOns.set([
       { id: 'basic', name: 'Basic Photobooth (2 Hours Unlimited)', price: 4000 },
