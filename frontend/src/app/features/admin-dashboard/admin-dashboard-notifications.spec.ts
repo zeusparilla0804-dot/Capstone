@@ -83,6 +83,33 @@ describe('Overview notification inbox', () => {
     expect(section.textContent).toContain('Date unavailable');
     expect(section.querySelector('a[href^="https:"]')).toBeNull();
   });
+  it('combines the Read and payment controls on page one while keeping the sidebar count global', () => {
+    feed(); fixture.detectChanges();
+    fixture.nativeElement.querySelector('[data-notification-filter="read"]').click();
+    const stale = getFeed();
+    const category: HTMLSelectElement = fixture.nativeElement.querySelector('[aria-label="Notification type"]');
+    category.value = 'payments'; category.dispatchEvent(new Event('change'));
+    expect(stale.cancelled).toBe(true);
+    const request = getFeed();
+    expect(request.request.params.get('readStatus')).toBe('read'); expect(request.request.params.get('category')).toBe('payments');
+    expect(request.request.params.get('page')).toBe('1');
+    request.flush({ success: true, data: { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, unreadCount: 25 } }); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-notification-filter="read"]').getAttribute('aria-pressed')).toBe('true');
+    expect(fixture.nativeElement.querySelector('.recent-activity')?.textContent).toContain('No read notifications');
+    expect(fixture.nativeElement.querySelector('a[href="/admin/dashboard"] .dashboard-sidebar__badge')?.textContent?.trim()).toBe('25');
+    expect([...category.options].map(option => option.text)).toEqual(['All types', 'Reservations', 'Payments', 'Customers', 'Other / System']);
+  });
+  it('keeps the type control aligned with retained records when a requested category fails', () => {
+    feed(); fixture.detectChanges();
+    const category: HTMLSelectElement = fixture.nativeElement.querySelector('[aria-label="Notification type"]');
+    category.value = 'payments'; category.dispatchEvent(new Event('change')); fixture.detectChanges();
+    getFeed().flush({}, { status: 500, statusText: 'Error' }); fixture.detectChanges();
+    expect(category.value).toBe('all');
+    fixture.nativeElement.querySelector('.recent-activity [role="alert"] button').click();
+    const retry = getFeed(); expect(retry.request.params.get('category')).toBe('payments');
+    retry.flush({ success: true, data: { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, unreadCount: 25 } }); fixture.detectChanges();
+    expect(category.value).toBe('payments');
+  });
   it('offers retry after a failed feed load and retains records after a failed refresh', () => {
     getFeed().flush({}, { status: 500, statusText: 'Error' }); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.recent-activity [role="alert"]')).not.toBeNull();

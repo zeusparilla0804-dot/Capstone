@@ -3,6 +3,7 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject, signal, ChangeDetectionStrategy } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PaymentMethod } from '../../core/models';
+import { menuSelectionsValid } from '../../core/models/menu.model';
 import { BookingDraftService } from '../../core/services/booking-draft.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
@@ -37,6 +38,10 @@ export class CheckoutPageComponent {
   }
 
   protected async confirmBooking(): Promise<void> {
+    if (!this.menuValid()) {
+      this.errorMessage.set('Complete your menu selection in Event Details before confirming.');
+      return;
+    }
     const catalogError = this.draftService.catalogSelectionError();
     if (catalogError) {
       this.errorMessage.set(catalogError);
@@ -61,5 +66,9 @@ export class CheckoutPageComponent {
     } finally {
       this.isSubmitting.set(false);
     }
+  }
+
+  protected menuValid(): boolean {
+    return menuSelectionsValid(this.draftService.selectedPackage()?.menu, this.draftService.draft().menuSelections);
   }
 }

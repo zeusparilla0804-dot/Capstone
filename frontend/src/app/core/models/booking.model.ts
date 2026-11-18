@@ -1,5 +1,6 @@
 import { CateringPackage } from './package.model';
 import { PaymentMethod } from './payment.model';
+import type { MenuSelectionSnapshot } from './menu.model';
 
 export type EventType = 'wedding' | 'birthday' | 'corporate' | 'debut' | 'anniversary' | 'other';
 export type BookingStatus = 'pending' | 'approved' | 'awaiting_payment' | 'payment_submitted' | 'payment_verified' | 'confirmed' | 'completed' | 'rejected' | 'cancelled' | 'expired';
@@ -25,6 +26,7 @@ export interface BookingDraft {
   readonly addOnQuantities?: Readonly<Record<string, number>>;
   readonly paymentMethod: PaymentMethod | null;
   readonly specialRequest?: string;
+  readonly menuSelections?: Readonly<Record<string, string>>;
 }
 
 export interface BookingPricing {
@@ -51,6 +53,7 @@ export interface BookingPackageSummary {
 export interface Booking {
   readonly id: string;
   readonly invoiceId?: number;
+  readonly invoiceNumber?: string;
   readonly reference: string;
   readonly customerId: string;
   readonly eventName: string;
@@ -60,6 +63,7 @@ export interface Booking {
   readonly venue: string;
   readonly guestCount: number;
   readonly specialRequest?: string;
+  readonly menuSelection?: MenuSelectionSnapshot;
   readonly package: BookingPackageSummary;
   readonly addOns: readonly BookingAddOn[];
   readonly discount: number;

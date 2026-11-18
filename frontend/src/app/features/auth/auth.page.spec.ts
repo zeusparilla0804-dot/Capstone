@@ -222,7 +222,7 @@ describe('AuthPageComponent', () => {
     expect(phone.getAttribute('aria-invalid')).toBe('false');
   });
 
-  it('shows incomplete phone feedback after the customer leaves the field', () => {
+  it('shows incomplete phone feedback while typing and clears it as soon as the value is valid', () => {
     const component = fixture.componentInstance as any;
     component.toggle();
     fixture.detectChanges();
@@ -231,10 +231,66 @@ describe('AuthPageComponent', () => {
     phone.value = '0917';
     phone.dispatchEvent(new Event('input', { bubbles: true }));
     fixture.detectChanges();
+    expect(feedback.textContent).toContain('Enter a valid Philippine mobile number');
+    expect(component.form.controls.phone.touched).toBe(false);
+    phone.value = '09171234567';
+    phone.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
     expect(feedback.textContent?.trim()).toBe('');
     phone.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
-    expect(feedback.textContent).toContain('Enter a valid Philippine mobile number');
+    expect(feedback.textContent?.trim()).toBe('');
+  });
+
+  it('validates email, password and confirmation before blur and clears their feedback after correction', () => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const root = fixture.nativeElement as HTMLElement;
+    const enter = (id: string, value: string) => {
+      const input = root.querySelector<HTMLInputElement>(`#${id}`)!;
+      input.value = value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      fixture.detectChanges();
+      return input.closest('.form-field')!.querySelector('.field-feedback')!;
+    };
+    expect(enter('email', 'invalid-email').textContent).toContain('Enter a valid email address.');
+    expect(component.form.controls.email.touched).toBe(false);
+    expect(enter('email', 'customer@example.com').textContent?.trim()).toBe('');
+    expect(enter('password', 'short').textContent).toContain('Password must contain at least 8 characters.');
+    expect(component.form.controls.password.touched).toBe(false);
+    expect(enter('password', 'SecurePassword123!').classList.contains('field-feedback--error')).toBe(false);
+    expect(enter('confirmPassword', 'different-password').textContent).toContain('Passwords do not match.');
+    expect(component.form.controls.confirmPassword.touched).toBe(false);
+    expect(enter('confirmPassword', 'SecurePassword123!').textContent?.trim()).toBe('');
+    expect(auth.register).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['firstName', 'First name must contain at most 100 characters.', 'Customer'],
+    ['lastName', 'Last name must contain at most 100 characters.', 'Customer'],
+    ['password', 'Password must contain at most 128 characters.', 'SecurePassword123!'],
+  ])('explains the maximum length while editing %s and clears the error after correction', (id, message, corrected) => {
+    const component = fixture.componentInstance as any;
+    component.toggle();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector(`#${id}`) as HTMLInputElement;
+    const feedback = input.closest('.form-field')!.querySelector('.field-feedback')!;
+
+    expect(input.getAttribute('aria-invalid')).toBe('false');
+    expect(feedback.classList.contains('field-feedback--error')).toBe(false);
+    input.value = 'a'.repeat(id === 'password' ? 129 : 101);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(feedback.textContent).toContain(message);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(component.form.controls[id].touched).toBe(false);
+
+    input.value = corrected;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(feedback.classList.contains('field-feedback--error')).toBe(false);
+    expect(input.getAttribute('aria-invalid')).toBe('false');
   });
 
   it('rejects short registration emails and obvious dummy mobile numbers before sending', async () => {

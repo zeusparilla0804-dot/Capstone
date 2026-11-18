@@ -12,6 +12,7 @@ import { assertAddOnsMatchEvent } from '../services/add-on-event-policy.js';
 import { assertCashPaymentWindow } from '../services/cash-payment-policy.js';
 import { assertCustomerBookingDate, bookingSubmissionHash, parseBookingSubmissionKey } from '../services/booking-submission-policy.js';
 import { lockedBookingSubmission, saveBookingSubmission } from './booking-submission.repository.js';
+import { buildMenuSnapshot, readMenuSnapshot } from '../services/package-menu.service.js';
 
 export async function assertOwnedPendingBooking(customerId: number, reservationId: number): Promise<void> {
   const result = await (await getDbPool()).request()
@@ -59,6 +60,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
     const request = new sql.Request(transaction);
     const pkg = await findPackageById(dto.packageId, request); if (!pkg) throw new AppError(400, 'Selected package is unavailable.');
     if (!packageMatchesEvent(pkg.category, dto.eventType)) throw new AppError(400, 'Selected package does not match the event type.');
+    const menuSelection = buildMenuSnapshot(pkg.name, dto.menuSelections);
     const { packageTotal, pricingSnapshot } = calculatePackagePrice(pkg, dto.guestCount);
     await bookingAvailabilityService.assertCanAccept(dto.eventDate, dto.guestCount, new sql.Request(transaction));
     const addOns = priceSelectedAddOns(await findAddOns(dto.addOnIds, new sql.Request(transaction)), dto.addOnQuantities);
@@ -79,6 +81,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
       .input('guestCount', sql.Int, dto.guestCount)
       .input('venue', sql.NVarChar(500), dto.venue)
       .input('specialRequest', sql.NVarChar(2000), dto.specialRequest ?? null)
+      .input('menuSelection', sql.NVarChar(sql.MAX), menuSelection ? JSON.stringify(menuSelection) : null)
       .input('packageName', sql.NVarChar(150), pkg.name)
       .input('pricingType', sql.VarChar(20), pricingSnapshot.pricingType)
       .input('unitPrice', sql.Decimal(12,2), pricingSnapshot.pricePerGuest)
@@ -90,12 +93,12 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
       .input('total', sql.Decimal(12,2), total)
       .query(`INSERT dbo.RESERVATION(
         customer_id,event_id,package_id,booking_reference,event_date,event_time,guest_count,
-        venue_address,special_request,status,package_name_snapshot,package_pricing_type,
+        venue_address,special_request,menu_selection_json,status,package_name_snapshot,package_pricing_type,
         package_unit_price,package_base_price,package_included_guests,package_excess_guest_price,
         package_total,subtotal,total_amount
       ) OUTPUT INSERTED.reservation_id,INSERTED.created_at VALUES(
         @customerId,@eventId,@packageId,@reference,@eventDate,@eventTime,@guestCount,
-        @venue,@specialRequest,'PENDING',@packageName,@pricingType,@unitPrice,@basePrice,
+        @venue,@specialRequest,@menuSelection,'PENDING',@packageName,@pricingType,@unitPrice,@basePrice,
         @includedGuests,@excessGuestPrice,@packageTotal,@subtotal,@total
       )`);
     const id = Number(insert.recordset[0].reservation_id);
@@ -103,7 +106,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
     const method=paymentMethod(dto.paymentMethod);
     await new sql.Request(transaction).input('reservationId',sql.Int,id).input('due',sql.Decimal(12,2),total).input('method',sql.NVarChar(50),method).query(`INSERT dbo.PAYMENT(reservation_id,amount_due,amount_paid,payment_method,status) VALUES(@reservationId,@due,0,@method,'PENDING')`);
     await queueBookingNotification(id, 'BOOKING_RECEIVED', new sql.Request(transaction));
-    const response: BookingRecord = { id, reference, eventName: `${dto.eventType} Event`, eventType: dto.eventType, eventDate:dto.eventDate,eventTime:dto.eventTime,venue:dto.venue,guestCount:dto.guestCount,specialRequest:dto.specialRequest,package:packageSnapshot(pkg,pricingSnapshot),addOns,discount:0,total,status:'pending',paymentMethod:customerPaymentMethod(dto.paymentMethod),amountPaid:0,createdAt:new Date(insert.recordset[0].created_at).toISOString() };
+    const response: BookingRecord = { id, reference, eventName: `${dto.eventType} Event`, eventType: dto.eventType, eventDate:dto.eventDate,eventTime:dto.eventTime,venue:dto.venue,guestCount:dto.guestCount,specialRequest:dto.specialRequest,...(menuSelection ? {menuSelection} : {}),package:packageSnapshot(pkg,pricingSnapshot),addOns,discount:0,total,status:'pending',paymentMethod:customerPaymentMethod(dto.paymentMethod),amountPaid:0,createdAt:new Date(insert.recordset[0].created_at).toISOString() };
     if (submissionKey) await saveBookingSubmission(customerId, submissionKey, requestHash!, response, new sql.Request(transaction));
     await transaction.commit();
     return response;
@@ -123,7 +126,8 @@ export async function updatePendingBooking(
       .input('reservationId', sql.Int, reservationId)
       .input('customerId', sql.Int, customerId)
       .query(`SELECT r.reservation_id,r.status,r.booking_reference,r.created_at,r.discount_amount,
-          COALESCE(pay.amount_paid,0) amount_paid,pay.payment_method,i.invoice_id
+          COALESCE(pay.amount_paid,0) amount_paid,pay.payment_method,i.invoice_id,i.invoice_number,
+          r.package_id,r.menu_selection_json
         FROM dbo.RESERVATION r WITH(UPDLOCK,HOLDLOCK)
         LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id
         LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
@@ -143,6 +147,9 @@ export async function updatePendingBooking(
     if (!packageMatchesEvent(pkg.category, dto.eventType)) {
       throw new AppError(400, 'Selected package does not match the event type.');
     }
+    const menuSelection = dto.menuSelections === undefined
+      ? Number(existing.package_id) === dto.packageId ? readMenuSnapshot(existing.menu_selection_json) : undefined
+      : buildMenuSnapshot(pkg.name, dto.menuSelections);
     const { packageTotal, pricingSnapshot } = calculatePackagePrice(pkg, dto.guestCount);
     await bookingAvailabilityService.assertCanAccept(
       dto.eventDate,
@@ -176,6 +183,7 @@ export async function updatePendingBooking(
       .input('guestCount', sql.Int, dto.guestCount)
       .input('venue', sql.NVarChar(500), dto.venue)
       .input('specialRequest', sql.NVarChar(2000), dto.specialRequest ?? null)
+      .input('menuSelection', sql.NVarChar(sql.MAX), menuSelection ? JSON.stringify(menuSelection) : null)
       .input('packageName', sql.NVarChar(150), pkg.name)
       .input('pricingType', sql.VarChar(20), pricingSnapshot.pricingType)
       .input('unitPrice', sql.Decimal(12,2), pricingSnapshot.pricePerGuest)
@@ -186,7 +194,7 @@ export async function updatePendingBooking(
       .input('subtotal', sql.Decimal(12,2), subtotal)
       .input('total', sql.Decimal(12,2), total)
       .query(`UPDATE dbo.RESERVATION SET event_id=@eventId,package_id=@packageId,event_date=@eventDate,
-          event_time=@eventTime,guest_count=@guestCount,venue_address=@venue,special_request=@specialRequest,
+          event_time=@eventTime,guest_count=@guestCount,venue_address=@venue,special_request=@specialRequest,menu_selection_json=@menuSelection,
           package_name_snapshot=@packageName,package_pricing_type=@pricingType,package_unit_price=@unitPrice,
           package_base_price=@basePrice,package_included_guests=@includedGuests,
           package_excess_guest_price=@excessGuestPrice,package_total=@packageTotal,subtotal=@subtotal,total_amount=@total
@@ -220,6 +228,7 @@ export async function updatePendingBooking(
     return {
       id: reservationId,
       invoiceId: existing.invoice_id ? Number(existing.invoice_id) : undefined,
+      invoiceNumber: existing.invoice_number ?? undefined,
       reference: String(existing.booking_reference),
       eventName: `${dto.eventType} Event`,
       eventType: dto.eventType,
@@ -228,6 +237,7 @@ export async function updatePendingBooking(
       venue: dto.venue,
       guestCount: dto.guestCount,
       specialRequest: dto.specialRequest,
+      ...(menuSelection ? { menuSelection } : {}),
       package: packageSnapshot(pkg, pricingSnapshot),
       addOns,
       discount: Number(existing.discount_amount ?? 0),
@@ -244,8 +254,8 @@ export async function updatePendingBooking(
 }
 
 export async function findCustomerBookings(customerId: number): Promise<BookingRecord[]> {
-  const pool=await getDbPool(); const result=await pool.request().input('customerId',sql.Int,customerId).query(`SELECT r.reservation_id,i.invoice_id,r.booking_reference,r.event_date,r.event_time,r.guest_count,r.venue_address,r.special_request,r.status,r.package_name_snapshot,r.package_pricing_type,r.package_unit_price,r.package_base_price,r.package_included_guests,r.package_excess_guest_price,r.package_total,r.discount_amount,r.total_amount,r.created_at,e.event_type,p.package_id,p.package_name,COALESCE(pay.amount_paid,0) amount_paid,pay.payment_method,proof.latestProofStatus, CAST(CASE WHEN r.status IN ('AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED') AND EXISTS (SELECT 1 FROM dbo.BOOKING_PAYMENT_DESTINATION a JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id WHERE a.reservation_id=r.reservation_id AND d.is_available=1 AND d.method=pay.payment_method AND DATALENGTH(d.image_bytes)>0) THEN 1 ELSE 0 END AS bit) paymentQrReady FROM dbo.RESERVATION r JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof WHERE r.customer_id=@customerId ORDER BY r.event_date DESC`);
+  const pool=await getDbPool(); const result=await pool.request().input('customerId',sql.Int,customerId).query(`SELECT r.reservation_id,i.invoice_id,i.invoice_number,r.booking_reference,r.event_date,r.event_time,r.guest_count,r.venue_address,r.special_request,r.menu_selection_json,r.status,r.package_name_snapshot,r.package_pricing_type,r.package_unit_price,r.package_base_price,r.package_included_guests,r.package_excess_guest_price,r.package_total,r.discount_amount,r.total_amount,r.created_at,e.event_type,p.package_id,p.package_name,COALESCE(pay.amount_paid,0) amount_paid,pay.payment_method,proof.latestProofStatus, CAST(CASE WHEN r.status IN ('AWAITING_PAYMENT','PAYMENT_SUBMITTED','PAYMENT_VERIFIED','CONFIRMED','COMPLETED') AND EXISTS (SELECT 1 FROM dbo.BOOKING_PAYMENT_DESTINATION a JOIN dbo.PAYMENT_DESTINATION d ON d.destination_id=a.destination_id WHERE a.reservation_id=r.reservation_id AND d.is_available=1 AND d.method=pay.payment_method AND DATALENGTH(d.image_bytes)>0) THEN 1 ELSE 0 END AS bit) paymentQrReady FROM dbo.RESERVATION r JOIN dbo.EVENT e ON e.event_id=r.event_id LEFT JOIN dbo.PACKAGE p ON p.package_id=r.package_id LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id LEFT JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id OUTER APPLY(SELECT TOP(1) pp.status latestProofStatus FROM dbo.PAYMENT_PROOF pp WHERE pp.reservation_id=r.reservation_id ORDER BY pp.created_at DESC,pp.payment_proof_id DESC) proof WHERE r.customer_id=@customerId ORDER BY r.event_date DESC`);
   const bookings: BookingRecord[]=[];
-  for(const row of result.recordset){ const addResult=await pool.request().input('id',sql.Int,row.reservation_id).query(`SELECT a.add_on_id,a.add_on_name,a.description,ra.unit_price,ra.quantity FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id WHERE ra.reservation_id=@id`); const pricingType=row.package_pricing_type??'PER_HEAD'; const unitPrice=row.package_unit_price===null?null:Number(row.package_unit_price); const packageTotal=row.package_total===null||row.package_total===undefined?(unitPrice??0)*Number(row.guest_count):Number(row.package_total); bookings.push({id:Number(row.reservation_id),invoiceId:row.invoice_id?Number(row.invoice_id):undefined,reference:row.booking_reference,eventName:`${row.event_type} Event`,eventType:String(row.event_type).toLowerCase(),eventDate:dateOnly(row.event_date),eventTime:timeOnly(row.event_time),venue:row.venue_address,guestCount:row.guest_count,specialRequest:row.special_request??undefined,package:{packageId:Number(row.package_id),packageName:row.package_name_snapshot??row.package_name,pricingType,pricePerGuest:unitPrice,basePrice:row.package_base_price===null?null:Number(row.package_base_price),includedGuests:row.package_included_guests===null?null:Number(row.package_included_guests),excessGuestPrice:row.package_excess_guest_price===null?null:Number(row.package_excess_guest_price),packageTotal},addOns:addResult.recordset.map(a=>({id:Number(a.add_on_id),name:a.add_on_name,description:a.description??'',price:Number(a.unit_price)*Number(a.quantity??1),unitPrice:Number(a.unit_price),quantity:Number(a.quantity??1)})),discount:Number(row.discount_amount),total:Number(row.total_amount),status:String(row.status).toLowerCase(),paymentMethod:customerPaymentMethod(row.payment_method),amountPaid:Number(row.amount_paid),latestProofStatus:row.latestProofStatus??undefined,paymentQrReady:Number(row.paymentQrReady)===1,createdAt:new Date(row.created_at).toISOString()}); }
+  for(const row of result.recordset){ const addResult=await pool.request().input('id',sql.Int,row.reservation_id).query(`SELECT a.add_on_id,a.add_on_name,a.description,ra.unit_price,ra.quantity FROM dbo.RESERVATION_ADD_ON ra JOIN dbo.ADD_ON a ON a.add_on_id=ra.add_on_id WHERE ra.reservation_id=@id`); const pricingType=row.package_pricing_type??'PER_HEAD'; const unitPrice=row.package_unit_price===null?null:Number(row.package_unit_price); const packageTotal=row.package_total===null||row.package_total===undefined?(unitPrice??0)*Number(row.guest_count):Number(row.package_total); bookings.push({id:Number(row.reservation_id),invoiceId:row.invoice_id?Number(row.invoice_id):undefined,invoiceNumber:row.invoice_number??undefined,reference:row.booking_reference,eventName:`${row.event_type} Event`,eventType:String(row.event_type).toLowerCase(),eventDate:dateOnly(row.event_date),eventTime:timeOnly(row.event_time),venue:row.venue_address,guestCount:row.guest_count,specialRequest:row.special_request??undefined,menuSelection:readMenuSnapshot(row.menu_selection_json),package:{packageId:Number(row.package_id),packageName:row.package_name_snapshot??row.package_name,pricingType,pricePerGuest:unitPrice,basePrice:row.package_base_price===null?null:Number(row.package_base_price),includedGuests:row.package_included_guests===null?null:Number(row.package_included_guests),excessGuestPrice:row.package_excess_guest_price===null?null:Number(row.package_excess_guest_price),packageTotal},addOns:addResult.recordset.map(a=>({id:Number(a.add_on_id),name:a.add_on_name,description:a.description??'',price:Number(a.unit_price)*Number(a.quantity??1),unitPrice:Number(a.unit_price),quantity:Number(a.quantity??1)})),discount:Number(row.discount_amount),total:Number(row.total_amount),status:String(row.status).toLowerCase(),paymentMethod:customerPaymentMethod(row.payment_method),amountPaid:Number(row.amount_paid),latestProofStatus:row.latestProofStatus??undefined,paymentQrReady:Number(row.paymentQrReady)===1,createdAt:new Date(row.created_at).toISOString()}); }
   return bookings;
 }

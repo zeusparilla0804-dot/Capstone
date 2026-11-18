@@ -55,6 +55,7 @@ test('booking creation stores unit prices and quantities and charges catalog sub
   const pool = { connected: true, close: async () => {} };
   const saved: Record<string, unknown>[] = [];
   let due: unknown;
+  let savedMenu: unknown;
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   t.mock.method(sql.Transaction.prototype, 'begin', async function () { return this; });
   t.mock.method(sql.Transaction.prototype, 'commit', async () => {});
@@ -63,7 +64,7 @@ test('booking creation stores unit prices and quantities and charges catalog sub
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, parameter]) => [key, parameter.value]));
     const result = (recordset: unknown[] = []) => ({ recordset, rowsAffected: [1] });
     if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result();
-    if (/FROM dbo\.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Standard', description: '', pricing_type: 'PER_HEAD', price_per_head: 480, event_type: 'Standard', min_guest: null, max_guest: null }]);
+    if (/FROM dbo\.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'PHP 480 Per Head', description: '', pricing_type: 'PER_HEAD', price_per_head: 480, event_type: 'Standard', min_guest: null, max_guest: null }]);
     if (/COUNT_BIG/i.test(command)) return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
     if (/FROM dbo\.ADD_ON/.test(command)) return result([
       { add_on_id: 1, add_on_name: 'Tiffany Chair', description: '', price: 100 },
@@ -71,14 +72,21 @@ test('booking creation stores unit prices and quantities and charges catalog sub
     ]);
     if (/SELECT event_id/.test(command)) return result([{ event_id: 1 }]);
     if (/INSERT dbo\.RESERVATION_ADD_ON/.test(command)) { saved.push(values); assert.match(command, /quantity/); return result(); }
-    if (/INSERT dbo\.RESERVATION\(/.test(command)) return result([{ reservation_id: 31, created_at: new Date() }]);
+    if (/INSERT dbo\.RESERVATION\(/.test(command)) {
+      assert.match(command, /menu_selection_json/);
+      savedMenu = values['menuSelection'];
+      return result([{ reservation_id: 31, created_at: new Date() }]);
+    }
     if (/INSERT dbo\.PAYMENT/.test(command)) { due = values['due']; return result(); }
     if (/email outbox context/i.test(command)) return result([{ customerEmail: 'test@example.test', customerName: 'Test', bookingReference: 'BK-31', eventDate: '2027-12-20' }]);
     if (/INSERT dbo\.EMAIL_OUTBOX/.test(command)) return result([{ id: 1 }]);
     throw new Error(`Unexpected query: ${command}`);
   });
   try {
-    const booking = await createBooking(7, { eventType: 'corporate', eventDate: '2027-12-20', eventTime: '12:00', venue: 'Venue', guestCount: 10, packageId: 1, addOnIds: [1, 2], addOnQuantities: { '1': 12, '2': 2 }, paymentMethod: 'cash' });
+    const booking = await createBooking(7, { eventType: 'corporate', eventDate: '2027-12-20', eventTime: '12:00', venue: 'Venue', guestCount: 10, packageId: 1, addOnIds: [1, 2], addOnQuantities: { '1': 12, '2': 2 }, paymentMethod: 'cash',
+      menuSelections: { pork: 'Pork preference', chicken: 'Chicken preference', fish: 'Fish preference', sideKind: 'Pasta', sideDish: 'Pasta preference', dessert: 'Dessert preference', drink: 'Drink preference' } });
+    assert.deepEqual(JSON.parse(String(savedMenu)), booking.menuSelection);
+    assert.equal(booking.menuSelection?.items[0]?.value, 'Pork preference');
     assert.equal((booking as any).paymentMethod, 'cash');
     assert.deepEqual(saved.map(item => [item['price'], item['quantity']]), [[100, 12], [14000, 2]]);
     assert.equal(booking.total, 34000);

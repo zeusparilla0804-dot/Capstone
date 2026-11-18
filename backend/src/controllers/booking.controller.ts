@@ -3,6 +3,7 @@ import { identifier, isoDate, text, time24 } from '../utils/validation.js';
 import { assertCustomerBookingDate, parseBookingSubmissionKey } from '../services/booking-submission-policy.js';
 import { assertCashPaymentWindow } from '../services/cash-payment-policy.js';
 import { chooseBookingPayment } from '../services/booking-payment.service.js';
+import { parseMenuSelections } from '../services/package-menu.service.js';
 import { calendarMonthAvailability } from '../services/booking-calendar.service.js';
 
 function customerEventDate(value: unknown, guestCount: number): string {
@@ -48,6 +49,7 @@ export function parseBooking(body: Record<string, unknown>, validateTiming = tru
     ...(addOnQuantities === undefined ? {} : { addOnQuantities }),
     paymentMethod,
     specialRequest,
+    ...(body['menuSelections'] === undefined ? {} : { menuSelections: parseMenuSelections(body['menuSelections']) }),
   };
 }
 export function parsePendingBookingUpdate(body: Record<string, unknown>): UpdatePendingBookingDto {

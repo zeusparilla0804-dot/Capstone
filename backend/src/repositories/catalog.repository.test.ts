@@ -56,7 +56,8 @@ test('maps per-head and base-plus-excess catalog rows without coercing nullable 
     },
   ]);
 
-  assert.deepEqual(packages, [
+  assert.equal(packages[1]?.menu?.fields.filter(field => /^main\d$/.test(field.key)).length, 3);
+  assert.deepEqual(packages.map(({ menu: _menu, ...item }) => item), [
     {
       id: 1,
       name: 'PHP 480 Catering Package',

@@ -36,6 +36,6 @@ export function customerNotification(row: CustomerUpdateRow) {
   const link = row.templateKey === 'PAYMENT_REQUESTED' ? `/book-event?paymentBooking=${row.bookingId}&step=4`
     : row.templateKey === 'PAYMENT_QR_READY' || row.templateKey === 'PAYMENT_PROOF_REJECTED' || row.templateKey === 'PAYMENT_PROOF_VERIFIED'
       ? `/my-bookings/${row.bookingId}/payment` : '/my-bookings';
-  return { id: row.id, title, message, reference: row.reference,
+  return { id: row.id, type: row.templateKey, title, message, reference: row.reference,
     createdAt: row.createdAt, isRead: row.isRead, link };
 }

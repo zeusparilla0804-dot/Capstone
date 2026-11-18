@@ -155,6 +155,30 @@ describe('AdminNotificationsService', () => {
     user.set({ id: '9' }); revision++; TestBed.tick(); flushFeed();
     TestBed.resetTestingModule(); vi.advanceTimersByTime(60_000); window.dispatchEvent(new Event('focus')); http.expectNone(request => request.url.endsWith('/admin/notifications'));
   });
+  it('combines rapid status/category changes, resets pages and retries the same selection without relabeling retained rows', () => {
+    flushFeed(); service.setPage(4); const oldPage = getFeed();
+    service.setReadStatus('read'); const oldStatus = getFeed();
+    service.setCategory('payments');
+    expect(oldPage.cancelled).toBe(true); expect(oldStatus.cancelled).toBe(true);
+    const filtered = getFeed();
+    expect(filtered.request.params.get('page')).toBe('1');
+    expect(filtered.request.params.get('readStatus')).toBe('read');
+    expect(filtered.request.params.get('category')).toBe('payments');
+    filtered.flush({}, { status: 500, statusText: 'Error' });
+    expect(service.readStatus()).toBe('all'); expect(service.category()).toBe('all');
+    expect(service.items()).toEqual([notification]); expect(service.unreadCount()).toBe(27);
+    service.refresh(); const retry = getFeed();
+    expect(retry.request.params.get('readStatus')).toBe('read'); expect(retry.request.params.get('category')).toBe('payments');
+    retry.flush({ success: true, data: { items: [{ ...notification, isRead: true }], page: 1, pageSize: 20, totalItems: 21, totalPages: 2, unreadCount: 27 } });
+    expect(service.readStatus()).toBe('read'); expect(service.category()).toBe('payments');
+    expect(service.totalItems()).toBe(21); expect(service.unreadCount()).toBe(27);
+    service.setPage(2); const page = getFeed();
+    expect(page.request.params.get('readStatus')).toBe('read'); expect(page.request.params.get('category')).toBe('payments');
+    page.flush({ success: true, data: { items: [], page: 2, pageSize: 20, totalItems: 21, totalPages: 2, unreadCount: 27 } });
+    revision++; user.set({ id: '8' }); TestBed.tick();
+    const newAccount = getFeed(); expect(newAccount.request.params.get('readStatus')).toBe('all'); expect(newAccount.request.params.get('category')).toBe('all');
+    newAccount.flush({ success: true, data: { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, unreadCount: 0 } });
+  });
 });
 
 describe('AdminNotificationsService failed sign-out recovery', () => {

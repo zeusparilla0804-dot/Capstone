@@ -3,6 +3,7 @@ import { getDbPool } from '../config/database.js';
 import type { InvoiceDetails } from '../types/invoice.types.js';
 import { queueBookingNotification } from '../services/notification.service.js';
 import { writeAdminAudit } from './audit.repository.js';
+import { readMenuSnapshot } from '../services/package-menu.service.js';
 import { bankSnapshotColumns, mapBankSnapshot } from './payment-bank.repository.js';
 
 const dateValue = (value: Date | string | undefined) => value ? new Date(value).toISOString() : undefined;
@@ -123,7 +124,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const request = pool.request().input('invoiceId', sql.Int, invoiceId).input('customerId', sql.Int, customerId ?? null);
   const main = await request.query(`SELECT i.invoice_id,i.invoice_number,i.issued_at,i.due_at,i.status,i.subtotal,
       i.discount_amount,i.total_amount,r.reservation_id,r.status reservation_status,r.booking_reference,r.event_date,r.event_time,
-      r.venue_address,r.guest_count,e.event_type,c.customer_id,CONCAT(c.first_name,' ',c.last_name) customer_name,
+      r.venue_address,r.guest_count,r.menu_selection_json,e.event_type,c.customer_id,CONCAT(c.first_name,' ',c.last_name) customer_name,
       c.email,c.contact_number,issuer.full_name issuer_name,COALESCE(pay.amount_paid,0) amount_paid
     FROM dbo.INVOICE i JOIN dbo.RESERVATION r ON r.reservation_id=i.reservation_id
     JOIN dbo.EVENT e ON e.event_id=r.event_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
@@ -148,7 +149,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
     booking: {
       id: Number(row.reservation_id), status: row.reservation_status, reference: row.booking_reference, eventType: row.event_type,
       eventDate: new Date(row.event_date).toISOString().slice(0,10),
-      eventTime: new Date(row.event_time).toISOString().slice(11,16), venue: row.venue_address, guestCount: row.guest_count,
+      eventTime: new Date(row.event_time).toISOString().slice(11,16), venue: row.venue_address, guestCount: row.guest_count, menuSelection: readMenuSnapshot(row.menu_selection_json),
     },
     items: items.recordset.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: Number(item.unit_price), amount: Number(item.line_total) })),
     subtotal: Number(row.subtotal), discount: Number(row.discount_amount), totalAmount: total, amountPaid: paid,

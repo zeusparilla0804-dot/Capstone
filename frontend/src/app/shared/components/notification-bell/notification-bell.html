@@ -9,10 +9,20 @@
       <div class="notifications__heading"><h2>Notifications</h2>
         @if (updates.unreadCount()) { <button type="button" (click)="updates.markAllRead()">Mark all as read</button> }
       </div>
+      <div class="notifications__filters">
+        <div class="notifications__read-filters" role="group" aria-label="Filter notifications by read status">
+          @for (filter of updates.readFilters; track filter.value) {
+            <button type="button" [attr.data-notification-filter]="filter.value" [attr.aria-pressed]="updates.readStatus() === filter.value" (click)="updates.setReadStatus(filter.value)">{{ filter.label }}</button>
+          }
+        </div>
+        <select aria-label="Notification type" [value]="updates.category()" (change)="updates.setCategory($any($event.target).value)">
+          @for (category of updates.categories; track category.value) { <option [value]="category.value">{{ category.label }}</option> }
+        </select>
+      </div>
       @if (updates.error()) { <p class="notifications__state" role="alert">{{ updates.error() }} <button type="button" (click)="updates.refresh()">Try again</button></p> }
-      @if (updates.items().length) {
+      @if (updates.filteredItems().length) {
         <ul>
-          @for (item of updates.items(); track item.id) {
+          @for (item of updates.filteredItems(); track item.id) {
             <li><a [routerLink]="routePath(item.link)" [queryParams]="routeQuery(item.link)" [class.is-unread]="!item.isRead" (click)="visit(item.id)">
               <strong>{{ item.title }} @if (!item.isRead) { <span class="notifications__dot" aria-label="Unread"></span> }</strong>
               <span>{{ item.message }}</span><small>{{ item.reference }} · {{ item.createdAt | date:'MMM d, h:mm a' }}</small>
@@ -20,7 +30,7 @@
           }
         </ul>
       } @else if (updates.loading()) { <p class="notifications__state" role="status">Loading updates…</p>
-      } @else if (!updates.error()) { <p class="notifications__state">No updates yet. Booking and payment updates will appear here.</p> }
+      } @else if (!updates.error()) { <p class="notifications__state">{{ updates.readStatus() !== 'all' || updates.category() !== 'all' ? 'No notifications match these filters.' : 'No updates yet. Booking and payment updates will appear here.' }}</p> }
       <a class="notifications__footer" routerLink="/my-bookings" (click)="open.set(false)">View My Reservations</a>
     </section>
   }

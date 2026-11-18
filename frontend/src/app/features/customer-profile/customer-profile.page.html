@@ -50,9 +50,9 @@
                       <label for="profile-phone" class="profile-phone-label">Contact number</label>
                       <input id="profile-phone" type="tel" autocomplete="tel" formControlName="phone"
                         placeholder="0917 123 4567" aria-describedby="profile-phone-hint profile-phone-error"
-                        [attr.aria-invalid]="phoneControl.touched && phoneControl.invalid" />
+                        [attr.aria-invalid]="(phoneControl.dirty || phoneControl.touched) && phoneControl.invalid" />
                       <small id="profile-phone-hint">Use 09XXXXXXXXX or +639XXXXXXXXX.</small>
-                      @if (phoneControl.touched && phoneControl.invalid) {
+                      @if ((phoneControl.dirty || phoneControl.touched) && phoneControl.invalid) {
                         <small id="profile-phone-error" class="profile-phone-error" role="alert">Enter a valid Philippine mobile number.</small>
                       }
                       @if (phoneError()) {

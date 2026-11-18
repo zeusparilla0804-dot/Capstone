@@ -1,0 +1,24 @@
+<section class="booking-menu" aria-labelledby="booking-menu-title">
+  <header><h3 id="booking-menu-title">Menu selection</h3><p>Choose the options and enter your preferred dishes for this package. LA Chef will confirm the final menu with you.</p></header>
+  <div class="booking-menu__fields">
+    @for (field of definition().fields; track field.key) {
+      <div class="form-field">
+        <label [for]="'menu-' + field.key">{{ field.label }} *</label>
+        @if (field.options; as options) {
+          <select [id]="'menu-' + field.key" required
+            [attr.aria-invalid]="!!error(field)" [attr.aria-describedby]="'menu-error-' + field.key"
+            (change)="edit(field, $event)" (blur)="markEdited(field.key)">
+            <option value="" [selected]="!values()[field.key]">Choose an option</option>
+            @for (option of options; track option) { <option [value]="option" [selected]="values()[field.key] === option">{{ option }}</option> }
+          </select>
+        } @else {
+          <input [id]="'menu-' + field.key" type="text" [value]="values()[field.key] ?? ''" required maxlength="120"
+            autocomplete="off" placeholder="Enter your preference" [attr.aria-invalid]="!!error(field)"
+            [attr.aria-describedby]="'menu-error-' + field.key" (input)="edit(field, $event)" (blur)="markEdited(field.key)" />
+        }
+        <small [id]="'menu-error-' + field.key" class="booking-menu__feedback" aria-live="polite">{{ error(field) }}</small>
+      </div>
+    }
+  </div>
+  <p class="booking-menu__included"><strong>Also included</strong> {{ definition().includedItems.join(' · ') }}</p>
+</section>

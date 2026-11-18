@@ -8,6 +8,15 @@ import { PackageService } from './package.service';
 import { CustomerAccountScopeService } from './customer-account-scope.service';
 
 describe('BookingDraftService add-on quantities', () => {
+  it('retains a menu for the same package and clears it when a different package is chosen', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    const service = TestBed.inject(BookingDraftService);
+    service.update({ packageId: '1', menuSelections: { pork: 'Preferred pork dish' } });
+    service.selectPackage('1');
+    expect(service.draft().menuSelections).toEqual({ pork: 'Preferred pork dish' });
+    service.selectPackage('2');
+    expect(service.draft().menuSelections).toEqual({});
+  });
   it('replaces a photobooth choice without removing other services or double charging', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient()] });
     const service = TestBed.inject(BookingDraftService);

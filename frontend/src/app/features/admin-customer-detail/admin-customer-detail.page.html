@@ -21,10 +21,10 @@
     <section class="profile-section" aria-labelledby="profile-title">
       <header class="section-header"><div><h2 id="profile-title">Contact details</h2><p>Changes affect future booking and billing communication.</p></div></header>
       <form class="profile-form" [formGroup]="profileForm" (ngSubmit)="saveProfile()">
-        <label>First name<input type="text" formControlName="firstName" maxlength="100" autocomplete="given-name" />@if(profileForm.controls.firstName.touched && profileForm.controls.firstName.invalid){<small>Enter a first name.</small>}</label>
-        <label>Last name<input type="text" formControlName="lastName" maxlength="100" autocomplete="family-name" />@if(profileForm.controls.lastName.touched && profileForm.controls.lastName.invalid){<small>Enter a last name.</small>}</label>
-        <label>Email<input type="email" formControlName="email" maxlength="255" autocomplete="email" autocapitalize="none" />@if(profileForm.controls.email.touched && profileForm.controls.email.invalid){<small>Enter a valid email address.</small>}</label>
-        <label>Phone<input type="tel" formControlName="phone" maxlength="30" autocomplete="tel" />@if(profileForm.controls.phone.touched && profileForm.controls.phone.invalid){<small>Enter a phone number.</small>}</label>
+        <label>First name<input type="text" formControlName="firstName" maxlength="100" autocomplete="given-name" />@if((profileForm.controls.firstName.dirty || profileForm.controls.firstName.touched) && profileForm.controls.firstName.invalid){<small>Enter a first name.</small>}</label>
+        <label>Last name<input type="text" formControlName="lastName" maxlength="100" autocomplete="family-name" />@if((profileForm.controls.lastName.dirty || profileForm.controls.lastName.touched) && profileForm.controls.lastName.invalid){<small>Enter a last name.</small>}</label>
+        <label>Email<input type="email" formControlName="email" maxlength="255" autocomplete="email" autocapitalize="none" />@if((profileForm.controls.email.dirty || profileForm.controls.email.touched) && profileForm.controls.email.invalid){<small>Enter a valid email address.</small>}</label>
+        <label>Phone<input type="tel" formControlName="phone" maxlength="30" autocomplete="tel" />@if((profileForm.controls.phone.dirty || profileForm.controls.phone.touched) && profileForm.controls.phone.invalid){<small>Enter a phone number.</small>}</label>
         <div class="profile-form__footer">
           <div aria-live="polite">
             @if(profileError()){<p class="form-message form-message--error" role="alert">{{ profileError() }}</p>}

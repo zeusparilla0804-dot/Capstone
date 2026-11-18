@@ -2,6 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { customerNotification } from './customer-notifications.service.js';
 
+test('customer notifications expose stable source types even when payment and reservation links are shared', () => {
+  for (const templateKey of ['BOOKING_RECEIVED', 'PAYMENT_RECORDED', 'INVOICE_ISSUED', 'UPCOMING_EVENT_REMINDER']) {
+    const item = customerNotification({ id: 'email:1', templateKey, bookingId: 42, reference: 'BK-42', createdAt: '2026-11-08', isRead: false });
+    assert.equal(item?.type, templateKey);
+  }
+});
+
 test('a smaller verified deposit tells the customer the shortfall, total balance and correction note', () => {
   const item = customerNotification({ id: 'email:3', templateKey: 'PAYMENT_PROOF_VERIFIED', bookingId: 42, reference: 'BK-42', createdAt: '2026-11-12', isRead: false,
     verifiedAmount: 70000, amountPaid: 70000, requiredDeposit: 77000, remainingDeposit: 7000, remainingBalance: 84000,

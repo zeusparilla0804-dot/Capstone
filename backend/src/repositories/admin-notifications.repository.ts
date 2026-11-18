@@ -99,6 +99,9 @@ const readFeedCte = `${feedCte}, readFeed AS (
   FROM feed f LEFT JOIN dbo.ADMIN_NOTIFICATION_READ seen ON seen.admin_id=@adminId AND seen.notification_key=f.id
 )`;
 
+const filterPredicate = `(@readStatus='all' OR (@readStatus='unread' AND isRead=0) OR (@readStatus='read' AND isRead=1))
+            AND (@category='all' OR category=@category)`;
+
 function notification(row: Record<string, unknown>): AdminNotification {
   return {
     id: String(row['id']), type: String(row['type']), title: String(row['title']),
@@ -112,21 +115,26 @@ export function createAdminNotificationRepository(deps: { request(): Promise<sql
   return {
     async list(adminId, query) {
       const result = await (await deps.request()).replaceInput('adminId', sql.Int, adminId)
-        .replaceInput('unreadOnly', sql.Bit, query.unreadOnly)
+        .replaceInput('readStatus', sql.VarChar(10), query.readStatus ?? (query.unreadOnly ? 'unread' : 'all'))
+        .replaceInput('category', sql.VarChar(20), query.category ?? 'all')
         .replaceInput('offset', sql.Int, (query.page - 1) * query.pageSize)
         .replaceInput('pageSize', sql.Int, query.pageSize).query(`
           DECLARE @serverOffset int=DATEPART(TZOFFSET,SYSDATETIMEOFFSET());
           DECLARE @notificationFeed TABLE (
             id nvarchar(120) NOT NULL,type nvarchar(80) NOT NULL,title nvarchar(200) NOT NULL,
             message nvarchar(max) NOT NULL,reference nvarchar(120) NOT NULL,createdAt datetime2 NULL,
-            isRead bit NOT NULL,link nvarchar(500) NOT NULL
+            isRead bit NOT NULL,link nvarchar(500) NOT NULL,category varchar(20) NOT NULL
           );
           ${readFeedCte}
-          INSERT INTO @notificationFeed(id,type,title,message,reference,createdAt,isRead,link)
-          SELECT id,type,title,message,reference,createdAt,isRead,link FROM readFeed;
-          SELECT COALESCE(SUM(CASE WHEN @unreadOnly=0 OR isRead=0 THEN 1 ELSE 0 END),0) totalItems,
+          INSERT INTO @notificationFeed(id,type,title,message,reference,createdAt,isRead,link,category)
+          SELECT id,type,title,message,reference,createdAt,isRead,link,
+            CASE WHEN type LIKE 'PAYMENT[_]%' OR type='INVOICE_ISSUED' THEN 'payments'
+              WHEN type LIKE 'RESERVATION[_]%' OR type='EVENT_TIME_UPDATED' THEN 'reservations'
+              WHEN type LIKE 'CUSTOMER[_]%' THEN 'customers' ELSE 'system' END
+          FROM readFeed;
+          SELECT COALESCE(SUM(CASE WHEN ${filterPredicate} THEN 1 ELSE 0 END),0) totalItems,
             COALESCE(SUM(CASE WHEN isRead=0 THEN 1 ELSE 0 END),0) unreadCount FROM @notificationFeed;
-          SELECT id,type,title,message,reference,createdAt,isRead,link FROM @notificationFeed WHERE @unreadOnly=0 OR isRead=0
+          SELECT id,type,title,message,reference,createdAt,isRead,link FROM @notificationFeed WHERE ${filterPredicate}
           ORDER BY createdAt DESC,id DESC OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY;`);
       const sets = result.recordsets as unknown as Record<string, unknown>[][];
       const totalItems = Number(sets[0]?.[0]?.['totalItems'] ?? 0);

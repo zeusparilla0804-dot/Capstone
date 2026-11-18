@@ -25,6 +25,21 @@ const submittedProof: PaymentProof = {
 };
 
 describe('PaymentProofPageComponent', () => {
+  it('keeps the issued invoice visible and accessible before, during and after payment', () => {
+    const issuedBooking = { ...booking, invoiceId: 8, invoiceNumber: 'INV-2026-000008' };
+    for (const stage of [
+      { status: 'approved' as const, amountPaid: 0 },
+      { status: 'confirmed' as const, amountPaid: 42500 },
+      { status: 'confirmed' as const, amountPaid: 85000 },
+    ]) {
+      bookingState.set([{ ...issuedBooking, ...stage }]);
+      fixture.detectChanges();
+      const summary = fixture.nativeElement.querySelector('.booking-summary') as HTMLElement;
+      expect(summary.querySelector('[data-testid="invoice-number"]')?.textContent).toContain('INV-2026-000008');
+      expect(summary.querySelector('a[href="/invoice/8"]')?.textContent).toContain('View Invoice');
+    }
+  });
+
   it('offers an explicit bank choice without waiting for an administrator assignment', () => {
     const api = TestBed.inject(PaymentDestinationService) as any;
     api.options = vi.fn(() => of([

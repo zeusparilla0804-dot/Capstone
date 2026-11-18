@@ -74,6 +74,7 @@ export const EXPECTED_MIGRATIONS = [
   '023_customer_updates_package_images.sql',
   '024_customer_bank_payment_snapshots.sql',
   '025_admin_notification_read.sql',
+  '026_reservation_menu_selection.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -181,6 +182,7 @@ const columns: ColumnShape[] = [
   decimal('RESERVATION', 'package_base_price', true), integer('RESERVATION', 'package_included_guests', true),
   decimal('RESERVATION', 'package_excess_guest_price', true), decimal('RESERVATION', 'package_total', true),
   integer('RESERVATION', 'accepted_quote_id', true),
+  nvarchar('RESERVATION', 'menu_selection_json', -1, true),
 
   integer('PAYMENT', 'payment_id', false, true), integer('PAYMENT', 'reservation_id'),
   integer('PAYMENT', 'admin_id', true), decimal('PAYMENT', 'amount_due'), decimal('PAYMENT', 'amount_paid'),
@@ -338,7 +340,7 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('RESERVATION', 'PK', ['PK_RESERVATION']),
   ...constraints('RESERVATION', 'F', ['FK_RESERVATION_CUSTOMER', 'FK_RESERVATION_EVENT', 'FK_RESERVATION_PACKAGE', 'FK_RESERVATION_ACCEPTED_QUOTE']),
   ...constraints('RESERVATION', 'D', ['DF_RESERVATION_status', 'DF_RESERVATION_created_at', 'DF_RESERVATION_discount']),
-  ...constraints('RESERVATION', 'C', ['CK_RESERVATION_guest_count', 'CK_RESERVATION_status', 'CK_RESERVATION_financials', 'CK_RESERVATION_package_pricing_snapshot']),
+  ...constraints('RESERVATION', 'C', ['CK_RESERVATION_guest_count', 'CK_RESERVATION_status', 'CK_RESERVATION_financials', 'CK_RESERVATION_package_pricing_snapshot', 'CK_RESERVATION_menu_selection_json']),
   ...constraints('PAYMENT', 'PK', ['PK_PAYMENT']), ...constraints('PAYMENT', 'UQ', ['UQ_PAYMENT_reservation']),
   ...constraints('PAYMENT', 'F', ['FK_PAYMENT_RESERVATION', 'FK_PAYMENT_ADMIN']),
   ...constraints('PAYMENT', 'D', ['DF_PAYMENT_amount_paid', 'DF_PAYMENT_status']),

@@ -154,6 +154,31 @@ describe('BookingPageComponent submission validation', () => {
     expect(page.querySelector('#venue-address-note')?.textContent).toContain('complete address');
   });
 
+  it('requires the package menu before continuing and retains the preferences in the submitted draft', async () => {
+    const definition = { fields: [
+      { key: 'pork', label: 'Pork dish' },
+      { key: 'sideKind', label: 'Side dish category', options: ['Pasta', 'Noodles', 'Vegetables'] },
+    ], includedItems: ['Steamed rice'] };
+    vi.spyOn(TestBed.inject(PackageService), 'getPackageById').mockReturnValue({ ...pkg, menu: definition });
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    fixture.detectChanges(); vi.advanceTimersByTime(300); fixture.detectChanges();
+    component.continueToAddOns(); fixture.detectChanges();
+    expect(component.currentStep()).toBe(1);
+    expect(fixture.nativeElement.querySelectorAll('app-booking-menu [aria-invalid=true]').length).toBe(2);
+    const pork = fixture.nativeElement.querySelector('#menu-pork') as HTMLInputElement;
+    pork.value = 'Preferred pork dish'; pork.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    const side = fixture.nativeElement.querySelector('#menu-sideKind') as HTMLSelectElement;
+    side.value = 'Pasta'; side.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
+    component.continueToAddOns(); fixture.detectChanges();
+    expect(component.currentStep()).toBe(2);
+    expect(draftState().menuSelections).toEqual({ pork: 'Preferred pork dish', sideKind: 'Pasta' });
+    await component.confirmBooking();
+    expect(bookingService.submitDraft).toHaveBeenCalledWith(expect.objectContaining({
+      menuSelections: { pork: 'Preferred pork dish', sideKind: 'Pasta' },
+    }), expect.anything(), expect.anything(), expect.anything());
+  });
+
   it('shows one photobooth selector, coffee inclusions, and the itemized add-ons total', () => {
     const { fixture, draft, component } = chairQuantityFixture();
     draft.addOns.set([...draft.addOns(),

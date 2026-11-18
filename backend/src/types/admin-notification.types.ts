@@ -9,10 +9,15 @@ export interface AdminNotification {
   link: string;
 }
 
+export type NotificationReadStatus = 'all' | 'unread' | 'read';
+export type NotificationCategory = 'all' | 'reservations' | 'payments' | 'customers' | 'system';
+
 export interface AdminNotificationQuery {
   page: number;
   pageSize: number;
   unreadOnly: boolean;
+  readStatus?: NotificationReadStatus;
+  category?: NotificationCategory;
 }
 
 export interface AdminNotificationPage {

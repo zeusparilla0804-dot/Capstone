@@ -188,6 +188,9 @@
                   @if (controlInvalid('packageId')) { @if (eventForm.controls.packageId.hasError('packageEvent')) { <small>Choose a package that matches the selected event type.</small> } @else { <small>Please select a package.</small> } }
                 </div>
               </div>
+              @if (selectedFormPackage()?.menu; as menu) {
+                <app-booking-menu [definition]="menu" [values]="draftService.draft().menuSelections ?? {}" [showErrors]="menuSubmitted()" (changed)="updateMenuSelections($event)" />
+              }
               <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons</button></div>
             </form>
           }
@@ -248,6 +251,10 @@
               <section><div class="review-heading"><h3>Package & Add-ons</h3></div><p class="review-package">{{ draftService.selectedPackage()?.name }} @if (draftService.selectedPackage(); as selectedPackage) { <span>{{ packagePricingExplanation(selectedPackage) }}</span> }</p>@if (draftService.selectedAddOns().length) { <ul class="review-addons">@for (addOn of draftService.selectedAddOns(); track addOn.id) { <li><span>{{ addOn.name }}@if (draftService.supportsQuantity(addOn)) { <small class="review-addon-quantity">{{ addOn.quantity }} × {{ addOn.unitPrice | currency:'PHP':'symbol-narrow':'1.0-0' }}</small> }</span><strong>{{ addOn.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></li> }</ul> } @else { <p class="empty-note">No add-ons selected.</p> }<div class="review-addons-total"><span>Add-ons total</span><strong>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></div></section>
               <section class="pricing-review"><h3>Pricing</h3><dl><div><dt>Package</dt><dd>{{ draftService.pricing().packageTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Add-ons</dt><dd>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Subtotal</dt><dd>{{ draftService.pricing().subtotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div class="pricing-review__total"><dt>Total</dt><dd>{{ draftService.pricing().total | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Down Payment (50%)</dt><dd>{{ draftService.pricing().downPayment | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Remaining Balance</dt><dd>{{ draftService.pricing().remainingBalance | currency:'PHP':'symbol-narrow':'1.0-0' }}</dd></div></dl></section>
             </div>
+            @if (draftService.selectedPackage()?.menu; as menu) {
+              <section class="booking-menu-review"><h3>Selected menu</h3><dl>@for (field of menu.fields; track field.key) { <div><dt>{{ field.label }}</dt><dd>{{ draftService.draft().menuSelections?.[field.key] }}</dd></div> }</dl><p>{{ menu.includedItems.join(' · ') }}</p></section>
+            }
+            <section class="booking-policy"><h3>Reservation and cancellation policy</h3><p>You can edit or cancel a pending reservation in My Reservations. Contact LA Chef for changes after approval. A 50% down payment is required to confirm your reservation, and the remaining balance is due on the event date.</p><p>The issued billing agreement states that cancellation after signing results in forfeiture of 50% of the total reservation amount. Review the agreement before signing.</p></section>
             <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="isSubmitting() || !!draftService.catalogSelectionError()" (click)="confirmBooking()">{{ isSubmitting() ? 'Submitting...' : editingBookingId() ? 'Save Booking Changes' : 'Submit Booking for Review' }}</button></div>
             @if (submissionError()) { <p class="submission-error" role="alert">{{ submissionError() }}</p> }
           }

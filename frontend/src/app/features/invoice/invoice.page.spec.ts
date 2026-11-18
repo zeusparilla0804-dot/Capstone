@@ -46,6 +46,30 @@ const invoice: Invoice = {
 };
 
 describe('InvoicePageComponent', () => {
+  it('shows the saved menu snapshot alongside the original invoice identity on a receipt', () => {
+    (fixture.componentInstance as any).invoice.set({ ...invoice, booking: { ...invoice.booking, menuSelection: {
+      items: [{ key: 'pork', label: 'Pork dish', value: 'Saved pork preference' }], includedItems: ['Steamed rice'],
+    } } });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.invoice-menu')?.textContent).toContain('Saved pork preference');
+    expect(fixture.nativeElement.querySelector('[data-testid="invoice-number"]')?.textContent).toContain(invoice.invoiceNumber);
+  });
+  it('keeps the same invoice number visible before payment, after the deposit and after full payment', () => {
+    const component = fixture.componentInstance as any;
+    for (const amountPaid of [0, 50000, 100000]) {
+      component.invoice.set({ ...invoice, totalAmount: 100000, amountPaid,
+        remainingBalance: 100000 - amountPaid, payments: amountPaid ? [{ ...invoice.payments[0], amount: amountPaid }] : [] });
+      fixture.detectChanges();
+      const identity = fixture.nativeElement.querySelector('[data-testid="invoice-number"]');
+      expect(identity?.textContent).toContain(invoice.invoiceNumber);
+      const heading = fixture.nativeElement.querySelector('.invoice-heading') as HTMLElement;
+      expect(heading.textContent?.split(invoice.invoiceNumber)).toHaveLength(2);
+      const issued = [...heading.querySelectorAll('dl > div')]
+        .find(row => row.querySelector('dt')?.textContent?.trim() === 'Invoice issued');
+      expect(issued?.querySelector('dd')?.textContent).toContain('Oct 18, 2026');
+    }
+  });
+
   it('prints the event time in AM/PM format on invoices and receipts', () => {
     (fixture.componentInstance as any).invoice.set(invoice); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.invoice-document').textContent).toContain('6:00 PM');

@@ -35,7 +35,10 @@
 .recent-activity { margin-top: 44px; }
 .recent-activity li a { min-width: 0; }
 .recent-activity li p { overflow-wrap: anywhere; }
-.notification-toolbar { display: flex; flex-wrap: wrap; gap: 8px; padding-block: 14px; }
+.notification-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding-block: 14px; }
+.notification-read-filters { display: flex; gap: 8px; }
+.notification-type-filter { min-height: 44px; max-width: 100%; padding: 8px 32px 8px 12px; border: 1px solid var(--portal-divider, var(--color-border)); border-radius: 6px; background: var(--color-surface, #fff); color: inherit; font: inherit; font-size: 13px; }
+.notification-type-filter:focus-visible { outline: 2px solid var(--portal-gold, #a67c2e); outline-offset: 3px; }
 .notification-mark-all { margin-left: auto; }
 .notification-toolbar .btn, .notification-pagination .btn { min-height: 44px; }
 .notification-status, .notification-reference, .notification-date-unavailable { color: var(--color-text-muted); font-size: 13px; }

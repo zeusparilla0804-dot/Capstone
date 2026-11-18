@@ -20,6 +20,7 @@ const EMPTY_DRAFT: BookingDraft = {
   addOnQuantities: {},
   paymentMethod: null,
   specialRequest: '',
+  menuSelections: {},
 };
 
 @Injectable({ providedIn: 'root' })
@@ -81,7 +82,8 @@ export class BookingDraftService {
   }
 
   selectPackage(packageId: string | null): void {
-    this.update({ packageId: packageId || null });
+    const selected = packageId || null;
+    this.update({ packageId: selected, ...(selected !== this.draftState().packageId ? { menuSelections: {} } : {}) });
   }
 
   toggleAddOn(addOnId: string): void {

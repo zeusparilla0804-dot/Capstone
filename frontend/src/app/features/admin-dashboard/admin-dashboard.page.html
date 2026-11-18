@@ -40,10 +40,16 @@
     </div>
   }
   <section class="attention-list recent-activity" aria-labelledby="activity-title" [attr.aria-busy]="notifications.loading()">
-    <header class="section-header"><div><h2 id="activity-title">Notifications</h2></div><span>{{ notifications.totalItems() }} {{ notifications.unreadOnly() ? 'unread' : 'total' }} updates &middot; All dates</span></header>
-    <div class="notification-toolbar" role="group" aria-label="Filter notifications">
-      <button class="btn btn-sm" type="button" data-notification-filter="all" [class.btn-secondary]="!notifications.unreadOnly()" [class.btn-tertiary]="notifications.unreadOnly()" [attr.aria-pressed]="!notifications.unreadOnly()" (click)="notifications.setUnreadOnly(false)">All</button>
-      <button class="btn btn-sm" type="button" data-notification-filter="unread" [class.btn-secondary]="notifications.unreadOnly()" [class.btn-tertiary]="!notifications.unreadOnly()" [attr.aria-pressed]="notifications.unreadOnly()" (click)="notifications.setUnreadOnly(true)">Unread</button>
+    <header class="section-header"><div><h2 id="activity-title">Notifications</h2></div><span>{{ notifications.totalItems() }} {{ notifications.readStatus() === 'all' ? 'total' : notifications.readStatus() }} updates &middot; All dates</span></header>
+    <div class="notification-toolbar">
+      <div class="notification-read-filters" role="group" aria-label="Filter notifications by read status">
+        @for (filter of notifications.readFilters; track filter.value) {
+          <button class="btn btn-sm" type="button" [attr.data-notification-filter]="filter.value" [class.btn-secondary]="notifications.readStatus() === filter.value" [class.btn-tertiary]="notifications.readStatus() !== filter.value" [attr.aria-pressed]="notifications.readStatus() === filter.value" (click)="notifications.setReadStatus(filter.value)">{{ filter.label }}</button>
+        }
+      </div>
+      <select class="notification-type-filter" aria-label="Notification type" [value]="notifications.category()" (change)="notifications.setCategory($any($event.target).value); $any($event.target).value = notifications.category()">
+        @for (category of notifications.categories; track category.value) { <option [value]="category.value">{{ category.label }}</option> }
+      </select>
       @if (notifications.unreadCount() > 0) {
         <button class="btn btn-secondary btn-sm notification-mark-all" type="button" [disabled]="notifications.loading() || notifications.markingAll() || notifications.readingIds().length > 0" (click)="markAllNotificationsRead()">{{ notifications.markingAll() ? 'Marking as read...' : 'Mark all as read' }}</button>
       }
@@ -59,7 +65,7 @@
           @if (item.createdAt) { <time [attr.datetime]="item.createdAt">{{ item.createdAt | date:'MMM d, y':'+0800' }}<span>{{ item.createdAt | date:'h:mm a':'+0800' }}</span></time> } @else { <span class="notification-date-unavailable">Date unavailable</span> }
           <span class="attention-arrow" aria-hidden="true">&rarr;</span>
         </a></li>
-      } @empty { @if (!notifications.loading() && !notifications.error()) { <li class="empty-row">{{ notifications.unreadOnly() ? 'No unread notifications.' : 'No notifications yet. Business updates will appear here.' }}</li> } }
+      } @empty { @if (!notifications.loading() && !notifications.error()) { <li class="empty-row">{{ notifications.readStatus() === 'unread' ? 'No unread notifications match these filters.' : notifications.readStatus() === 'read' ? 'No read notifications match these filters.' : notifications.category() !== 'all' ? 'No notifications match these filters.' : 'No notifications yet. Business updates will appear here.' }}</li> } }
     </ol>
     <nav class="notification-pagination" aria-label="Notification pages">
       <span aria-live="polite">Page {{ notifications.page() }} of {{ notifications.totalPages() || 1 }} &middot; {{ notifications.totalItems() }} updates</span>

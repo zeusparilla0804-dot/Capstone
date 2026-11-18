@@ -14,7 +14,7 @@
 .packages-intro__copy { display: grid; gap: 16px; max-width: 52ch; color: var(--color-text-muted); }
 .packages-intro__copy p:last-child { color: var(--color-text); }
 .packages-content { padding-block: 54px 104px; }
-.filter-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 14px; }
+.filter-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
 .filter-heading p { font-family: var(--font-serif); }
 .filter-heading span { color: var(--color-muted); font-size: .7rem; font-weight: 750; text-transform: uppercase; }
 .category-filters { display: flex; flex-wrap: nowrap; gap: 28px; overflow-x: auto; border-bottom: 1px solid var(--color-border); scrollbar-width: none; }
@@ -23,8 +23,8 @@
 .category-filters button::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; transform: scaleX(0); background: var(--color-primary); content: ''; transform-origin: center; transition: transform 180ms ease; }
 .category-filters button.is-active { color: var(--color-primary-dark); }
 .category-filters button.is-active::after { transform: scaleX(1); }
-.packages-count { margin-top: 34px; color: var(--color-text-muted); }
-.package-experiences { margin-top: 4px; }
+.packages-count { margin-top: 40px; color: var(--color-text-muted); }
+.package-experiences { margin-top: 16px; }
 app-package-experience { display: block; scroll-margin-top: 90px; outline: none; }
 app-package-experience:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent); }
 .packages-empty { border-block: 1px solid var(--color-border); margin-top: 20px; color: var(--color-text-muted); padding: 54px 0; text-align: center; }
@@ -64,10 +64,11 @@ app-package-experience:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, 
   .packages-intro h1 { font-size: 2.85rem; }
   .packages-intro__copy { gap: 12px; }
   .packages-content { padding-block: 40px 66px; }
-  .filter-heading { margin-bottom: 10px; }
+  .filter-heading { margin-bottom: 16px; }
   .filter-heading span { display: none; }
   .category-filters { gap: 24px; margin-inline: -20px; padding-inline: 20px; }
-  .packages-count { margin-top: 26px; }
+  .packages-count { margin-top: 32px; }
+  .package-experiences { margin-top: 12px; }
   .custom-quote, .custom-event__inner, .planning-cta__inner { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .custom-quote { margin-top: 34px; padding-block: 44px; }
   .custom-quote h3 { font-size: 2.2rem; }

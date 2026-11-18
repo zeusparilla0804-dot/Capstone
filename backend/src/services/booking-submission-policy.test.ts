@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertCustomerBookingDate } from './booking-submission-policy.js';
+import { assertCustomerBookingDate, bookingSubmissionHash } from './booking-submission-policy.js';
 import { assertCashPaymentWindow, cashDepositDeadline } from './cash-payment-policy.js';
+
+test('booking retries retain menu identity independently of object key order', () => {
+  const draft = { eventType: 'wedding', eventDate: '2027-01-10', eventTime: '14:00', venue: 'Venue',
+    guestCount: 50, packageId: 246, addOnIds: [] };
+  const original = bookingSubmissionHash({ ...draft, menuSelections: { pork: 'Pork dish', sideKind: 'Pasta' } });
+  assert.equal(bookingSubmissionHash({ ...draft, menuSelections: { sideKind: 'Pasta', pork: 'Pork dish' } }), original);
+  assert.notEqual(bookingSubmissionHash({ ...draft, menuSelections: { pork: 'Changed dish', sideKind: 'Pasta' } }), original);
+  assert.notEqual(bookingSubmissionHash(draft), original);
+});
 
 test('new bookings reserve one deposit day plus three or five preparation days for every method', () => {
   const now = new Date('2026-11-10T12:00:00Z'); // 8 PM Manila: office is closed.

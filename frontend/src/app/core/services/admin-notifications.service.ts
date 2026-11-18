@@ -4,6 +4,7 @@ import { catchError, finalize, fromEvent, interval, map, merge, Observable, of, 
 import { environment } from '../../../environments/environment';
 import type { ApiResponse } from '../models';
 import type { AdminNotificationPage } from '../models/admin-notification.model';
+import { notificationCategories, notificationReadFilters, type NotificationCategory, type NotificationReadStatus } from '../models/notification-filter.model';
 import { AdminAuthService } from './admin-auth.service';
 
 const emptyPage: AdminNotificationPage = { items: [], page: 1, pageSize: 20, totalItems: 0, totalPages: 0, unreadCount: 0 };
@@ -19,9 +20,11 @@ export class AdminNotificationsService {
   private readonly pending = signal(false);
   private readonly refreshFailure = signal('');
   private readonly readFailure = signal('');
-  private readonly unreadFilter = signal(false);
+  private readonly appliedReadStatus = signal<NotificationReadStatus>('all');
+  private readonly appliedCategory = signal<NotificationCategory>('all');
   private requestedPage = 1;
-  private requestedUnreadOnly = false;
+  private requestedReadStatus: NotificationReadStatus = 'all';
+  private requestedCategory: NotificationCategory = 'all';
   private readonly reading = signal<readonly string[]>([]);
   private readonly bulkRead = signal(false);
   private readonly scopeChanges = new Subject<void>();
@@ -38,7 +41,11 @@ export class AdminNotificationsService {
   readonly pageSize = computed(() => this.pageState().pageSize);
   readonly totalItems = computed(() => this.pageState().totalItems);
   readonly totalPages = computed(() => this.pageState().totalPages);
-  readonly unreadOnly = computed(() => this.current() && this.unreadFilter());
+  readonly readFilters = notificationReadFilters;
+  readonly categories = notificationCategories;
+  readonly readStatus = computed(() => this.current() ? this.appliedReadStatus() : 'all');
+  readonly category = computed(() => this.current() ? this.appliedCategory() : 'all');
+  readonly unreadOnly = computed(() => this.readStatus() === 'unread');
   readonly loading = computed(() => this.current() && this.pending());
   readonly error = computed(() => this.current() ? this.refreshFailure() : '');
   readonly readError = computed(() => this.current() ? this.readFailure() : '');
@@ -51,8 +58,8 @@ export class AdminNotificationsService {
       untracked(() => {
         this.scope.set({ user, version: this.auth.sessionVersion });
         this.state.set({ ...emptyPage }); this.pending.set(false); this.refreshFailure.set('');
-        this.readFailure.set(''); this.unreadFilter.set(false); this.reading.set([]); this.bulkRead.set(false);
-        this.requestedPage = 1; this.requestedUnreadOnly = false;
+        this.readFailure.set(''); this.appliedReadStatus.set('all'); this.appliedCategory.set('all'); this.reading.set([]); this.bulkRead.set(false);
+        this.requestedPage = 1; this.requestedReadStatus = 'all'; this.requestedCategory = 'all';
         if (!user || !this.http) return;
         this.refresh();
       });
@@ -67,17 +74,17 @@ export class AdminNotificationsService {
   refresh(): void {
     if (!this.prepareScope() || !this.http || this.pending() || this.bulkRead()) return;
     const user = this.owner; const version = this.version; const requestVersion = ++this.requestVersion;
-    const unreadOnly = this.requestedUnreadOnly;
+    const readStatus = this.requestedReadStatus; const category = this.requestedCategory;
     this.pending.set(true);
     this.fetch = this.http.get<ApiResponse<AdminNotificationPage>>(`${environment.apiBaseUrl}/admin/notifications`, {
       withCredentials: true, headers: { 'X-La-Chef-Background': '1' },
-      params: { page: this.requestedPage, pageSize: 20, unreadOnly },
+      params: { page: this.requestedPage, pageSize: 20, unreadOnly: readStatus === 'unread', readStatus, category },
     }).pipe(finalize(() => {
       if (this.isCurrent(user, version) && requestVersion === this.requestVersion) this.pending.set(false);
     })).subscribe({
       next: response => {
         if (!this.isCurrent(user, version) || requestVersion !== this.requestVersion) return;
-        this.state.set(response.data); this.unreadFilter.set(unreadOnly); this.refreshFailure.set('');
+        this.state.set(response.data); this.appliedReadStatus.set(readStatus); this.appliedCategory.set(category); this.refreshFailure.set('');
         this.requestedPage = response.data.page;
         // An acknowledged item may remove the final record from an Unread page.
         if (response.data.page > Math.max(1, response.data.totalPages)) this.setPage(Math.max(1, response.data.totalPages));
@@ -91,12 +98,21 @@ export class AdminNotificationsService {
 
   setPage(page: number): void {
     if (!this.prepareScope() || !Number.isInteger(page) || page < 1 || page > Math.max(1, this.totalPages())) return;
-    this.cancelFetch(); this.requestedPage = page; this.requestedUnreadOnly = this.unreadFilter(); this.refresh();
+    this.cancelFetch(); this.requestedPage = page; this.requestedReadStatus = this.appliedReadStatus(); this.requestedCategory = this.appliedCategory(); this.refresh();
   }
 
   setUnreadOnly(unreadOnly: boolean): void {
-    if (!this.prepareScope() || (this.requestedUnreadOnly === unreadOnly && this.pending())) return;
-    this.cancelFetch(); this.requestedUnreadOnly = unreadOnly; this.requestedPage = 1; this.refresh();
+    this.setReadStatus(unreadOnly ? 'unread' : 'all');
+  }
+
+  setReadStatus(readStatus: NotificationReadStatus): void {
+    if (!this.prepareScope() || (this.requestedReadStatus === readStatus && this.pending())) return;
+    this.cancelFetch(); this.requestedReadStatus = readStatus; this.requestedPage = 1; this.refresh();
+  }
+
+  setCategory(category: NotificationCategory): void {
+    if (!this.prepareScope() || (this.requestedCategory === category && this.pending())) return;
+    this.cancelFetch(); this.requestedCategory = category; this.requestedPage = 1; this.refresh();
   }
 
   markRead(ids: readonly string[]): Observable<boolean> {

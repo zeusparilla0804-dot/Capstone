@@ -18,6 +18,9 @@ export function bookingSubmissionHash(dto: CreateBookingDto): string {
     eventType: dto.eventType, eventDate: dto.eventDate, eventTime: dto.eventTime,
     venue: dto.venue, guestCount: dto.guestCount, packageId: dto.packageId, addOns,
     paymentMethod: dto.paymentMethod ?? null, specialRequest: dto.specialRequest ?? null,
+    ...(dto.menuSelections === undefined ? {} : {
+      menuSelections: Object.fromEntries(Object.entries(dto.menuSelections).sort(([left], [right]) => left.localeCompare(right))),
+    }),
   };
   return createHash('sha256').update('booking-create:v1:').update(JSON.stringify(canonical)).digest('hex');
 }

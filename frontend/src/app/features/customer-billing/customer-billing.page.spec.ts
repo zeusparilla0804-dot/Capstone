@@ -16,6 +16,35 @@ const booking: Booking = {
 };
 
 describe('CustomerBillingPageComponent', () => {
+  it('keeps the issued invoice identity and link through approval, deposit and full payment', async () => {
+    const issuedBooking = { ...booking, invoiceNumber: 'INV-2026-000009' };
+    const bookingService = {
+      bookings: signal<readonly Booking[]>([issuedBooking]), loading: signal(false), error: signal(''),
+      loadMine: () => undefined,
+    };
+    TestBed.configureTestingModule({
+      imports: [CustomerBillingPageComponent],
+      providers: [provideRouter([]), { provide: BookingService, useValue: bookingService }, {
+        provide: AuthService,
+        useValue: { user: signal({ id: '42', fullName: 'Ana Reyes' }), logout: async () => undefined },
+      }],
+    });
+    const fixture = TestBed.createComponent(CustomerBillingPageComponent);
+    await fixture.whenStable();
+
+    for (const stage of [
+      { status: 'approved' as const, amountPaid: 0 },
+      { status: 'confirmed' as const, amountPaid: 5000 },
+      { status: 'confirmed' as const, amountPaid: 10000 },
+    ]) {
+      bookingService.bookings.set([{ ...issuedBooking, ...stage }]);
+      fixture.detectChanges();
+      const record = fixture.nativeElement.querySelector('.billing-record') as HTMLElement;
+      expect(record.querySelector('[data-testid="invoice-number"]')?.textContent).toContain('INV-2026-000009');
+      expect(record.querySelector('a[href="/invoice/9"]')?.textContent).toContain('View Invoice');
+    }
+  });
+
   it('uses the approved warm ivory customer portal background', async () => {
     const bookingService = {
       bookings: signal<readonly Booking[]>([]), loading: signal(false), error: signal(''),

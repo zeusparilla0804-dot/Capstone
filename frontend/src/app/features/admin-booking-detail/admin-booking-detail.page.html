@@ -66,6 +66,12 @@
           @for (addOn of item.addOns; track addOn.name) { <div><dt>Add-on</dt><dd>{{ addOn.name }}@if (addOn.quantity && addOn.quantity > 1) { &middot; {{ addOn.quantity }} × {{ addOn.unitPrice | currency:'PHP':'symbol-narrow':'1.2-2' }} } &middot; {{ addOn.price | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div> }
         </dl>
       </section>
+      @if (item.menuSelection; as menu) {
+        <section class="detail-section" aria-labelledby="menu-details-title">
+          <div class="section-heading"><h2 id="menu-details-title">Selected menu</h2></div>
+          <dl class="fact-list">@for (choice of menu.items; track choice.key) { <div><dt>{{ choice.label }}</dt><dd>{{ choice.value }}</dd></div> }<div><dt>Also included</dt><dd>{{ menu.includedItems.join(' · ') }}</dd></div></dl>
+        </section>
+      }
       <section class="detail-section" aria-labelledby="customer-details-title">
         <div class="section-heading"><h2 id="customer-details-title">Customer information</h2></div>
         <dl class="fact-list"><div><dt>Name</dt><dd>{{ item.customerName }}</dd></div><div><dt>Email</dt><dd><a [href]="'mailto:' + item.email">{{ item.email || 'Not provided' }}</a></dd></div><div><dt>Phone</dt><dd><a [href]="'tel:' + item.phone">{{ item.phone || 'Not provided' }}</a></dd></div></dl>

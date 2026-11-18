@@ -1,3 +1,5 @@
+import type { PackageMenuDefinition } from './menu.model';
+
 export type PackageCategory =
   'all' | 'standard' | 'wedding' | 'birthday' | 'corporate' | 'debut' | 'anniversary' | 'custom';
 
@@ -21,6 +23,7 @@ export interface CateringPackage {
   readonly galleryImageUrls?: readonly string[];
   readonly hasCustomImages?: boolean;
   readonly features: readonly PackageFeature[];
+  readonly menu?: PackageMenuDefinition;
   readonly minGuests: number | null;
   readonly maxGuests: number | null;
   readonly isPopular?: boolean;

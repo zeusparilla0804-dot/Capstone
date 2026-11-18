@@ -2,6 +2,7 @@ import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
 import type { AddOnRecord, PackageRecord } from '../types/domain.types.js';
 import { addOnEventTypes } from '../services/add-on-event-policy.js';
+import { packageMenu } from '../services/package-menu.service.js';
 import { packageImages } from './package-images.repository.js';
 
 type PackageRow = Record<string, unknown>;
@@ -17,6 +18,7 @@ export function mapPackageRows(rows: PackageRow[]): PackageRecord[] {
     const item: PackageRecord = packages.get(id) ?? {
       id,
       name: String(row['package_name']),
+      ...(packageMenu(String(row['package_name'])) ? { menu: packageMenu(String(row['package_name'])) } : {}),
       category: String(row['event_type']).toLowerCase(),
       description: String(row['description'] ?? ''),
       pricingType: String(row['pricing_type']) as PackageRecord['pricingType'],

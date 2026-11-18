@@ -2,12 +2,17 @@
 .notifications { position: relative; }
 .notifications__trigger { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid transparent; border-radius: 50%; color: var(--color-primary, #3e4531); background: transparent; cursor: pointer; }
 .notifications__trigger:hover, .notifications__trigger[aria-expanded=true] { background: #eee9df; }
-button:focus-visible, a:focus-visible { outline: 2px solid #927024; outline-offset: 3px; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 2px solid #927024; outline-offset: 3px; }
 .notifications__count { position: absolute; right: 0; top: 0; min-width: 18px; height: 18px; padding: 0 3px; display: grid; place-items: center; border-radius: 12px; background: #806020; color: #fff; font-size: 11px; font-weight: 700; }
 .notifications__panel { position: absolute; right: 0; top: calc(100% + 16px); z-index: 110; width: min(380px, calc(100vw - 32px)); background: #fff; border: 1px solid #ded8cb; border-radius: 12px; overflow: hidden; color: #272820; }
 .notifications__heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #e5e0d7; }
 .notifications__heading h2 { margin: 0; font: 600 17px var(--font-sans); }
 .notifications button:not(.notifications__trigger) { padding: 2px; border: 0; background: transparent; color: #66501f; font: 600 12px var(--font-sans); cursor: pointer; }
+.notifications__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid #e5e0d7; }
+.notifications__read-filters { display: flex; gap: 4px; }
+.notifications .notifications__read-filters button { min-height: 36px; padding: 8px 10px; border-radius: 6px; }
+.notifications__read-filters button[aria-pressed=true] { background: #eee9df; color: #3e4531; }
+.notifications__filters select { flex: 1; min-width: 124px; min-height: 36px; max-width: 100%; padding: 6px 8px; border: 1px solid #ded8cb; border-radius: 6px; background: #fff; color: #3e4531; font: 500 12px var(--font-sans); }
 .notifications ul { max-height: 400px; overflow-y: auto; padding: 0; margin: 0; list-style: none; }
 .notifications li + li { border-top: 1px solid #eeeae3; }
 .notifications li a { display: grid; gap: 5px; padding: 16px 20px; color: inherit; text-decoration: none; line-height: 1.5; }

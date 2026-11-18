@@ -12,6 +12,8 @@ import { PackageService } from '../../core/services/package.service';
 import { PublicHeaderComponent } from '../../shared/components/public-header/public-header';
 import { BookingSuccessComponent } from './components/booking-success/booking-success';
 import { BookingStepperComponent } from './components/booking-stepper/booking-stepper';
+import { BookingMenuComponent } from './components/booking-menu/booking-menu';
+import { menuSelectionsValid } from '../../core/models/menu.model';
 import { bookingSubmissionMessage, isBookingCapacityConflict } from './booking-submission-error';
 import { cashDepositDeadline, cashPreparationDays, minimumBookingEventDate } from '../../core/utils/cash-payment-policy';
 import { bookingTotal } from '../../core/utils/customer-payment-status';
@@ -34,7 +36,7 @@ type AvailabilityState =
 
 @Component({
   selector: 'app-booking-page',
-  imports: [EventTimePipe, BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
+  imports: [BookingMenuComponent, EventTimePipe, BookingStepperComponent, BookingSuccessComponent, SuccessDialogComponent, PaymentChoiceDialogComponent, CurrencyPipe, DatePipe, PublicHeaderComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './booking.page.html',
   changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./booking.page.scss', './booking-addons.scss'],
@@ -74,6 +76,7 @@ export class BookingPageComponent {
   protected readonly editingBookingId = signal<string | null>(null);
   protected readonly editingLoading = signal(false);
   protected readonly editingError = signal('');
+  protected readonly menuSubmitted = signal(false);
   protected readonly isSubmitting = signal(false);
   protected readonly submissionError = signal('');
   protected readonly availabilityConflictMessage = signal('');
@@ -228,6 +231,7 @@ export class BookingPageComponent {
     });
     this.eventForm.controls.packageId.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(packageId => {
       this.draftService.selectPackage(packageId || null);
+      this.menuSubmitted.set(false);
       if (!packageId) this.eventForm.controls.eventType.enable({ emitEvent: false });
       if (!this.editingLoading()) this.applyPackageDefaults(packageId, true);
     });
@@ -250,6 +254,7 @@ export class BookingPageComponent {
   }
 
   protected continueToAddOns(): void {
+    this.menuSubmitted.set(true);
     this.revalidateDate();
     this.eventForm.controls.guestCount.updateValueAndValidity({ emitEvent: false });
     const value = this.eventForm.getRawValue();
@@ -273,7 +278,7 @@ export class BookingPageComponent {
     if (selectedPackage && !this.packageMatchesEvent(selectedPackage, value.eventType)) {
       packageControl.setErrors({ ...packageControl.errors, packageEvent: true });
     }
-    if (!selectedPackage || this.eventForm.invalid || !this.canContinueToAddOns()) {
+    if (!selectedPackage || this.eventForm.invalid || !this.canContinueToAddOns() || !this.menuValid()) {
       this.furthestStep.set(1);
       this.eventForm.markAllAsTouched();
       return;
@@ -502,6 +507,12 @@ export class BookingPageComponent {
   }
 
   protected async confirmBooking(): Promise<void> {
+    if (!this.menuValid()) {
+      this.menuSubmitted.set(true);
+      this.currentStep.set(1);
+      this.furthestStep.set(1);
+      return;
+    }
     const catalogError = this.draftService.catalogSelectionError();
     if (catalogError) {
       this.submissionError.set(catalogError);
@@ -553,7 +564,16 @@ export class BookingPageComponent {
 
   protected controlInvalid(controlName: keyof BookingPageComponent['eventForm']['controls']): boolean {
     const control = this.eventForm.controls[controlName];
-    return control.invalid && control.touched;
+    return control.invalid && (control.dirty || control.touched);
+  }
+
+  protected updateMenuSelections(values: Readonly<Record<string, string>>): void {
+    this.draftService.update({ menuSelections: values });
+    this.furthestStep.set(1);
+  }
+
+  protected menuValid(): boolean {
+    return menuSelectionsValid(this.selectedFormPackage()?.menu, this.draftService.draft().menuSelections);
   }
 
   protected selectedFormPackage() {
@@ -696,6 +716,7 @@ export class BookingPageComponent {
       addOnQuantities: Object.fromEntries(booking.addOns.map(addOn => [addOn.id, addOn.quantity ?? 1])),
       paymentMethod: booking.paymentMethod ?? this.draftService.draft().paymentMethod,
       specialRequest: booking.specialRequest ?? '',
+      menuSelections: Object.fromEntries(booking.menuSelection?.items.map(item => [item.key, item.value]) ?? []),
     };
     this.draftService.update(draft);
     this.eventForm.setValue({

@@ -12,6 +12,7 @@ import { customerNavItems } from '../../shared/navigation/customer-navigation';
 interface BillingRecord {
   readonly id: string;
   readonly invoiceId?: number;
+  readonly invoiceNumber?: string;
   readonly reference: string;
   readonly eventName: string;
   readonly eventDate: string;
@@ -55,6 +56,7 @@ export class CustomerBillingPageComponent implements OnDestroy {
       return {
         id: booking.id,
         invoiceId: booking.invoiceId,
+        invoiceNumber: booking.invoiceNumber,
         reference: booking.reference,
         eventName: booking.eventName,
         eventDate: booking.eventDate,

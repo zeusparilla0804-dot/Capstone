@@ -1,5 +1,5 @@
 import { adminNotificationRepository } from '../repositories/admin-notifications.repository.js';
-import type { AdminNotificationRepository } from '../types/admin-notification.types.js';
+import type { AdminNotificationRepository, NotificationCategory, NotificationReadStatus } from '../types/admin-notification.types.js';
 import { AppError } from '../utils/app-error.js';
 
 function positiveInteger(value: unknown, fallback: number, maximum: number): number {
@@ -17,7 +17,11 @@ export function createAdminNotificationService(repository: AdminNotificationRepo
       const page = positiveInteger(raw['page'], 1, Math.floor(2_147_483_647 / pageSize));
       const unread = raw['unreadOnly'];
       if (unread !== undefined && unread !== 'true' && unread !== 'false') throw new AppError(400, 'Invalid unread notification filter.');
-      return repository.list(adminId, { page, pageSize, unreadOnly: unread === 'true' });
+      const readStatus = raw['readStatus'] === undefined ? (unread === 'true' ? 'unread' : 'all') : raw['readStatus'];
+      const category = raw['category'] === undefined ? 'all' : raw['category'];
+      if (typeof readStatus !== 'string' || !['all', 'unread', 'read'].includes(readStatus)) throw new AppError(400, 'Invalid notification read filter.');
+      if (typeof category !== 'string' || !['all', 'reservations', 'payments', 'customers', 'system'].includes(category)) throw new AppError(400, 'Invalid notification category.');
+      return repository.list(adminId, { page, pageSize, unreadOnly: readStatus === 'unread', readStatus: readStatus as NotificationReadStatus, category: category as NotificationCategory });
     },
     async markRead(adminId: number, raw: unknown) {
       const ids = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>)['ids'] : undefined;

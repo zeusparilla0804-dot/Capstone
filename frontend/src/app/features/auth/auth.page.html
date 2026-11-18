@@ -38,21 +38,27 @@
           <div class="form-grid">
             <div class="form-field">
               <label for="firstName">First name</label
-              ><input id="firstName" formControlName="firstName" placeholder="First name" />
+              ><input id="firstName" formControlName="firstName" placeholder="First name"
+                [attr.aria-invalid]="(form.controls.firstName.dirty || form.controls.firstName.touched) && form.controls.firstName.invalid" />
               <small
                 class="field-feedback"
-                [class.field-feedback--error]="form.controls.firstName.touched && form.controls.firstName.invalid"
+                [class.field-feedback--error]="(form.controls.firstName.dirty || form.controls.firstName.touched) && form.controls.firstName.invalid"
                 aria-live="polite"
-              >@if (form.controls.firstName.touched && form.controls.firstName.invalid) {First name is required.}</small>
+              >@if ((form.controls.firstName.dirty || form.controls.firstName.touched) && form.controls.firstName.invalid) {
+                {{ form.controls.firstName.hasError('maxlength') ? 'First name must contain at most 100 characters.' : 'First name is required.' }}
+              }</small>
             </div>
             <div class="form-field">
               <label for="lastName">Last name</label
-              ><input id="lastName" formControlName="lastName" placeholder="Last name" />
+              ><input id="lastName" formControlName="lastName" placeholder="Last name"
+                [attr.aria-invalid]="(form.controls.lastName.dirty || form.controls.lastName.touched) && form.controls.lastName.invalid" />
               <small
                 class="field-feedback"
-                [class.field-feedback--error]="form.controls.lastName.touched && form.controls.lastName.invalid"
+                [class.field-feedback--error]="(form.controls.lastName.dirty || form.controls.lastName.touched) && form.controls.lastName.invalid"
                 aria-live="polite"
-              >@if (form.controls.lastName.touched && form.controls.lastName.invalid) {Last name is required.}</small>
+              >@if ((form.controls.lastName.dirty || form.controls.lastName.touched) && form.controls.lastName.invalid) {
+                {{ form.controls.lastName.hasError('maxlength') ? 'Last name must contain at most 100 characters.' : 'Last name is required.' }}
+              }</small>
             </div>
           </div>
           <div class="form-field">
@@ -94,13 +100,14 @@
               formControlName="email"
               placeholder="you@example.com"
               autocomplete="username"
+              [attr.aria-invalid]="(form.controls.email.dirty || form.controls.email.touched) && form.controls.email.invalid"
             />
           </div>
           <small
             class="field-feedback"
-            [class.field-feedback--error]="form.controls.email.touched && form.controls.email.invalid"
+            [class.field-feedback--error]="(form.controls.email.dirty || form.controls.email.touched) && form.controls.email.invalid"
             aria-live="polite"
-          >@if (form.controls.email.touched && form.controls.email.invalid) {Enter a valid email address.}</small>
+          >@if ((form.controls.email.dirty || form.controls.email.touched) && form.controls.email.invalid) {Enter a valid email address.}</small>
         </div>
         <div class="form-field">
           <label for="password">Password</label>
@@ -116,6 +123,7 @@
               formControlName="password"
               placeholder="Enter your password"
               [attr.autocomplete]="registerMode() ? 'new-password' : 'current-password'"
+              [attr.aria-invalid]="(form.controls.password.dirty || form.controls.password.touched) && form.controls.password.invalid"
             />
             <button
               type="button"
@@ -137,9 +145,11 @@
           @if (registerMode()) {
             <small
               class="field-feedback"
-              [class.field-feedback--error]="form.controls.password.touched && form.controls.password.invalid"
+              [class.field-feedback--error]="(form.controls.password.dirty || form.controls.password.touched) && form.controls.password.invalid"
               aria-live="polite"
-            >@if (form.controls.password.touched && form.controls.password.invalid) {Password must contain at least 8 characters.} @else {Use at least 8 characters.}</small>
+            >@if ((form.controls.password.dirty || form.controls.password.touched) && form.controls.password.invalid) {
+              {{ form.controls.password.hasError('maxlength') ? 'Password must contain at most 128 characters.' : 'Password must contain at least 8 characters.' }}
+            } @else {Use at least 8 characters.}</small>
           }
           @if (!registerMode()) {
             <a class="password-assist" routerLink="/forgot-password">Forgot password?</a>
@@ -161,7 +171,7 @@
                 placeholder="Re-enter your password"
                 autocomplete="new-password"
                 aria-describedby="confirm-password-feedback"
-                [attr.aria-invalid]="form.controls.confirmPassword.touched && (form.controls.confirmPassword.invalid || form.hasError('passwordMismatch'))"
+                [attr.aria-invalid]="(form.controls.confirmPassword.dirty || form.controls.confirmPassword.touched) && (form.controls.confirmPassword.invalid || form.hasError('passwordMismatch'))"
               />
               <button
                 type="button"
@@ -181,10 +191,10 @@
             <small
               id="confirm-password-feedback"
               class="field-feedback"
-              [class.field-feedback--error]="form.controls.confirmPassword.touched && (form.controls.confirmPassword.invalid || form.hasError('passwordMismatch'))"
+              [class.field-feedback--error]="(form.controls.confirmPassword.dirty || form.controls.confirmPassword.touched) && (form.controls.confirmPassword.invalid || form.hasError('passwordMismatch'))"
               aria-live="polite"
             >
-              @if (form.controls.confirmPassword.touched) {
+              @if (form.controls.confirmPassword.dirty || form.controls.confirmPassword.touched) {
                 @if (form.controls.confirmPassword.hasError('required')) {
                   Please re-enter your password.
                 } @else if (form.controls.confirmPassword.hasError('maxlength')) {

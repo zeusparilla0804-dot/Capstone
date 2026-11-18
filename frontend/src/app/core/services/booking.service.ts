@@ -138,6 +138,9 @@ export class BookingService {
       ...payload, eventType: payload.eventType?.trim(), eventDate: payload.eventDate?.trim(),
       eventTime: payload.eventTime?.trim(), venue: payload.venue?.trim(),
       specialRequest: payload.specialRequest?.trim() || null,
+      ...(payload.menuSelections === undefined ? {} : {
+        menuSelections: Object.fromEntries(Object.entries(payload.menuSelections).sort(([left], [right]) => left.localeCompare(right))),
+      }),
       addOnIds: [...payload.addOnIds].sort((a, b) => a - b),
       addOnQuantities: Object.fromEntries([...payload.addOnIds].sort((a, b) => a - b)
         .map(id => [String(id), payload.addOnQuantities[String(id)] ?? 1])),
@@ -189,6 +192,9 @@ export class BookingService {
       addOnQuantities: Object.fromEntries(addOns.map(item => [item.id, item.quantity ?? 1])),
       ...(draft.paymentMethod ? { paymentMethod: draft.paymentMethod } : {}),
       specialRequest: draft.specialRequest,
+      ...(draft.menuSelections === undefined || !pkg.menu ? {} : {
+        menuSelections: Object.fromEntries(Object.entries(draft.menuSelections).map(([key, value]) => [key, value.trim()])),
+      }),
     };
   }
 

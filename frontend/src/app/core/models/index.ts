@@ -1,4 +1,5 @@
 export * from './booking.model';
+export * from './menu.model';
 export * from './dashboard.model';
 export * from './invoice.model';
 export * from './package.model';

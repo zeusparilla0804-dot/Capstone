@@ -15,11 +15,18 @@ test('admin notification service validates pagination and deduplicates explicit 
     async markRead(...args: unknown[]) { calls.push(args); }, async markAllRead(...args: unknown[]) { calls.push(args); } };
   const service = createAdminNotificationService(repository);
   await service.list(7, {});
-  assert.deepEqual(calls.pop(), [7, { page: 1, pageSize: 20, unreadOnly: false }]);
+  assert.deepEqual(calls.pop(), [7, { page: 1, pageSize: 20, unreadOnly: false, readStatus: 'all', category: 'all' }]);
   await service.list(7, { page: '2', pageSize: '50', unreadOnly: 'true', month: '2020-01' });
-  assert.deepEqual(calls.pop(), [7, { page: 2, pageSize: 50, unreadOnly: true }]);
+  assert.deepEqual(calls.pop(), [7, { page: 2, pageSize: 50, unreadOnly: true, readStatus: 'unread', category: 'all' }]);
+  await service.list(7, { page: '3', readStatus: 'read', category: 'payments', unreadOnly: 'false' });
+  assert.deepEqual(calls.pop(), [7, { page: 3, pageSize: 20, unreadOnly: false, readStatus: 'read', category: 'payments' }]);
+  for (const category of ['reservations', 'customers', 'system', 'all']) {
+    await service.list(7, { category });
+    assert.deepEqual(calls.pop(), [7, { page: 1, pageSize: 20, unreadOnly: false, readStatus: 'all', category }]);
+  }
   for (const query of [{ page: '0' }, { page: '1.2' }, { page: ['1'] }, { page: '1e3' }, { page: '999999999999999999' },
-    { pageSize: '101' }, { pageSize: '0' }, { unreadOnly: 'yes' }, { unreadOnly: ['true'] }]) {
+    { pageSize: '101' }, { pageSize: '0' }, { unreadOnly: 'yes' }, { unreadOnly: ['true'] },
+    { readStatus: 'seen' }, { readStatus: ['read'] }, { category: 'payment' }, { category: ['payments'] }]) {
     await assert.rejects(() => service.list(7, query), { statusCode: 400 });
   }
   await service.markRead(7, { ids: ['proof:2', 'proof:2'], adminId: 99 });

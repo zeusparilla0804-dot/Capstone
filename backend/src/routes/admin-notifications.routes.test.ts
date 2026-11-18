@@ -38,7 +38,7 @@ test('admin notification endpoints enforce admin sessions, validate selection, a
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.deepEqual(await response.json(), { success: true, data: { items: [], page: 2, pageSize: 20, totalItems: 24, totalPages: 2, unreadCount: 99 } });
-    assert.deepEqual(lists, [[7, { page: 2, pageSize: 20, unreadOnly: true }]]);
+    assert.deepEqual(lists, [[7, { page: 2, pageSize: 20, unreadOnly: true, readStatus: 'unread', category: 'all' }]]);
     assert.equal(writes.length, 0, 'opening Overview does not acknowledge anything');
     for (const suffix of ['?page=0', '?pageSize=101', '?unreadOnly=1', '?page=1&page=2']) assert.equal((await fetch(url + suffix, { headers })).status, 400);
     for (const body of [{}, { ids: [12] }, { ids: ['x'.repeat(121)] }, { ids: Array(51).fill('proof:1') }]) assert.equal((await post(body)).status, 400);

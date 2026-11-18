@@ -41,15 +41,15 @@
 
         <div class="invoice-heading">
           <p>{{ isReceipt(doc) ? 'PAYMENT RECEIPT' : 'INVOICE & BILLING AGREEMENT' }}</p>
-          <h1>{{ isReceipt(doc) ? 'Receipt' : doc.invoiceNumber }}</h1>
+          <h1>{{ isReceipt(doc) ? 'Receipt' : 'Invoice' }}</h1>
           <dl>
-            @if (isReceipt(doc)) {
-              <div><dt>Payment reference</dt><dd>{{ doc.payments[0].reference || doc.booking.reference }}</dd></div>
-            } @else {
+            <div data-testid="invoice-number"><dt>Invoice number</dt><dd>{{ doc.invoiceNumber }}</dd></div>
             <div>
               <dt>Invoice issued</dt>
               <dd>{{ doc.issueDate | date: 'mediumDate' }}</dd>
             </div>
+            @if (isReceipt(doc)) {
+              <div><dt>Payment reference</dt><dd>{{ doc.payments[0].reference || doc.booking.reference }}</dd></div>
             }
             @if (isReceipt(doc) && doc.payments.length) {
               <div><dt>Latest payment</dt><dd>{{ doc.payments[0].date | date: 'mediumDate': 'UTC' }}</dd></div>
@@ -112,6 +112,13 @@
         </div>
       </section>
 
+      @if (doc.booking.menuSelection; as menu) {
+        <section class="invoice-menu" aria-labelledby="invoice-menu-title">
+          <h2 id="invoice-menu-title">Selected menu</h2>
+          <dl>@for (choice of menu.items; track choice.key) { <div><dt>{{ choice.label }}</dt><dd>{{ choice.value }}</dd></div> }</dl>
+          <p>{{ menu.includedItems.join(' · ') }}</p>
+        </section>
+      }
       <div class="invoice-table-wrap">
         <table class="invoice-table invoice-table--items">
           <thead>

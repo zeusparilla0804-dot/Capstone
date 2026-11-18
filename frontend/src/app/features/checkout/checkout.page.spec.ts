@@ -18,8 +18,19 @@ describe('Checkout editing and selection integrity', () => {
     const draft = TestBed.inject(BookingDraftService) as any;
     draft.update({ eventType: 'wedding', eventDate: '2098-06-15', eventTime: '12:00', venue: 'Updated', guestCount: 50, packageId: '1', paymentMethod: 'bank-transfer' });
     draft.addOnsLoaded?.set(true);
-    return { draft, bookings, component: TestBed.createComponent(CheckoutPageComponent).componentInstance as any };
+    return { pkg, draft, bookings, component: TestBed.createComponent(CheckoutPageComponent).componentInstance as any };
   }
+
+  it('requires the menu through the full billing summary and submits the completed preferences', async () => {
+    const { pkg, draft, bookings, component } = setup();
+    Object.assign(pkg, { menu: { fields: [{ key: 'pork', label: 'Pork dish' }], includedItems: ['Steamed rice'] } });
+    await component.confirmBooking();
+    expect(bookings.submitDraft).not.toHaveBeenCalled();
+    expect(component.errorMessage()).toContain('Complete your menu selection');
+    draft.update({ menuSelections: { pork: 'Preferred pork dish' } });
+    await component.confirmBooking();
+    expect(bookings.submitDraft).toHaveBeenCalledWith(expect.objectContaining({ menuSelections: { pork: 'Preferred pork dish' } }), expect.anything(), [], expect.anything());
+  });
 
   it('saves the original pending reservation through the full billing summary', async () => {
     const { draft, bookings, component } = setup();

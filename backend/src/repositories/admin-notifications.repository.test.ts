@@ -39,17 +39,17 @@ test('admin feed uses complete stable ordered sources, global unread metadata an
   assert.match(result.items[1]!.message, /1:00 PM → 6:00 PM/);
   assert.deepEqual(Object.keys(result.items[1]!).sort(), ['id', 'type', 'title', 'message', 'reference', 'createdAt', 'isRead', 'link'].sort());
   const { command, params } = request.calls[0]!;
-  assert.deepEqual(params, { adminId: 7, unreadOnly: true, offset: 20, pageSize: 20 });
+  assert.deepEqual(params, { adminId: 7, readStatus: 'unread', category: 'all', offset: 20, pageSize: 20 });
   assert.match(command, /ORDER BY createdAt DESC,id DESC/);
   assert.match(command, /DECLARE @notificationFeed TABLE\s*\(/, 'metadata and page rows must share one captured feed');
   assert.match(command, /createdAt datetime2 NULL/);
   assert.match(command, /message nvarchar\(max\)/);
   assert.equal((command.match(/WITH feed AS/g) ?? []).length, 1, 'capture the source union exactly once');
-  assert.match(command, /INSERT INTO @notificationFeed\s*\(id,type,title,message,reference,createdAt,isRead,link\)/);
+  assert.match(command, /INSERT INTO @notificationFeed\s*\(id,type,title,message,reference,createdAt,isRead,link,category\)/);
   assert.equal((command.match(/FROM @notificationFeed/g) ?? []).length, 2, 'both global counts and page rows must read the captured feed');
   assert.match(command, /OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY/);
   assert.match(command, /SUM\(CASE WHEN isRead=0 THEN 1 ELSE 0 END\)/);
-  assert.match(command, /SUM\(CASE WHEN @unreadOnly=0 OR isRead=0 THEN 1 ELSE 0 END\)/);
+  assert.match(command, /@readStatus='unread' AND isRead=0/);
   assert.match(command, /seen.admin_id=@adminId/);
   assert.match(command, /n.recipient_type='ADMIN' AND n.recipient_id=@adminId/);
   assert.doesNotMatch(command, /n.sent_at IS NOT NULL/);
@@ -104,4 +104,20 @@ test('mark all read captures the entire current admin feed and only inserts miss
   assert.match(command, /target.admin_id=source.admin_id AND target.notification_key=source.notification_key/);
   assert.match(command, /WHEN NOT MATCHED THEN INSERT\(admin_id,notification_key\)/);
   assert.doesNotMatch(command, /\bOFFSET\b|FETCH NEXT|WHEN MATCHED|DELETE\s+FROM|UPDATE dbo\./);
+});
+
+test('combined status and category filters constrain totals and rows before pagination while unread badge stays global', async () => {
+  const request = new Recorder([[{ totalItems: 21, unreadCount: 78 }], []]);
+  const repository = await create(request);
+  const result = await repository.list(7, { page: 2, pageSize: 20, unreadOnly: false, readStatus: 'read', category: 'payments' });
+  assert.deepEqual(result, { items: [], page: 2, pageSize: 20, totalItems: 21, totalPages: 2, unreadCount: 78 });
+  const { command, params } = request.calls[0]!;
+  assert.deepEqual(params, { adminId: 7, readStatus: 'read', category: 'payments', offset: 20, pageSize: 20 });
+  assert.match(command, /'INVOICE_ISSUED'/);
+  assert.match(command, /'EVENT_TIME_UPDATED'/);
+  assert.match(command, /ELSE 'system' END/);
+  assert.match(command, /SUM\(CASE WHEN isRead=0 THEN 1 ELSE 0 END\)/);
+  assert.match(command, /@readStatus='read' AND isRead=1/);
+  assert.match(command, /@category='all' OR category=@category/);
+  assert.match(command, /WHERE .*@readStatus='read' AND isRead=1.*@category='all' OR category=@category.*ORDER BY createdAt DESC,id DESC OFFSET/s);
 });
