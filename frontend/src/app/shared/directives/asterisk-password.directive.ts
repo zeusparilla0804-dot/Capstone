@@ -71,8 +71,11 @@ export class AsteriskPasswordDirective implements AfterViewChecked, OnDestroy {
     }
     const paddingLeft = parseFloat(style.paddingLeft) || 0;
     const paddingRight = parseFloat(style.paddingRight) || 0;
-    this.mask.style.left = `${input.offsetLeft + input.clientLeft + paddingLeft}px`;
-    this.mask.style.width = `${Math.max(0, input.clientWidth - paddingLeft - paddingRight)}px`;
+    const borderLeft = parseFloat(style.borderLeftWidth) || 0;
+    const borderRight = parseFloat(style.borderRightWidth) || 0;
+    // Chromium can report the native text viewport in clientLeft/clientWidth, already excluding padding.
+    this.mask.style.left = `${input.offsetLeft + borderLeft + paddingLeft}px`;
+    this.mask.style.width = `${Math.max(0, input.offsetWidth - borderLeft - borderRight - paddingLeft - paddingRight)}px`;
     this.mask.style.top = `${input.offsetTop + input.offsetHeight / 2}px`;
     this.mask.style.color = this.foreground;
     const maskStyle = view.getComputedStyle(input);
