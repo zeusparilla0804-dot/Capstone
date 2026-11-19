@@ -58,7 +58,7 @@ export class BookingDraftService {
   }
 
   readonly draft = this.draftState.asReadonly();
-  readonly unlockedStep = signal<1 | 2 | 3 | 4>(1);
+  readonly unlockedStep = signal<1 | 2 | 3 | 4 | 5>(1);
   readonly selectedPackage = computed(() => {
     const packageId = this.draftState().packageId;
     return packageId ? this.packageService.getPackageById(packageId) : undefined;

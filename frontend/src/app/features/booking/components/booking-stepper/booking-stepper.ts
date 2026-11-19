@@ -1,4 +1,4 @@
-import { Component, computed, input, output, ChangeDetectionStrategy } from '@angular/core';
+import { Component, input, output, ChangeDetectionStrategy } from '@angular/core';
 
 @Component({
   selector: 'app-booking-stepper',
@@ -11,7 +11,5 @@ export class BookingStepperComponent {
   readonly furthestStep = input(1);
   readonly navigationDisabled = input(false);
   readonly stepSelected = output<number>();
-  readonly showPayment = input(false);
-  protected readonly steps = computed(() => this.showPayment()
-    ? ['Event Details', 'Add-ons', 'Review', 'Payment'] : ['Event Details', 'Add-ons', 'Review']);
+  protected readonly steps = ['Event Details', 'Menu Selection', 'Add-ons', 'Review'];
 }

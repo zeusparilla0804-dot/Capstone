@@ -39,7 +39,7 @@ export class CheckoutPageComponent {
 
   protected async confirmBooking(): Promise<void> {
     if (!this.menuValid()) {
-      this.errorMessage.set('Complete your menu selection in Event Details before confirming.');
+      this.errorMessage.set('Complete your menu selection before confirming.');
       return;
     }
     const catalogError = this.draftService.catalogSelectionError();

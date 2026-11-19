@@ -33,7 +33,7 @@
         <section class="payment-choice-panel" aria-labelledby="payment-choice-title">
           <h2 id="payment-choice-title">Choose payment method</h2>
           <p>Select bank transfer or cash at the LA Chef office to continue.</p>
-          <a class="btn btn-primary" routerLink="/book-event" [queryParams]="{ paymentBooking: item.id, step: 4 }">Continue to Step 4</a>
+          <a class="btn btn-primary" routerLink="/book-event" [queryParams]="{ paymentBooking: item.id, step: 4 }">Choose Payment Method</a>
         </section>
       } @else if (cashInstructionsAvailable()) {
         <section class="proof-tool cash-instructions" aria-labelledby="cash-instructions-title">

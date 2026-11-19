@@ -96,7 +96,7 @@ describe('BookingPageComponent submission validation', () => {
       catalogSelectionError: signal(''), addOnsLoading: signal(false), addOnsError: signal(''),
       missingAddOnIds: signal<string[]>([]), removeUnavailableAddOns: () => undefined,
       incompatibleAddOnIds: signal<string[]>([]), availableAddOns: signal([]),
-      unlockedStep: signal<1 | 2 | 3 | 4>(1),
+      unlockedStep: signal<1 | 2 | 3 | 4 | 5>(1),
       draft: draftState.asReadonly(), selectedPackage: signal(pkg), selectedAddOns: signal<[]>([]),
       pricing: signal({ packageTotal: 21600, addOnTotal: 0, subtotal: 21600, discount: 0, total: 21600, downPayment: 10800, remainingBalance: 10800 }),
       addOns: signal([]), loadAddOns: () => undefined, toggleAddOn: () => undefined,
@@ -159,23 +159,30 @@ describe('BookingPageComponent submission validation', () => {
       { key: 'pork', label: 'Pork dish' },
       { key: 'sideKind', label: 'Side dish category', options: ['Pasta', 'Noodles', 'Vegetables'] },
     ], includedItems: ['Steamed rice'] };
-    vi.spyOn(TestBed.inject(PackageService), 'getPackageById').mockReturnValue({ ...pkg, menu: definition });
+    const packageWithMenu = { ...pkg, menu: definition };
+    vi.spyOn(TestBed.inject(PackageService), 'getPackageById').mockReturnValue(packageWithMenu);
+    vi.spyOn(TestBed.inject(BookingDraftService), 'selectedPackage').mockReturnValue(packageWithMenu);
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     fixture.detectChanges(); vi.advanceTimersByTime(300); fixture.detectChanges();
-    component.continueToAddOns(); fixture.detectChanges();
-    expect(component.currentStep()).toBe(1);
-    expect(fixture.nativeElement.querySelectorAll('app-booking-menu [aria-invalid=true]').length).toBe(2);
-    const pork = fixture.nativeElement.querySelector('#menu-pork') as HTMLInputElement;
-    pork.value = 'Preferred pork dish'; pork.dispatchEvent(new Event('input', { bubbles: true })); fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-booking-menu')).toBeNull();
+    component.continueToMenu(); fixture.detectChanges();
+    expect(component.currentStep()).toBe(2);
+    expect(fixture.nativeElement.querySelector('#menu-pork').value).toBe('LA Chef\u2019s choice');
+    component.goToStep(3); fixture.detectChanges();
+    expect(component.currentStep()).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('app-booking-menu [aria-invalid=true]').length).toBe(1);
     const side = fixture.nativeElement.querySelector('#menu-sideKind') as HTMLSelectElement;
     side.value = 'Pasta'; side.dispatchEvent(new Event('change', { bubbles: true })); fixture.detectChanges();
-    component.continueToAddOns(); fixture.detectChanges();
-    expect(component.currentStep()).toBe(2);
-    expect(draftState().menuSelections).toEqual({ pork: 'Preferred pork dish', sideKind: 'Pasta' });
+    component.goToStep(3); fixture.detectChanges();
+    expect(component.currentStep()).toBe(3);
+    component.goToStep(4); fixture.detectChanges();
+    expect(component.currentStep()).toBe(4);
+    expect(fixture.nativeElement.querySelector('.booking-menu-review').textContent).toContain('LA Chef\u2019s choice');
+    expect(draftState().menuSelections).toEqual({ pork: 'LA Chef\u2019s choice', sideKind: 'Pasta' });
     await component.confirmBooking();
     expect(bookingService.submitDraft).toHaveBeenCalledWith(expect.objectContaining({
-      menuSelections: { pork: 'Preferred pork dish', sideKind: 'Pasta' },
+      menuSelections: { pork: 'LA Chef\u2019s choice', sideKind: 'Pasta' },
     }), expect.anything(), expect.anything(), expect.anything());
   });
 
@@ -205,11 +212,11 @@ describe('BookingPageComponent submission validation', () => {
     select.value = 'basic'; select.dispatchEvent(new Event('change'));
     select.value = 'mirror'; select.dispatchEvent(new Event('change'));
     expect(draft.draft().selectedAddOnIds).toEqual(['chair', 'lechon', 'mirror']);
-    component.currentStep.set(3);
+    component.currentStep.set(4);
     fixture.detectChanges();
     expect(page.querySelector('.review-addons-total')?.textContent).toContain('24,100');
     expect(page.querySelector('.review-addons')?.textContent).not.toContain('Basic Photobooth');
-    component.currentStep.set(2); fixture.detectChanges();
+    component.currentStep.set(3); fixture.detectChanges();
     (page.querySelector('#addon-photobooth') as HTMLInputElement).click(); fixture.detectChanges();
     expect(draft.draft().selectedAddOnIds).toEqual(['chair', 'lechon']);
     expect(page.querySelector('#photobooth-choice')).toBeNull();
@@ -341,7 +348,7 @@ describe('BookingPageComponent submission validation', () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     fixture.detectChanges();
-    expect(component.currentStep()).toBe(4);
+    expect(component.currentStep()).toBe(5);
     expect(fixture.nativeElement.textContent).toContain('Payment Method');
     expect(fixture.nativeElement.textContent).toContain('BK-EDIT');
     expect(component.approvedPaymentTotal()).toBe(69_000);
@@ -371,7 +378,7 @@ describe('BookingPageComponent submission validation', () => {
     await component.selectApprovedPayment('cash');
     await component.confirmApprovedPayment();
     fixture.detectChanges();
-    expect(component.currentStep()).toBe(4);
+    expect(component.currentStep()).toBe(5);
     expect(component.isSubmitting()).toBe(false);
     expect(component.approvedPaymentMethod()).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Payment method can no longer be changed.');
@@ -438,7 +445,7 @@ describe('BookingPageComponent submission validation', () => {
   it('submits the request from review without asking for a payment method', async () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
-    component.currentStep.set(3);
+    component.currentStep.set(4);
     fixture.detectChanges();
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Submit Booking')) as HTMLButtonElement | undefined;
     expect(button).toBeDefined();
@@ -454,7 +461,7 @@ describe('BookingPageComponent submission validation', () => {
     component.eventForm.controls.eventDate.setValue(initialDraft.eventDate);
     vi.advanceTimersByTime(300);
     expect(component.availabilityState().phase).toBe('ready');
-    expect(component.canContinueToAddOns()).toBe(true);
+    expect(component.canContinueToMenu()).toBe(true);
   });
 
   it('previews an edit with its original reservation identifier', () => {
@@ -522,7 +529,7 @@ describe('BookingPageComponent submission validation', () => {
       draftState.set({ ...initialDraft, guestCount, packageId: standardPackage.id, eventDate });
       const fixture = TestBed.createComponent(BookingPageComponent);
       const component = fixture.componentInstance as any;
-      component.currentStep.set(4);
+      component.currentStep.set(5);
       component.selectPayment('cash');
       fixture.detectChanges();
       expect(component.eventForm.controls.eventDate.valid).toBe(true);
@@ -540,7 +547,7 @@ describe('BookingPageComponent submission validation', () => {
     draftState.set({ ...initialDraft, guestCount: 501, packageId: standardPackage.id, eventDate: '2026-11-02' });
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
-    component.currentStep.set(4);
+    component.currentStep.set(5);
     component.selectPayment('cash');
     vi.advanceTimersByTime(300);
     fixture.detectChanges();
@@ -565,7 +572,7 @@ describe('BookingPageComponent submission validation', () => {
     ] });
     draft.toggleAddOn('chair');
     draft.toggleAddOn('lechon');
-    (fixture.componentInstance as any).currentStep.set(2);
+    (fixture.componentInstance as any).currentStep.set(3);
     fixture.detectChanges();
     TestBed.inject(HttpTestingController).expectOne(`${environment.apiBaseUrl}/auth/me`)
       .flush({ success: false }, { status: 401, statusText: 'Unauthorized' });
@@ -592,8 +599,8 @@ describe('BookingPageComponent submission validation', () => {
     expect(draft.addOnQuantity('lechon')).toBe(1);
     draft.toggleAddOn('chair');
     draft.toggleAddOn('chair');
+    component.currentStep.set(4); fixture.detectChanges();
     component.currentStep.set(3); fixture.detectChanges();
-    component.currentStep.set(2); fixture.detectChanges();
     expect(draft.addOnQuantity('chair')).toBe(500);
     expect(fixture.nativeElement.querySelector('input[aria-label="Tiffany Chair quantity"]').value).toBe('500');
     TestBed.inject(HttpTestingController).verify();
@@ -629,13 +636,13 @@ describe('BookingPageComponent submission validation', () => {
     expect(fixture.nativeElement.querySelector('#guest-count-error')?.textContent).toContain('Maximum of 1,500 guests only.');
     expect(input.classList.contains('guest-count-invalid')).toBe(true);
     expect(input.getAttribute('aria-invalid')).toBe('true');
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(1);
     input.value = '1500'; input.dispatchEvent(new Event('input', { bubbles: true }));
     vi.advanceTimersByTime(300); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('#guest-count-error')).toBeNull();
     expect(input.classList.contains('guest-count-invalid')).toBe(false);
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(2);
   });
 
@@ -648,11 +655,11 @@ describe('BookingPageComponent submission validation', () => {
     }
     for (const value of [0, -1, 1.5, 1501, 10000]) {
       component.eventForm.controls.guestCount.setValue(value);
-      component.continueToAddOns();
+      component.continueToMenu();
       expect(component.eventForm.controls.guestCount.invalid).toBe(true);
       expect(component.eventForm.controls.guestCount.value).toBe(value);
       expect(component.currentStep()).toBe(1);
-      expect(component.canContinueToAddOns()).toBe(false);
+      expect(component.canContinueToMenu()).toBe(false);
     }
   });
 
@@ -668,9 +675,9 @@ describe('BookingPageComponent submission validation', () => {
       const feedback = fixture.nativeElement.querySelector('#availability-feedback');
       expect(feedback.textContent).toContain('Unavailable Date. Please select a date at least 4 days in advance.');
       expect(feedback.textContent).not.toContain('Choose a future date');
-      component.continueToAddOns();
+      component.continueToMenu();
       expect(component.currentStep()).toBe(1);
-      expect(component.canContinueToAddOns()).toBe(false);
+      expect(component.canContinueToMenu()).toBe(false);
       expect(fixture.nativeElement.querySelector('form button[type="submit"]').disabled).toBe(true);
     }
     component.eventForm.controls.eventDate.setValue('2026-11-02');
@@ -678,7 +685,7 @@ describe('BookingPageComponent submission validation', () => {
     fixture.detectChanges();
     expect(component.dateUnavailable()).toBe(false);
     expect(fixture.nativeElement.querySelector('#availability-feedback').textContent).not.toContain('Unavailable Date.');
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(2);
   });
 
@@ -690,11 +697,11 @@ describe('BookingPageComponent submission validation', () => {
     draftState.set({ ...initialDraft, eventDate: '2026-11-02' });
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(2);
     component.goToStep(1);
     vi.setSystemTime(new Date('2026-10-29T15:00:00Z'));
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(1);
     expect(component.dateUnavailable()).toBe(true);
     expect(component.eventForm.controls.eventDate.invalid).toBe(true);
@@ -712,7 +719,7 @@ describe('BookingPageComponent submission validation', () => {
     draftState.set({ ...initialDraft, selectedAddOnIds: ['5'] });
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.continueToAddOns();
+    component.continueToMenu();
     component.goToStep(3);
     const saved = draftState();
     component.navigateFromStepper(1);
@@ -724,7 +731,7 @@ describe('BookingPageComponent submission validation', () => {
   it('requires event details to be validated again after editing an earlier step', () => {
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.continueToAddOns();
+    component.continueToMenu();
     component.goToStep(3);
     component.goToStep(4);
     component.navigateFromStepper(1);
@@ -733,7 +740,7 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.currentStep()).toBe(1);
     expect(component.furthestStep()).toBe(1);
     component.eventForm.controls.venue.setValue('New venue');
-    component.continueToAddOns();
+    component.continueToMenu();
     expect(component.currentStep()).toBe(2);
     expect(component.furthestStep()).toBe(2);
     expect(draftState().venue).toBe('New venue');
@@ -743,7 +750,7 @@ describe('BookingPageComponent submission validation', () => {
   it('ignores the active step and blocks progress navigation during submission', () => {
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.continueToAddOns();
+    component.continueToMenu();
     component.goToStep(3);
     component.goToStep(4);
     component.navigateFromStepper(4);
@@ -753,25 +760,27 @@ describe('BookingPageComponent submission validation', () => {
     expect(component.currentStep()).toBe(4);
   });
 
-  it('does not unlock Payment from a query parameter on a fresh booking flow', () => {
+  it('does not unlock Review from a query parameter on a fresh booking flow', () => {
     routeParams['step'] = '4';
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     expect(component.currentStep()).toBe(1);
     expect(component.furthestStep()).toBe(1);
   });
 
-  it('requires review again after changing add-ons before returning to Payment', () => {
+  it('revalidates changed menu choices without losing the selected add-ons', () => {
+    draftState.set({ ...initialDraft, selectedAddOnIds: ['5'] });
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.continueToAddOns();
+    component.continueToMenu();
     component.goToStep(3);
     component.goToStep(4);
     component.navigateFromStepper(2);
-    component.toggleAddOn('5');
+    component.updateMenuSelections({ pork: 'LA Chef\u2019s choice' });
     component.navigateFromStepper(4);
     expect(component.currentStep()).toBe(2);
-    expect(component.furthestStep()).toBe(3);
-    component.navigateFromStepper(3);
+    expect(component.furthestStep()).toBe(2);
+    expect(draftState().selectedAddOnIds).toEqual(['5']);
+    component.goToStep(3);
     component.goToStep(4);
     expect(component.currentStep()).toBe(4);
   });
@@ -779,7 +788,7 @@ describe('BookingPageComponent submission validation', () => {
   it('shows the approved half-deposit requirement and only supported manual payment methods', () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
-    component.currentStep.set(4);
+    component.currentStep.set(5);
     fixture.detectChanges();
 
     const content = fixture.nativeElement.textContent as string;
@@ -896,7 +905,7 @@ describe('BookingPageComponent submission validation', () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     component.draftService.selectedPackage = computed(() => unboundedPackage);
-    component.currentStep.set(4);
+    component.currentStep.set(5);
     vi.advanceTimersByTime(300);
     draftState.update(value => ({ ...value, eventType: 'wedding' }));
     component.eventForm.controls.eventType.setValue('wedding');
@@ -916,7 +925,7 @@ describe('BookingPageComponent submission validation', () => {
       guestCount: 1000, packageId: pkg.id, specialRequest: '',
     });
 
-    component.continueToAddOns();
+    component.continueToMenu();
 
     expect(component.currentStep()).toBe(1);
     expect(component.eventForm.controls.guestCount.errors?.packageRange).toBe(true);
@@ -930,7 +939,7 @@ describe('BookingPageComponent submission validation', () => {
     });
     vi.advanceTimersByTime(300);
 
-    component.continueToAddOns();
+    component.continueToMenu();
 
     expect(component.currentStep()).toBe(2);
     expect(draftState().guestCount).toBe(720);
@@ -1025,14 +1034,14 @@ describe('BookingPageComponent submission validation', () => {
     vi.advanceTimersByTime(300);
     expect(bookingService.checkAvailability).toHaveBeenCalledWith('2027-01-10', 30);
     component.eventForm.controls.eventDate.setValue('2027-01-11');
-    expect(component.canContinueToAddOns()).toBe(false);
+    expect(component.canContinueToMenu()).toBe(false);
     vi.advanceTimersByTime(300);
     first.next(availability('AVAILABLE', '2027-01-10'));
-    expect(component.canContinueToAddOns()).toBe(false);
+    expect(component.canContinueToMenu()).toBe(false);
     second.next(availability('LIMITED', '2027-01-11'));
 
     expect(component.availabilityState().data.status).toBe('LIMITED');
-    expect(component.canContinueToAddOns()).toBe(true);
+    expect(component.canContinueToMenu()).toBe(true);
   });
 
   it('rechecks the same availability query after an invalid value is restored', () => {
@@ -1047,7 +1056,7 @@ describe('BookingPageComponent submission validation', () => {
 
     expect(bookingService.checkAvailability).toHaveBeenCalledTimes(2);
     expect(component.availabilityState().phase).toBe('ready');
-    expect(component.canContinueToAddOns()).toBe(true);
+    expect(component.canContinueToMenu()).toBe(true);
   });
 
   it('allows available, limited, and review states but blocks a full date', () => {
@@ -1059,7 +1068,7 @@ describe('BookingPageComponent submission validation', () => {
       component.eventForm.controls.guestCount.setValue(status === 'AVAILABLE' ? 30 : status === 'LIMITED' ? 31 : status === 'NEEDS_CONFIRMATION' ? 32 : 33);
       vi.advanceTimersByTime(300);
       expect(component.availabilityState().data.status).toBe(status);
-      expect(component.canContinueToAddOns()).toBe(status !== 'FULL');
+      expect(component.canContinueToMenu()).toBe(status !== 'FULL');
     }
   });
 
@@ -1075,7 +1084,7 @@ describe('BookingPageComponent submission validation', () => {
 
     expect(bookingService.checkAvailability).toHaveBeenCalledTimes(2);
     expect(component.availabilityState().data.status).toBe('AVAILABLE');
-    expect(component.canContinueToAddOns()).toBe(true);
+    expect(component.canContinueToMenu()).toBe(true);
   });
 
   it('preserves the draft and returns to focused date feedback after a stale capacity conflict', async () => {
@@ -1086,7 +1095,7 @@ describe('BookingPageComponent submission validation', () => {
     const fixture = TestBed.createComponent(BookingPageComponent);
     const component = fixture.componentInstance as any;
     vi.advanceTimersByTime(300);
-    component.currentStep.set(4);
+    component.currentStep.set(5);
     fixture.detectChanges();
 
     await component.confirmBooking();

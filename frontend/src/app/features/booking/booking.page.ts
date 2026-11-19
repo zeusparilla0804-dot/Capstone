@@ -13,7 +13,7 @@ import { PublicHeaderComponent } from '../../shared/components/public-header/pub
 import { BookingSuccessComponent } from './components/booking-success/booking-success';
 import { BookingStepperComponent } from './components/booking-stepper/booking-stepper';
 import { BookingMenuComponent } from './components/booking-menu/booking-menu';
-import { menuSelectionsValid } from '../../core/models/menu.model';
+import { chefMenuChoice, menuSelectionsValid } from '../../core/models/menu.model';
 import { bookingSubmissionMessage, isBookingCapacityConflict } from './booking-submission-error';
 import { cashDepositDeadline, cashPreparationDays, minimumBookingEventDate } from '../../core/utils/cash-payment-policy';
 import { bookingTotal } from '../../core/utils/customer-payment-status';
@@ -21,7 +21,7 @@ import { SuccessDialogComponent } from '../../shared/components/success-dialog/s
 import { PaymentChoiceDialogComponent } from './components/payment-choice-dialog/payment-choice-dialog';
 import { PaymentDestinationService } from '../../core/services/payment-destination.service';
 
-type BookingStep = 1 | 2 | 3 | 4;
+type BookingStep = 1 | 2 | 3 | 4 | 5;
 const STANDARD_PACKAGE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   '480': 'Classic buffet catering tier',
   '580': 'Expanded buffet catering tier',
@@ -105,7 +105,7 @@ export class BookingPageComponent {
         status: statuses[date] ?? '' };
     });
   });
-  protected readonly canContinueToAddOns = computed(() => {
+  protected readonly canContinueToMenu = computed(() => {
     const query = this.currentAvailabilityQuery();
     const state = this.availabilityState();
     return !this.dateUnavailable() && query !== null
@@ -194,7 +194,7 @@ export class BookingPageComponent {
 
   constructor() {
     if (this.paymentBookingId) {
-      this.currentStep.set(4);
+      this.currentStep.set(5);
       this.loadPaymentMethods();
       this.editingLoading.set(true);
       this.bookingService.loadBookingById(this.paymentBookingId).pipe(
@@ -242,7 +242,7 @@ export class BookingPageComponent {
       if (pending && !this.editingLoading()) this.applyPackageDefaults(pending.id, pending.alignEventType);
     });
     const requestedStep = Number(this.route.snapshot.queryParamMap.get('step'));
-    if (draft.packageId && requestedStep >= 2 && requestedStep <= 3 && requestedStep <= this.furthestStep()) {
+    if (draft.packageId && Number.isInteger(requestedStep) && requestedStep >= 2 && requestedStep <= 4 && requestedStep <= this.furthestStep()) {
       this.currentStep.set(requestedStep as BookingStep);
     }
     this.watchAvailability();
@@ -253,8 +253,7 @@ export class BookingPageComponent {
     if (requestedBooking) this.loadPendingBooking(requestedBooking, requestedBooking === savedEditingId && !!draft.packageId);
   }
 
-  protected continueToAddOns(): void {
-    this.menuSubmitted.set(true);
+  protected continueToMenu(): void {
     this.revalidateDate();
     this.eventForm.controls.guestCount.updateValueAndValidity({ emitEvent: false });
     const value = this.eventForm.getRawValue();
@@ -278,16 +277,21 @@ export class BookingPageComponent {
     if (selectedPackage && !this.packageMatchesEvent(selectedPackage, value.eventType)) {
       packageControl.setErrors({ ...packageControl.errors, packageEvent: true });
     }
-    if (!selectedPackage || this.eventForm.invalid || !this.canContinueToAddOns() || !this.menuValid()) {
+    if (!selectedPackage || this.eventForm.invalid || !this.canContinueToMenu()) {
       this.furthestStep.set(1);
       this.eventForm.markAllAsTouched();
       return;
+    }
+    const menuSelections = { ...this.draftService.draft().menuSelections };
+    for (const field of selectedPackage.menu?.fields ?? []) {
+      if (!field.options && !menuSelections[field.key]?.trim()) menuSelections[field.key] = chefMenuChoice;
     }
     this.draftService.update({
       ...value,
       eventType: value.eventType as EventType,
       packageId: value.packageId,
       specialRequest: value.specialRequest.trim() || undefined,
+      menuSelections,
     });
     this.currentStep.set(2);
     this.furthestStep.update(step => Math.max(step, 2) as BookingStep);
@@ -296,7 +300,7 @@ export class BookingPageComponent {
   protected goToStep(step: BookingStep): void {
     if (this.isSubmitting() || this.editingLoading() || this.editingError() || step === this.currentStep()) return;
     if (step < this.currentStep()) { this.currentStep.set(step); return; }
-    if (step >= 3 && this.draftService.catalogSelectionError()) return;
+    if (step >= 4 && this.draftService.catalogSelectionError()) return;
     if (step > this.currentStep() + 1 && step > this.furthestStep()) return;
     if (!this.revalidateDate()) {
       this.currentStep.set(1);
@@ -304,12 +308,18 @@ export class BookingPageComponent {
       return;
     }
     if (this.currentStep() === 1) {
-      this.continueToAddOns();
+      this.continueToMenu();
       if (this.currentStep() !== 2) return;
     }
-    if (this.eventForm.invalid || !this.canContinueToAddOns()) {
+    if (this.eventForm.invalid || !this.canContinueToMenu()) {
       this.furthestStep.set(1);
       this.currentStep.set(1);
+      return;
+    }
+    if (step >= 3 && !this.menuValid()) {
+      this.menuSubmitted.set(true);
+      this.currentStep.set(2);
+      this.furthestStep.set(2);
       return;
     }
     this.currentStep.set(step);
@@ -317,7 +327,7 @@ export class BookingPageComponent {
   }
 
   protected navigateFromStepper(step: number): void {
-    if (!Number.isInteger(step) || step < 1 || step > 3 || step > this.furthestStep()) return;
+    if (!Number.isInteger(step) || step < 1 || step > 4 || step > this.furthestStep()) return;
     this.goToStep(step as BookingStep);
   }
 
@@ -367,11 +377,11 @@ export class BookingPageComponent {
 
   protected toggleAddOn(addOnId: string): void {
     this.draftService.toggleAddOn(addOnId);
-    this.furthestStep.update(step => Math.min(step, 3) as BookingStep);
+    this.furthestStep.update(step => Math.min(step, 4) as BookingStep);
   }
   protected changeAddOnQuantity(addOnId: string, delta: number): void {
     this.draftService.setAddOnQuantity(addOnId, this.draftService.addOnQuantity(addOnId) + delta);
-    this.furthestStep.update(step => Math.min(step, 3) as BookingStep);
+    this.furthestStep.update(step => Math.min(step, 4) as BookingStep);
   }
   protected editAddOnQuantity(addOnId: string, event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -384,7 +394,7 @@ export class BookingPageComponent {
     input.setAttribute('aria-invalid', String(!valid));
     if (!valid) return;
     this.draftService.setAddOnQuantity(addOnId, quantity);
-    this.furthestStep.update(step => Math.min(step, 3) as BookingStep);
+    this.furthestStep.update(step => Math.min(step, 4) as BookingStep);
   }
   protected finishAddOnQuantityEdit(addOnId: string, event: Event): void {
     const input = event.target as HTMLInputElement;
@@ -509,14 +519,14 @@ export class BookingPageComponent {
   protected async confirmBooking(): Promise<void> {
     if (!this.menuValid()) {
       this.menuSubmitted.set(true);
-      this.currentStep.set(1);
-      this.furthestStep.set(1);
+      this.currentStep.set(2);
+      this.furthestStep.set(2);
       return;
     }
     const catalogError = this.draftService.catalogSelectionError();
     if (catalogError) {
       this.submissionError.set(catalogError);
-      this.currentStep.set(2);
+      this.currentStep.set(3);
       return;
     }
     if (!this.revalidateDate()) {
@@ -569,7 +579,7 @@ export class BookingPageComponent {
 
   protected updateMenuSelections(values: Readonly<Record<string, string>>): void {
     this.draftService.update({ menuSelections: values });
-    this.furthestStep.set(1);
+    this.furthestStep.set(2);
   }
 
   protected menuValid(): boolean {

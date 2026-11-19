@@ -29,10 +29,12 @@
         <p class="page-kicker">{{ editingBookingId() ? 'Pending booking' : 'Event booking' }}</p>
         <h1>{{ paymentBookingId ? 'Complete Your Booking' : editingBookingId() ? 'Update Your Event' : 'Book Your Event' }}</h1>
         <p>{{ paymentBookingId ? 'Your booking has been reviewed. Choose your payment method to continue.' : editingBookingId() ? 'Adjust your estimate while LA Chef is reviewing your request.' : 'Tell us about your event and choose the catering options that work for you.' }}</p>
-        <app-booking-stepper [currentStep]="currentStep()" [furthestStep]="paymentBookingId ? 4 : furthestStep()" [showPayment]="!!paymentBookingId" [navigationDisabled]="!!paymentBookingId || isSubmitting() || editingLoading() || !!editingError()" (stepSelected)="navigateFromStepper($event)" />
+        @if (!paymentBookingId) {
+          <app-booking-stepper [currentStep]="currentStep()" [furthestStep]="furthestStep()" [navigationDisabled]="isSubmitting() || editingLoading() || !!editingError()" (stepSelected)="navigateFromStepper($event)" />
+        }
       </header>
 
-      <section class="booking-surface" [class.booking-payment]="currentStep() === 4 || !!paymentBookingId" [class.booking-surface--addons]="currentStep() === 2" [class.booking-review]="currentStep() === 3">
+      <section class="booking-surface" [class.booking-payment]="currentStep() === 5 || !!paymentBookingId" [class.booking-surface--addons]="currentStep() === 3" [class.booking-review]="currentStep() === 4">
         @if (editingLoading()) {
           <div class="availability-status availability-status--checking" role="status"><span class="availability-status__mark availability-status__mark--loading" aria-hidden="true"></span><div><strong>Loading booking</strong><p>Preparing your event details...</p></div></div>
         } @else if (editingError()) {
@@ -40,7 +42,7 @@
         } @else if (approvedPaymentBooking(); as approved) {
           <div class="payment-layout" data-testid="approved-payment-step">
             <div>
-              <div class="step-heading"><p>Step 4</p><h2>Payment Method</h2><span>Select how you will pay for booking {{ approved.reference }}. Review and confirm your choice before submitting.</span></div>
+              <div class="step-heading"><h2>Payment Method</h2><span>Select how you will pay for booking {{ approved.reference }}. Review and confirm your choice before submitting.</span></div>
               <section class="approved-booking-details" aria-label="Booking details">
                 <h3>{{ approved.eventName }}</h3>
                 <dl>
@@ -81,7 +83,7 @@
             </aside>
           </div>
         } @else {
-          @if (currentStep() >= 2 && draftService.catalogSelectionError()) {
+          @if (currentStep() >= 3 && draftService.catalogSelectionError()) {
             <div class="availability-status availability-status--error" role="alert">
               <p>{{ draftService.catalogSelectionError() }}</p>
               @if (draftService.addOnsError()) {
@@ -93,7 +95,7 @@
           }
           @switch (currentStep()) {
           @case (1) {
-            <form [formGroup]="eventForm" (ngSubmit)="continueToAddOns()" novalidate>
+            <form [formGroup]="eventForm" (ngSubmit)="continueToMenu()" novalidate>
               <div class="step-heading"><p>Step 1</p><h2>Event Details</h2><span>Required fields are marked with an asterisk.</span></div>
               <div class="form-grid booking-form-grid">
               <div id="date-preparation-note" class="booking-preparation">
@@ -188,14 +190,20 @@
                   @if (controlInvalid('packageId')) { @if (eventForm.controls.packageId.hasError('packageEvent')) { <small>Choose a package that matches the selected event type.</small> } @else { <small>Please select a package.</small> } }
                 </div>
               </div>
-              @if (selectedFormPackage()?.menu; as menu) {
-                <app-booking-menu [definition]="menu" [values]="draftService.draft().menuSelections ?? {}" [showErrors]="menuSubmitted()" (changed)="updateMenuSelections($event)" />
-              }
-              <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToAddOns()">Continue to Add-ons</button></div>
+              <div class="step-actions"><button class="btn btn-primary" type="submit" [disabled]="!canContinueToMenu()">Continue to Menu</button></div>
             </form>
           }
           @case (2) {
-            <div class="step-heading"><p>Step 2</p><h2>Select Add-ons</h2><span>Add optional services to complete your event setup.</span></div>
+            <div class="step-heading"><p>Step 2</p><h2>Menu Selection</h2>@if (selectedFormPackage()?.menu) { <span>Choose from the options included in {{ selectedFormPackage()?.name }}. LA Chef will confirm your final menu.</span> }</div>
+            @if (selectedFormPackage()?.menu; as menu) {
+              <app-booking-menu [definition]="menu" [values]="draftService.draft().menuSelections ?? {}" [showErrors]="menuSubmitted()" (changed)="updateMenuSelections($event)" />
+            } @else {
+              <p class="booking-help">LA Chef will confirm the menu for this package with you.</p>
+            }
+            <div class="step-actions"><button class="btn btn-secondary" type="button" (click)="goToStep(1)">Back</button><button class="btn btn-primary" type="button" (click)="goToStep(3)">Continue to Add-ons</button></div>
+          }
+          @case (3) {
+            <div class="step-heading"><p>Step 3</p><h2>Select Add-ons</h2><span>Add optional services to complete your event setup.</span></div>
             <fieldset class="selection-list addon-list"><legend class="visually-hidden">Available add-ons</legend>
               @if (photoboothOptions().length) {
                 <div class="selection-row addon-row has-image" [class.is-selected]="!!selectedPhotoboothId()">
@@ -242,10 +250,10 @@
               }
             </fieldset>
             <div class="step-total"><span>Selected add-ons</span><strong>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></div>
-            <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="!!draftService.catalogSelectionError()" (click)="goToStep(3)">Review Booking</button></div>
+            <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="!!draftService.catalogSelectionError()" (click)="goToStep(4)">Review Booking</button></div>
           }
-          @case (3) {
-            <div class="step-heading"><p>Step 3</p><h2>Review Your Booking</h2><span>Submit your request for LA Chef's review. Choose payment after approval.</span></div>
+          @case (4) {
+            <div class="step-heading"><p>Step 4</p><h2>Review Your Booking</h2><span>Submit your request for LA Chef's review. Choose payment after approval.</span></div>
             <div class="review-grid">
               <section><div class="review-heading"><h3>Event Details</h3></div><dl><div><dt>Event</dt><dd>{{ eventTypeLabel(draftService.draft().eventType) }}</dd></div><div><dt>Date</dt><dd>{{ draftService.draft().eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div><div><dt>Time</dt><dd>{{ draftService.draft().eventTime | eventTime }}</dd></div><div><dt>Venue</dt><dd>{{ draftService.draft().venue }}</dd></div><div><dt>Estimated guests</dt><dd>{{ draftService.draft().guestCount }}</dd></div>@if (draftService.draft().specialRequest) { <div><dt>Special requests</dt><dd>{{ draftService.draft().specialRequest }}</dd></div> }</dl></section>
               <section><div class="review-heading"><h3>Package & Add-ons</h3></div><p class="review-package">{{ draftService.selectedPackage()?.name }} @if (draftService.selectedPackage(); as selectedPackage) { <span>{{ packagePricingExplanation(selectedPackage) }}</span> }</p>@if (draftService.selectedAddOns().length) { <ul class="review-addons">@for (addOn of draftService.selectedAddOns(); track addOn.id) { <li><span>{{ addOn.name }}@if (draftService.supportsQuantity(addOn)) { <small class="review-addon-quantity">{{ addOn.quantity }} × {{ addOn.unitPrice | currency:'PHP':'symbol-narrow':'1.0-0' }}</small> }</span><strong>{{ addOn.price | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></li> }</ul> } @else { <p class="empty-note">No add-ons selected.</p> }<div class="review-addons-total"><span>Add-ons total</span><strong>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></div></section>
@@ -258,9 +266,9 @@
             <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="isSubmitting() || !!draftService.catalogSelectionError()" (click)="confirmBooking()">{{ isSubmitting() ? 'Submitting...' : editingBookingId() ? 'Save Booking Changes' : 'Submit Booking for Review' }}</button></div>
             @if (submissionError()) { <p class="submission-error" role="alert">{{ submissionError() }}</p> }
           }
-          @case (4) {
+          @case (5) {
             <div class="payment-layout">
-              <div><div class="step-heading"><p>Step 4</p><h2>Payment Method</h2><span>Select how you plan to pay after your booking is approved.</span></div><fieldset class="selection-list payment-methods"><legend class="visually-hidden">Payment methods</legend>@for (method of paymentMethods; track method.value) { <label class="selection-row" [class.is-selected]="draftService.draft().paymentMethod === method.value"><input type="radio" name="paymentMethod" [value]="method.value" [checked]="draftService.draft().paymentMethod === method.value" (change)="selectPayment(method.value)" /><span><strong>{{ method.label }}</strong><small>{{ method.description }}</small></span></label> }</fieldset>
+              <div><div class="step-heading"><h2>Payment Method</h2><span>Select how you plan to pay after your booking is approved.</span></div><fieldset class="selection-list payment-methods"><legend class="visually-hidden">Payment methods</legend>@for (method of paymentMethods; track method.value) { <label class="selection-row" [class.is-selected]="draftService.draft().paymentMethod === method.value"><input type="radio" name="paymentMethod" [value]="method.value" [checked]="draftService.draft().paymentMethod === method.value" (change)="selectPayment(method.value)" /><span><strong>{{ method.label }}</strong><small>{{ method.description }}</small></span></label> }</fieldset>
                 @if (selectedCashDeadline; as deadline) {
                   <div class="cash-payment-note">
                     <dl>

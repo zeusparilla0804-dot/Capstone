@@ -14,6 +14,8 @@ export interface MenuSelectionSnapshot {
   readonly includedItems: readonly string[];
 }
 
+export const chefMenuChoice = 'LA Chef’s choice';
+
 export function menuSelectionsValid(definition: PackageMenuDefinition | undefined, values: Readonly<Record<string, string>> = {}): boolean {
   return !definition || definition.fields.every(field => {
     const value = values[field.key]?.trim() ?? '';
