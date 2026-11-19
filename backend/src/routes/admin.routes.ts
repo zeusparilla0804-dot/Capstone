@@ -1,4 +1,4 @@
-import {Router} from 'express';import {adminController as c} from '../controllers/admin.controller.js';import {adminInvoice,issueInvoice} from '../controllers/invoice.controller.js';import {customerAdminController} from '../controllers/customer-admin.controller.js';import {requireAdmin} from '../middleware/auth.middleware.js';
+import {Router} from 'express';import {adminController as c} from '../controllers/admin.controller.js';import {adminInvoice,issueInvoice,saveRefund} from '../controllers/invoice.controller.js';import {customerAdminController} from '../controllers/customer-admin.controller.js';import {requireAdmin} from '../middleware/auth.middleware.js';
 import {adminReportController} from '../controllers/admin-report.controller.js';
 import {retiredCustomQuotation} from './custom-event.routes.js';
 import {completeEvent} from '../controllers/event-completion.controller.js';
@@ -15,6 +15,7 @@ export default Router().use(requireAdmin)
  .get('/payment-proofs',c.paymentProofs).get('/payment-proofs/:id',c.paymentProof)
  .post('/payment-proofs/:id/verify',c.verifyPaymentProof).post('/payment-proofs/:id/reject',c.rejectPaymentProof)
  .get('/invoices/:id',adminInvoice).post('/bookings/:bookingId/invoice',issueInvoice)
+ .post('/invoices/:id/refund',saveRefund)
  .get('/dashboard',c.dashboard).get('/email-outbox',c.emailOutbox).get('/email-outbox/:id/preview',c.emailPreview)
  .post('/email-outbox/:id/retry',c.retryEmail).get('/audit-log',c.auditLog)
  .get('/custom-events',retiredCustomQuotation).get('/custom-events/:id',retiredCustomQuotation)

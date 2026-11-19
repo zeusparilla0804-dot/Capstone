@@ -64,6 +64,33 @@ test('schema contract tracks every shipped migration and payment destination see
   }
 });
 
+test('schema validation rejects a database missing the invoice refund migration and table', () => {
+  const snapshot = validSnapshot();
+  snapshot.migrations = snapshot.migrations.filter((migration) => migration !== '027_invoice_refunds.sql');
+  snapshot.tables = snapshot.tables.filter((table) => table !== 'INVOICE_REFUND');
+  snapshot.columns = snapshot.columns.filter((column) => column.table !== 'INVOICE_REFUND');
+  snapshot.constraints = snapshot.constraints.filter((constraint) => constraint.table !== 'INVOICE_REFUND');
+  snapshot.indexes = snapshot.indexes.filter((index) => index.table !== 'INVOICE_REFUND');
+
+  assert.deepEqual(findSchemaContractViolations(snapshot), [
+    'dbo.SCHEMA_MIGRATION.027_invoice_refunds.sql: missing migration',
+    'dbo.INVOICE_REFUND: missing table',
+    'dbo.INVOICE_REFUND.invoice_id: missing column',
+    'dbo.INVOICE_REFUND.recorded_at: missing column',
+    'dbo.INVOICE_REFUND.recorded_by: missing column',
+    'dbo.INVOICE_REFUND.reference: missing column',
+    'dbo.INVOICE_REFUND.refund_amount: missing column',
+    'dbo.INVOICE_REFUND.refund_date: missing column',
+    'dbo.INVOICE_REFUND.review_note: missing column',
+    'dbo.INVOICE_REFUND.CK_INVOICE_REFUND_settlement: missing C constraint',
+    'dbo.INVOICE_REFUND.DF_INVOICE_REFUND_recorded_at: missing D constraint',
+    'dbo.INVOICE_REFUND.FK_INVOICE_REFUND_ADMIN: missing F constraint',
+    'dbo.INVOICE_REFUND.FK_INVOICE_REFUND_INVOICE: missing F constraint',
+    'dbo.INVOICE_REFUND.PK_INVOICE_REFUND: missing PK constraint',
+    'dbo.INVOICE_REFUND.UX_INVOICE_REFUND_reference: missing index',
+  ]);
+});
+
 test('missing or incompatible columns produce named violations', () => {
   const missing = validSnapshot();
   missing.columns = missing.columns.filter((column) => !(column.table === 'RESERVATION' && column.name === 'booking_reference'));

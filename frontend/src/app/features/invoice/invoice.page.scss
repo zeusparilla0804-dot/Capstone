@@ -217,6 +217,77 @@
   color: var(--color-text-muted);
 }
 
+.invoice-refund dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.invoice-refund dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+}
+
+.invoice-refund dt,
+.invoice-refund p,
+.invoice-refund-form > p {
+  color: var(--color-text-muted);
+}
+
+.invoice-refund dd {
+  margin: 0;
+}
+
+.invoice-refund p {
+  margin: 8px 0 0;
+}
+
+.invoice-refund-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: clamp(12px, 2vw, 20px);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.invoice-refund-form h3 {
+  margin: 0;
+  font: 600 1rem / 1.4 var(--font-sans);
+}
+
+.invoice-refund-form > p {
+  margin: 0;
+}
+
+.invoice-refund-form__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.invoice-refund-form__fields input[readonly] {
+  background: #f8f7f3;
+}
+
+.invoice-refund-form__note {
+  grid-column: 1 / -1;
+}
+
+.invoice-refund-form > .invoice-refund-form__error {
+  color: var(--color-danger);
+}
+
+.invoice-refund-form button {
+  justify-self: start;
+}
+
 .invoice-agreement ol {
   max-width: 75ch;
   margin: 18px 0 0;
@@ -331,6 +402,10 @@
 
   .invoice-signatures {
     gap: 46px;
+  }
+
+  .invoice-refund dl > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -530,7 +605,8 @@
     display: table-header-group;
   }
 
-  :host ::ng-deep .invoice-heading .status-badge {
+  :host ::ng-deep .invoice-heading .status-badge,
+  :host ::ng-deep .invoice-refund .status-badge {
     min-height: 0;
     padding: 0;
     border: 0;

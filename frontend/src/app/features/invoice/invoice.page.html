@@ -169,7 +169,9 @@
             <div><dt>Cancellation date</dt><dd>{{ cancellation.date + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</dd></div>
             @if (cancellation.kind === 'EARLY') {
               <div><dt>Retained from down payment</dt><dd>{{ cancellation.forfeitedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-              <div><dt>Refundable amount</dt><dd>{{ cancellation.refundableAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              @if (!doc.refund) {
+                <div><dt>Refundable amount</dt><dd>{{ cancellation.refundableAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              }
             }
           }
         </dl>
@@ -180,7 +182,7 @@
         <div class="invoice-agreement__heading">
           @if (isCancelled(doc)) {
             <h2 id="agreement-title">Cancellation</h2>
-            @if (doc.amountPaid > 0) {
+            @if (doc.amountPaid > 0 && !doc.refund) {
               <p>{{ doc.cancellation?.kind === 'EARLY' ? 'The refundable amount is shown above. Contact LA Chef for refund arrangements.' : 'Contact LA Chef for a review of any forfeiture or refund under the signed agreement.' }}</p>
             }
           } @else {
@@ -188,6 +190,82 @@
             <p>{{ paymentComplete(doc) ? 'Payment received in full. No outstanding balance.' : isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
           }
         </div>
+
+        @if (isCancelled(doc) && doc.amountPaid > 0) {
+          @if (doc.refund; as refund) {
+            <div class="invoice-refund" aria-live="polite">
+              <dl>
+                <div><dt>Refund status</dt><dd><app-status-badge [status]="refund.status" /></dd></div>
+                @if (refund.status === 'PENDING_REFUND') {
+                  <div><dt>Refundable amount</dt><dd>{{ refund.amount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+                }
+                @if (refund.status === 'REFUNDED') {
+                  <div><dt>Amount refunded</dt><dd>{{ refund.amount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+                  @if (refund.date) {
+                    <div><dt>Refund date</dt><dd>{{ refund.date + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</dd></div>
+                  }
+                  @if (refund.reference) {
+                    <div><dt>Refund reference</dt><dd>{{ refund.reference }}</dd></div>
+                  }
+                }
+                @if (admin && (refund.status === 'REFUNDED' || refund.status === 'NO_REFUND_DUE') && refund.reviewNote) {
+                  <div class="no-print"><dt>Signed agreement review</dt><dd>{{ refund.reviewNote }}</dd></div>
+                }
+              </dl>
+              @if (refund.status === 'ADMIN_REVIEW') {
+                <p>LA Chef will review the refund under the signed agreement.</p>
+              } @else if (refund.status === 'PENDING_REFUND' && !admin) {
+                <p>Contact LA Chef for refund arrangements.</p>
+              }
+            </div>
+
+            @if (canRecordRefund(doc)) {
+              @let isReview = refund.status === 'ADMIN_REVIEW';
+              @let amount = refund.status === 'PENDING_REFUND' ? refund.amount : refundForm.controls.amount.value;
+              <form class="invoice-refund-form no-print" [formGroup]="refundForm" (ngSubmit)="recordRefund(doc)"
+                aria-labelledby="refund-form-title" aria-describedby="refund-form-help" [attr.aria-busy]="savingRefund()">
+                <h3 id="refund-form-title">{{ isReview ? 'Record refund decision' : 'Record refund' }}</h3>
+                <p id="refund-form-help">
+                  {{ isReview
+                    ? 'Enter the amount returned to the customer or enter zero if the signed agreement requires no refund.'
+                    : 'Return the funds directly to the customer before recording the refund here.' }}
+                </p>
+                <fieldset class="invoice-refund-form__fields" [disabled]="savingRefund()">
+                  <div class="form-field">
+                    <label for="refund-amount">Refund amount (PHP)</label>
+                    @if (isReview) {
+                      <input id="refund-amount" name="amount" type="number" formControlName="amount" min="0" [max]="doc.amountPaid" step="0.01" required />
+                    } @else {
+                      <input id="refund-amount" name="amount" type="number" [value]="amount" readonly />
+                    }
+                  </div>
+                  @if (amount != null && amount > 0) {
+                    <div class="form-field">
+                      <label for="refund-date">Refund date</label>
+                      <input id="refund-date" name="refundDate" type="date" formControlName="refundDate" [max]="refundDateLimit()" required />
+                    </div>
+                    <div class="form-field">
+                      <label for="refund-reference">Voucher or transaction reference</label>
+                      <input id="refund-reference" name="reference" type="text" formControlName="reference" maxlength="150" required />
+                    </div>
+                  }
+                  @if (isReview) {
+                    <div class="form-field invoice-refund-form__note">
+                      <label for="refund-review-note">Signed agreement review note</label>
+                      <textarea id="refund-review-note" name="reviewNote" formControlName="reviewNote" maxlength="1000" rows="3" required></textarea>
+                    </div>
+                  }
+                </fieldset>
+                @if (refundError()) {
+                  <p class="invoice-refund-form__error" role="alert">{{ refundError() }}</p>
+                }
+                <button class="btn btn-primary" type="submit" [disabled]="savingRefund()">
+                  {{ savingRefund() ? 'Saving…' : amount === 0 && isReview ? 'Record no refund due' : 'Record refund' }}
+                </button>
+              </form>
+            }
+          }
+        }
 
         @if (!isReceipt(doc) && !isCancelled(doc)) {
           <ol>

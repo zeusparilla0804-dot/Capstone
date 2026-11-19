@@ -1,0 +1,30 @@
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET XACT_ABORT ON;
+
+IF OBJECT_ID('dbo.INVOICE_REFUND', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.INVOICE_REFUND (
+    invoice_id int NOT NULL CONSTRAINT PK_INVOICE_REFUND PRIMARY KEY,
+    refund_amount decimal(12,2) NOT NULL,
+    refund_date date NULL,
+    [reference] nvarchar(150) NULL,
+    review_note nvarchar(1000) NULL,
+    recorded_by int NOT NULL,
+    recorded_at datetime2 NOT NULL CONSTRAINT DF_INVOICE_REFUND_recorded_at DEFAULT(SYSUTCDATETIME()),
+    CONSTRAINT FK_INVOICE_REFUND_INVOICE FOREIGN KEY(invoice_id) REFERENCES dbo.INVOICE(invoice_id),
+    CONSTRAINT FK_INVOICE_REFUND_ADMIN FOREIGN KEY(recorded_by) REFERENCES dbo.ADMIN(admin_id),
+    CONSTRAINT CK_INVOICE_REFUND_settlement CHECK (
+      (refund_amount > 0 AND refund_date IS NOT NULL AND NULLIF(LTRIM(RTRIM([reference])), N'') IS NOT NULL)
+      OR (refund_amount = 0 AND refund_date IS NULL AND [reference] IS NULL AND NULLIF(LTRIM(RTRIM(review_note)), N'') IS NOT NULL)
+    )
+  );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.INVOICE_REFUND', 'U') AND name = 'UX_INVOICE_REFUND_reference')
+  CREATE UNIQUE INDEX UX_INVOICE_REFUND_reference ON dbo.INVOICE_REFUND([reference]) WHERE [reference] IS NOT NULL;

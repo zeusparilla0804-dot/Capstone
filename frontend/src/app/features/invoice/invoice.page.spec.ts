@@ -1,9 +1,13 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { of } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import type { Invoice } from '../../core/models';
 import { AdminAuthService } from '../../core/services/admin-auth.service';
+import { AuthService } from '../../core/services/auth.service';
 import { InvoiceService } from '../../core/services/invoice.service';
 import { InvoicePageComponent } from './invoice.page';
 
@@ -44,6 +48,157 @@ const invoice: Invoice = {
     status: 'RECORDED',
   }],
 };
+
+describe('Invoice refund records', () => {
+  const cancelledInvoice: Invoice = {
+    ...invoice, status: 'CANCELLED', booking: { ...invoice.booking, status: 'CANCELLED' }, remainingBalance: 0,
+  };
+  const ineligibleInvoices: Invoice[] = [
+    { ...invoice, refund: { status: 'PENDING_REFUND', amount: 40000 } },
+    { ...cancelledInvoice, amountPaid: 0, payments: [], refund: { status: 'ADMIN_REVIEW' } },
+    cancelledInvoice,
+  ];
+  const refundUrl = `${environment.apiBaseUrl}/admin/invoices/8/refund`;
+  let http: HttpTestingController;
+  let fixture: ComponentFixture<InvoicePageComponent>;
+
+  function openInvoice(admin: boolean, data: Invoice): HTMLElement {
+    TestBed.configureTestingModule({
+      imports: [InvoicePageComponent],
+      providers: [
+        provideRouter([]), provideHttpClient(), provideHttpClientTesting(),
+        { provide: ActivatedRoute, useValue: { snapshot: { data: { admin }, paramMap: convertToParamMap({ id: '8' }) } } },
+        { provide: AdminAuthService, useValue: { user: signal(null), idleWarning: signal(false) } },
+        { provide: AuthService, useValue: { user: signal(null), ensureAuthenticated: () => Promise.resolve(false) } },
+      ],
+    });
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(InvoicePageComponent);
+    http.expectOne(`${environment.apiBaseUrl}${admin ? '/admin' : ''}/invoices/8`).flush({ success: true, data });
+    fixture.detectChanges();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  function fill(form: HTMLFormElement, field: string, value: string): void {
+    const control = form.elements.namedItem(field) as HTMLInputElement | HTMLTextAreaElement;
+    expect(control).not.toBeNull();
+    control.value = value;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+  }
+
+  function submit(form: HTMLFormElement): void {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-19T10:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    http.verify();
+  });
+
+  it('shows an early refund as pending on the customer invoice without payment confirmation', () => {
+    const page = openInvoice(false, { ...cancelledInvoice, refund: { status: 'PENDING_REFUND', amount: 40000 } });
+    const summary = page.querySelector('.invoice-refund');
+    expect(summary?.textContent).toContain('Pending Refund');
+    expect(summary?.textContent).toContain('40,000.00');
+    expect(summary?.textContent).not.toContain('Amount refunded');
+    expect(page.querySelector('.invoice-refund-form')).toBeNull();
+  });
+
+  it('prints recorded customer refund details without exposing the admin review note', () => {
+    const page = openInvoice(false, { ...cancelledInvoice, refund: {
+      status: 'REFUNDED', amount: 1500, date: '2026-11-19', reference: 'VOUCHER-123', reviewNote: 'Internal agreement note',
+    } });
+    const summary = page.querySelector('.invoice-document .invoice-refund');
+    expect(summary?.classList.contains('no-print')).toBe(false);
+    expect(summary?.textContent).toContain('Refunded');
+    expect(summary?.textContent).toContain('1,500.00');
+    expect(summary?.textContent).toContain('Nov 19, 2026');
+    expect(summary?.textContent).toContain('VOUCHER-123');
+    expect(page.textContent).not.toContain('Internal agreement note');
+    expect(page.querySelector('.invoice-refund-form')).toBeNull();
+  });
+
+  it('records the fixed early refund once after date and reference are supplied', () => {
+    const page = openInvoice(true, { ...cancelledInvoice, refund: { status: 'PENDING_REFUND', amount: 40000 } });
+    const form = page.querySelector<HTMLFormElement>('.invoice-refund-form');
+    expect(form).not.toBeNull();
+    expect(form?.classList.contains('no-print')).toBe(true);
+    const amount = form!.elements.namedItem('amount') as HTMLInputElement;
+    expect(amount.readOnly).toBe(true);
+    expect(amount.value).toBe('40000');
+    fill(form!, 'refundDate', '2026-11-19');
+    submit(form!);
+    http.expectNone(refundUrl);
+    expect(form?.querySelector('[role="alert"]')?.textContent).toContain('reference');
+    fill(form!, 'reference', ' VOUCHER-123 ');
+
+    submit(form!);
+    submit(form!);
+    const response = http.expectOne({ method: 'POST', url: refundUrl });
+    expect(response.request.withCredentials).toBe(true);
+    expect(response.request.body).toEqual({ amount: 40000, refundDate: '2026-11-19', reference: 'VOUCHER-123' });
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('Pending Refund');
+    expect(form?.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    response.flush({ success: true, data: { status: 'REFUNDED', amount: 40000, date: '2026-11-19', reference: 'VOUCHER-123' } });
+    fixture.detectChanges();
+    expect(page.querySelector('.invoice-refund-form')).toBeNull();
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('VOUCHER-123');
+    expect(page.querySelector('.payment-history')?.textContent).toContain('GCASH-0042');
+    expect(page.querySelector('.invoice-totals')?.textContent).toContain('50,000.00');
+  });
+
+  it('requires evidence of the signed agreement to record zero as no refund due', () => {
+    const page = openInvoice(true, { ...cancelledInvoice, refund: { status: 'ADMIN_REVIEW' } });
+    const form = page.querySelector<HTMLFormElement>('.invoice-refund-form');
+    expect(form).not.toBeNull();
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('Admin Review');
+    fill(form!, 'amount', '0');
+    expect(form?.elements.namedItem('refundDate')).toBeNull();
+    submit(form!);
+    http.expectNone(refundUrl);
+    expect(form?.querySelector('[role="alert"]')?.textContent).toContain('signed agreement');
+    fill(form!, 'reviewNote', ' Signed contract dated 2026-10-18 ');
+    submit(form!);
+    const response = http.expectOne({ method: 'POST', url: refundUrl });
+    expect(response.request.body).toEqual({ amount: 0, reviewNote: 'Signed contract dated 2026-10-18' });
+    response.flush({ success: true, data: { status: 'NO_REFUND_DUE', amount: 0, reviewNote: 'Signed contract dated 2026-10-18' } });
+    fixture.detectChanges();
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('No Refund Due');
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('Signed contract dated 2026-10-18');
+    expect(page.querySelector('.invoice-refund-form')).toBeNull();
+  });
+
+  it('rejects a late refund above the amount paid and preserves the entered record if saving fails', () => {
+    const page = openInvoice(true, { ...cancelledInvoice, refund: { status: 'ADMIN_REVIEW' } });
+    const form = page.querySelector<HTMLFormElement>('.invoice-refund-form');
+    expect(form).not.toBeNull();
+    fill(form!, 'amount', '50000.01');
+    fill(form!, 'reviewNote', 'Signed contract dated 2026-10-18');
+    submit(form!);
+    http.expectNone(refundUrl);
+    expect(form?.querySelector('[role="alert"]')?.textContent).toContain('amount paid');
+    fill(form!, 'amount', '50000');
+    fill(form!, 'refundDate', '2026-11-19');
+    fill(form!, 'reference', 'VOUCHER-123');
+    submit(form!);
+    http.expectOne({ method: 'POST', url: refundUrl }).flush({ message: 'Refund date is before cancellation.' }, { status: 400, statusText: 'Bad Request' });
+    fixture.detectChanges();
+    expect(form?.querySelector('[role="alert"]')?.textContent).toContain('Refund date is before cancellation.');
+    expect((form?.elements.namedItem('reference') as HTMLInputElement).value).toBe('VOUCHER-123');
+    expect(form?.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+  });
+
+  it.each(ineligibleInvoices)('only offers recording on cancelled paid invoices with a pending refund decision', data => {
+    const page = openInvoice(true, data);
+    expect(page.querySelector('.invoice-refund-form')).toBeNull();
+  });
+});
 
 describe('InvoicePageComponent', () => {
   it('keeps verified payments visible without requesting a balance on a cancelled reservation', () => {

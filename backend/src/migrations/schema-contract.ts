@@ -75,6 +75,7 @@ export const EXPECTED_MIGRATIONS = [
   '024_customer_bank_payment_snapshots.sql',
   '025_admin_notification_read.sql',
   '026_reservation_menu_selection.sql',
+  '027_invoice_refunds.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -255,6 +256,11 @@ const columns: ColumnShape[] = [
   decimal('INVOICE_ITEM', 'unit_price'), decimal('INVOICE_ITEM', 'line_total'),
   nvarchar('INVOICE_ITEM', 'item_type', 30),
 
+  integer('INVOICE_REFUND', 'invoice_id'), decimal('INVOICE_REFUND', 'refund_amount'),
+  column('INVOICE_REFUND', 'refund_date', 'date', 3, 10, 0, true),
+  nvarchar('INVOICE_REFUND', 'reference', 150, true), nvarchar('INVOICE_REFUND', 'review_note', 1000, true),
+  integer('INVOICE_REFUND', 'recorded_by'), datetime2('INVOICE_REFUND', 'recorded_at'),
+
   bigint('ADMIN_AUDIT_LOG', 'audit_id', false, true), integer('ADMIN_AUDIT_LOG', 'admin_id'),
   nvarchar('ADMIN_AUDIT_LOG', 'action', 80), nvarchar('ADMIN_AUDIT_LOG', 'entity_type', 50),
   integer('ADMIN_AUDIT_LOG', 'entity_id'), nvarchar('ADMIN_AUDIT_LOG', 'old_values', -1, true),
@@ -388,6 +394,10 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('INVOICE', 'C', ['CK_INVOICE_status', 'CK_INVOICE_amounts']),
   ...constraints('INVOICE_ITEM', 'PK', ['PK_INVOICE_ITEM']), ...constraints('INVOICE_ITEM', 'F', ['FK_INVOICE_ITEM_INVOICE']),
   ...constraints('INVOICE_ITEM', 'C', ['CK_INVOICE_ITEM_values', 'CK_INVOICE_ITEM_type']),
+  ...constraints('INVOICE_REFUND', 'PK', ['PK_INVOICE_REFUND']),
+  ...constraints('INVOICE_REFUND', 'F', ['FK_INVOICE_REFUND_INVOICE', 'FK_INVOICE_REFUND_ADMIN']),
+  ...constraints('INVOICE_REFUND', 'D', ['DF_INVOICE_REFUND_recorded_at']),
+  ...constraints('INVOICE_REFUND', 'C', ['CK_INVOICE_REFUND_settlement']),
   ...constraints('ADMIN_AUDIT_LOG', 'PK', ['PK_ADMIN_AUDIT_LOG']), ...constraints('ADMIN_AUDIT_LOG', 'F', ['FK_ADMIN_AUDIT_LOG_ADMIN']),
   ...constraints('ADMIN_AUDIT_LOG', 'D', ['DF_ADMIN_AUDIT_LOG_created']),
   ...constraints('ADMIN_AUDIT_LOG', 'C', ['CK_ADMIN_AUDIT_LOG_old_json', 'CK_ADMIN_AUDIT_LOG_new_json']),
@@ -454,6 +464,7 @@ const indexes: IndexShape[] = [
   index('PAYMENT_TRANSACTION', 'IX_PAYMENT_TRANSACTION_payment_date', ['payment_date']),
   index('PAYMENT_TRANSACTION', 'UX_PAYMENT_TRANSACTION_reference', ['payment_method', 'transaction_ref'], [], true, 'transaction_ref is not null'),
   index('INVOICE_ITEM', 'IX_INVOICE_ITEM_invoice', ['invoice_id']),
+  index('INVOICE_REFUND', 'UX_INVOICE_REFUND_reference', ['reference'], [], true, 'reference is not null'),
   index('ADMIN_AUDIT_LOG', 'IX_ADMIN_AUDIT_LOG_admin_created', ['admin_id', 'created_at']),
   index('ADMIN_AUDIT_LOG', 'IX_ADMIN_AUDIT_LOG_entity', ['entity_type', 'entity_id', 'created_at']),
   index('PAYMENT_PROOF', 'UX_PAYMENT_PROOF_active_reference', ['transaction_reference'], [], true, 'transaction_reference is not null'),

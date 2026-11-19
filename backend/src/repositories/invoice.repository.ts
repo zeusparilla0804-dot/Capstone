@@ -1,12 +1,22 @@
 import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
-import type { CancellationAssessment, InvoiceDetails } from '../types/invoice.types.js';
+import type { CancellationAssessment, InvoiceDetails, InvoiceRefund, RecordedRefund, RefundSettlement } from '../types/invoice.types.js';
 import { queueBookingNotification } from '../services/notification.service.js';
 import { writeAdminAudit } from './audit.repository.js';
 import { readMenuSnapshot } from '../services/package-menu.service.js';
 import { bankSnapshotColumns, mapBankSnapshot } from './payment-bank.repository.js';
+import { lockedBookingStatus, runBookingStatusTransaction } from './booking-status.repository.js';
+import { AppError } from '../utils/app-error.js';
 
 const dateValue = (value: Date | string | undefined) => value ? new Date(value).toISOString() : undefined;
+
+const cancellationAssessmentApply = `OUTER APPLY (
+  SELECT TOP (1) JSON_QUERY(CASE WHEN ISJSON(a.new_values)=1 THEN a.new_values END,'$.cancellation') assessment
+  FROM dbo.ADMIN_AUDIT_LOG a
+  WHERE r.status='CANCELLED' AND a.entity_type='BOOKING' AND a.entity_id=r.reservation_id
+    AND a.action='BOOKING_STATUS_CHANGED'
+  ORDER BY a.audit_id DESC
+) cancellation`;
 
 function readCancellationAssessment(value: unknown): CancellationAssessment | undefined {
   if (typeof value !== 'string') return undefined;
@@ -17,6 +27,114 @@ function readCancellationAssessment(value: unknown): CancellationAssessment | un
     if (data.kind !== 'EARLY' || typeof data.forfeitedAmount !== 'number' || typeof data.refundableAmount !== 'number') return undefined;
     return { kind: data.kind, date: data.date, forfeitedAmount: data.forfeitedAmount, refundableAmount: data.refundableAmount };
   } catch { return undefined; }
+}
+
+interface RefundRow {
+  refund_amount: number;
+  refund_date: string | null;
+  reference: string | null;
+  review_note: string | null;
+}
+
+async function readRecordedRefund(request: sql.Request, invoiceId: number, admin: boolean): Promise<RecordedRefund | undefined> {
+  const result = await request.replaceInput('invoiceId', sql.Int, invoiceId)
+    .query<RefundRow>(`SELECT refund_amount,CONVERT(varchar(10),refund_date,23) refund_date,reference,review_note
+      FROM dbo.INVOICE_REFUND WHERE invoice_id=@invoiceId`);
+  const row = result.recordset[0];
+  if (!row) return undefined;
+  const amount = Number(row.refund_amount);
+  return {
+    status: amount > 0 ? 'REFUNDED' : 'NO_REFUND_DUE',
+    amount,
+    ...(row.refund_date ? { date: row.refund_date } : {}),
+    ...(row.reference ? { reference: row.reference } : {}),
+    ...(admin && row.review_note ? { reviewNote: row.review_note } : {}),
+  };
+}
+
+function refundWithoutSettlement(cancellation: CancellationAssessment | undefined): InvoiceRefund {
+  if (cancellation?.kind !== 'EARLY') return { status: 'ADMIN_REVIEW' };
+  const amount = cancellation.refundableAmount;
+  return { status: amount > 0 ? 'PENDING_REFUND' : 'NO_REFUND_DUE', amount };
+}
+
+function refundTableMissing(error: unknown): boolean {
+  return error instanceof Error && 'number' in error && error.number === 208 && error.message.includes('dbo.INVOICE_REFUND');
+}
+
+async function findRefund(
+  pool: sql.ConnectionPool,
+  invoiceId: number,
+  cancellation: CancellationAssessment | undefined,
+  admin: boolean,
+): Promise<InvoiceRefund | undefined> {
+  try {
+    return await readRecordedRefund(pool.request(), invoiceId, admin) ?? refundWithoutSettlement(cancellation);
+  } catch (error) {
+    if (refundTableMissing(error)) return undefined;
+    throw error;
+  }
+}
+
+export async function saveInvoiceRefund(invoiceId: number, adminId: number, settlement: RefundSettlement): Promise<RecordedRefund> {
+  const { amount, date, reference, reviewNote } = settlement;
+  try {
+    return await runBookingStatusTransaction(async (request) => {
+      const invoice = await request.input('invoiceId', sql.Int, invoiceId)
+        .query<{ reservation_id: number }>('SELECT reservation_id FROM dbo.INVOICE WHERE invoice_id=@invoiceId');
+      const reservationId = invoice.recordset[0]?.reservation_id;
+      if (!reservationId) throw new AppError(404, 'Invoice not found.');
+
+      const booking = await lockedBookingStatus(reservationId, request);
+      if (booking?.status !== 'CANCELLED') throw new AppError(409, 'Refunds can only be recorded for cancelled reservations.');
+
+      const existing = await readRecordedRefund(request, invoiceId, true);
+      if (existing) {
+        if (existing.amount === amount && existing.date === date && existing.reference === reference && existing.reviewNote === reviewNote) {
+          return existing;
+        }
+        throw new AppError(409, 'A refund decision is already recorded for this invoice.');
+      }
+
+      const source = await request.query<{ amount_paid: number; cancellation_assessment: string | null }>(
+        `SELECT COALESCE(pay.amount_paid,0) amount_paid,cancellation.assessment cancellation_assessment
+        FROM dbo.RESERVATION r LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id
+        ${cancellationAssessmentApply}
+        WHERE r.reservation_id=@reservationId`);
+      const paid = Number(source.recordset[0]?.amount_paid ?? 0);
+      if (paid <= 0) throw new AppError(409, 'This invoice has no verified payments to refund.');
+      if (amount > paid) throw new AppError(400, 'Refund amount cannot exceed the verified payments.');
+
+      const assessment = refundWithoutSettlement(readCancellationAssessment(source.recordset[0]?.cancellation_assessment));
+      if (assessment.status === 'NO_REFUND_DUE') throw new AppError(409, 'No refund is due for this cancellation.');
+      if (assessment.status === 'PENDING_REFUND' && amount !== assessment.amount) {
+        throw new AppError(400, 'Enter the assessed refund amount for this cancellation.');
+      }
+      if (assessment.status === 'ADMIN_REVIEW' && !reviewNote) {
+        throw new AppError(400, 'Enter a review note based on the signed agreement.');
+      }
+
+      await request.input('refundAmount', sql.Decimal(12, 2), amount)
+        .input('refundDate', sql.VarChar(10), date ?? null)
+        .input('refundReference', sql.NVarChar(150), reference ?? null)
+        .input('refundNote', sql.NVarChar(1000), reviewNote ?? null)
+        .input('recordedBy', sql.Int, adminId)
+        .query(`INSERT dbo.INVOICE_REFUND(invoice_id,refund_amount,refund_date,reference,review_note,recorded_by)
+          VALUES(@invoiceId,@refundAmount,CONVERT(date,@refundDate,23),@refundReference,@refundNote,@recordedBy)`);
+      const refund: RecordedRefund = { status: amount > 0 ? 'REFUNDED' : 'NO_REFUND_DUE', ...settlement };
+      await writeAdminAudit({
+        adminId, action: amount > 0 ? 'REFUND_RECORDED' : 'REFUND_DECISION_RECORDED',
+        entityType: 'INVOICE', entityId: invoiceId, newValues: { reservationId, ...refund },
+      }, request);
+      return refund;
+    });
+  } catch (error) {
+    if (refundTableMissing(error)) throw new AppError(503, 'Refund tracking is temporarily unavailable.');
+    if (error instanceof Error && 'number' in error && (error.number === 2601 || error.number === 2627)) {
+      throw new AppError(409, 'This refund reference or invoice is already recorded.');
+    }
+    throw error;
+  }
 }
 
 interface InvoicePackageLine {
@@ -142,13 +260,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
     JOIN dbo.EVENT e ON e.event_id=r.event_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
     LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id
     LEFT JOIN dbo.ADMIN issuer ON issuer.admin_id=i.issued_by
-    OUTER APPLY (
-      SELECT TOP (1) JSON_QUERY(CASE WHEN ISJSON(a.new_values)=1 THEN a.new_values END,'$.cancellation') assessment
-      FROM dbo.ADMIN_AUDIT_LOG a
-      WHERE r.status='CANCELLED' AND a.entity_type='BOOKING' AND a.entity_id=r.reservation_id
-        AND a.action='BOOKING_STATUS_CHANGED'
-      ORDER BY a.audit_id DESC
-    ) cancellation
+    ${cancellationAssessmentApply}
     WHERE i.invoice_id=@invoiceId AND (@customerId IS NULL OR c.customer_id=@customerId)`);
   const row = main.recordset[0];
   if (!row) return undefined;
@@ -161,6 +273,8 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const paid = Number(row.amount_paid);
   const total = Number(row.total_amount);
   const cancelled = row.reservation_status === 'CANCELLED' || row.status === 'CANCELLED';
+  const cancellation = cancelled ? readCancellationAssessment(row.cancellation_assessment) : undefined;
+  const refund = cancelled && paid > 0 ? await findRefund(pool, invoiceId, cancellation, customerId === undefined) : undefined;
   const settledPaymentStatus = paid >= total ? 'PAID' : paid > 0 ? 'PARTIALLY_PAID' : row.status;
   return {
     invoiceId: Number(row.invoice_id), invoiceNumber: row.invoice_number, issueDate: dateValue(row.issued_at)!,
@@ -175,7 +289,7 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
     items: items.recordset.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: Number(item.unit_price), amount: Number(item.line_total) })),
     subtotal: Number(row.subtotal), discount: Number(row.discount_amount), totalAmount: total, amountPaid: paid,
     remainingBalance: cancelled ? 0 : Math.max(total - paid, 0),
-    cancellation: cancelled ? readCancellationAssessment(row.cancellation_assessment) : undefined,
+    cancellation, refund,
     payments: payments.recordset.map((payment) => ({
       id: Number(payment.id), date: dateValue(payment.payment_date)!, reference: payment.transaction_ref ?? undefined,
       method: payment.payment_method, amount: Number(payment.amount), status: payment.status, ...mapBankSnapshot(payment),

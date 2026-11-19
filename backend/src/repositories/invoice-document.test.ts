@@ -15,6 +15,7 @@ const [{ findInvoice }, { closeDatabase }] = await Promise.all([
 
 test('invoice and receipt use the issuing administrator and retain the recorded payment ledger', async t => {
   let reservationStatus = 'CONFIRMED';
+  let refundRow: Record<string, unknown> | undefined;
   const pool = { connected: true, close: async () => {}, request: () => new sql.Request() };
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   t.mock.method(sql.Request.prototype, 'query', async (command: string) => {
@@ -30,6 +31,7 @@ test('invoice and receipt use the issuing administrator and retain the recorded 
         guest_count: 50, customer_id: 7, customer_name: 'Preview Customer', issuer_name: 'Issuing Administrator' }] };
     }
     if (command.includes('FROM dbo.INVOICE_ITEM')) return { recordset: [] };
+    if (command.includes('FROM dbo.INVOICE_REFUND')) return { recordset: refundRow ? [refundRow] : [] };
     if (command.includes('FROM dbo.PAYMENT_TRANSACTION')) {
       assert.match(command, /ORDER BY pt\.payment_date DESC,pt\.payment_transaction_id DESC/);
       return { recordset: [{ id: 1, payment_date: '2026-11-10',
@@ -52,7 +54,14 @@ test('invoice and receipt use the issuing administrator and retain the recorded 
     assert.equal(cancelled?.remainingBalance, 0);
     assert.equal(cancelled?.amountPaid, 5000);
     assert.deepEqual(cancelled?.cancellation, { kind: 'EARLY', date: '2026-11-30', forfeitedAmount: 1000, refundableAmount: 4000 });
+    assert.deepEqual(cancelled?.refund, { status: 'PENDING_REFUND', amount: 4000 });
     assert.deepEqual(cancelled?.payments, doc?.payments);
+
+    refundRow = { refund_amount: 4000, refund_date: '2026-12-01', reference: 'REFUND-42', review_note: 'Internal note' };
+    const customerReceipt = await findInvoice(8, 7);
+    assert.deepEqual(customerReceipt?.refund, { status: 'REFUNDED', amount: 4000, date: '2026-12-01', reference: 'REFUND-42' });
+    assert.equal((await findInvoice(8))?.refund?.reviewNote, 'Internal note');
+    assert.deepEqual(customerReceipt?.payments, doc?.payments);
   } finally { await closeDatabase(); }
 });
 
