@@ -71,7 +71,19 @@ export const adminController={
  const body=proofBody(q.body);
  if(body['reference']!==undefined&&typeof body['reference']!=='string')throw new AppError(400,'Payment reference is invalid.');
  if(body['paymentDate']!==undefined&&typeof body['paymentDate']!=='string')throw new AppError(400,'Payment date is invalid.');
- const data=await adminService.recordPayment(q.admin!.id,{reservationId:Number(body['reservationId']),amount:Number(body['amount']),method:typeof body['method']==='string'?body['method'] as PaymentInput['method']:'' as PaymentInput['method'],reference:body['reference'] as string|undefined,requestId:body['requestId'] as string|undefined,paymentDate:body['paymentDate'] as string??''});
+ const { destinationId, destinationVersion } = body;
+ if (destinationId !== undefined && typeof destinationId !== 'number') throw new AppError(400, 'Bank account identifier is invalid.');
+ if (destinationVersion !== undefined && typeof destinationVersion !== 'string') throw new AppError(400, 'Bank account version is invalid. Refresh the bank accounts.');
+ const data = await adminService.recordPayment(q.admin!.id, {
+  reservationId: Number(body['reservationId']),
+  amount: Number(body['amount']),
+  method: (typeof body['method'] === 'string' ? body['method'] : '') as PaymentInput['method'],
+  reference: body['reference'] as string | undefined,
+  requestId: body['requestId'] as string | undefined,
+  paymentDate: body['paymentDate'] as string ?? '',
+  destinationId,
+  destinationVersion,
+ });
  s.status(201).json({success:true,message:'Payment recorded.',data});
  }catch(e){n(e);}}
 };

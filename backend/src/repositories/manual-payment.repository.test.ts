@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { createServer } from 'node:http';
 import test from 'node:test';
 import sql from 'mssql';
 
@@ -14,6 +16,43 @@ const { closeDatabase } = await import('../config/database.js');
 const { paymentBankVersion } = await import('../services/payment-bank.service.js');
 const bank = { id: 2, method: 'BANK_TRANSFER', label: 'Bank B', accountName: 'LA Chef', accountHint: 'Ending 2222', isAvailable: true, mime: 'image/png', image: Buffer.from('bank-b') };
 const bankChoice = { destinationId: bank.id, destinationVersion: paymentBankVersion(bank) };
+
+test('admin payments endpoint records the bank selected for a manual installment', async t => {
+  const { default: app } = await import('../app.js');
+  const db = installDatabase(t, 'CONFIRMED', { amountPaid: 50, paymentMethod: 'CASH' });
+  const server = createServer(app).listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/api/admin/payments`;
+  const payment = {
+    reservationId: 5, amount: 20, method: 'BANK_TRANSFER',
+    reference: 'BANK-ADMIN-20', paymentDate: '2026-10-02',
+  };
+  const post = (body: Record<string, unknown>) => fetch(url, {
+    method: 'POST',
+    headers: { cookie: 'la_chef_admin_session=test', 'content-type': 'application/json', 'x-la-chef-request': '1' },
+    body: JSON.stringify(body),
+  });
+  try {
+    const response = await post({ ...payment, ...bankChoice });
+    const body = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(body));
+    assert.deepEqual(body, { success: true, message: 'Payment recorded.', data: { reference: payment.reference } });
+    assert.equal(db.credits.length, 1);
+    assert.equal(db.credits[0]?.['destination_id'], bank.id);
+    assert.equal(db.credits[0]?.['destination_version'], bankChoice.destinationVersion);
+    assert.equal(db.amountPaid(), 70);
+
+    assert.equal((await post({ ...payment, ...bankChoice })).status, 201);
+    assert.equal((await post({ ...payment, reference: 'MISSING-BANK' })).status, 400);
+    assert.equal((await post({ ...payment, ...bankChoice, destinationId: '2' })).status, 400);
+    assert.equal((await post({ ...payment, ...bankChoice, destinationVersion: [bankChoice.destinationVersion] })).status, 400);
+    assert.equal(db.credits.length, 1);
+    assert.equal(db.amountPaid(), 70);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await closeDatabase();
+  }
+});
 
 test('staff bank installments store the selected receiving bank and reject changed-bank reference replays', async t => {
   const db = installDatabase(t, 'CONFIRMED', { amountPaid: 50, paymentMethod: 'BANK_TRANSFER' });
@@ -145,7 +184,7 @@ function installDatabase(
   const credits: Record<string, unknown>[] = [];
   const queries: string[] = [];
   const events: string[] = [];
-  const pool = { connected: true, close: async () => {} };
+  const pool = { connected: true, close: async () => {}, request: () => new sql.Request() };
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   t.mock.method(sql.Transaction.prototype, 'begin', async () => { events.push('begin'); });
   t.mock.method(sql.Transaction.prototype, 'commit', async () => { events.push('commit'); });
@@ -154,6 +193,7 @@ function installDatabase(
     queries.push(command);
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, value]) => [key, value.value]));
     const result = (recordset: Record<string, unknown>[] = [], rows = 1) => ({ recordset, rowsAffected: [rows] });
+    if (/FROM dbo\.ADMIN_SESSION/i.test(command)) return result([{ admin_id: 2, full_name: 'Test Admin', email: 'admin@example.test' }]);
     if (/FROM dbo\.PAYMENT_DESTINATION d/i.test(command)) return result([bank]);
     if (/FROM dbo\.BOOKING_POLICY\b/i.test(command)) return result(amounts.policy ? [amounts.policy] : []);
     if (/UPDATE dbo\.BOOKING_POLICY/i.test(command)) {
