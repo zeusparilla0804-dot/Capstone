@@ -1,7 +1,7 @@
 import type { MenuSelectionSnapshot } from './menu.types.js';
 import type { PaymentBankSnapshot } from './payment-bank.types.js';
 export type CancellationAssessment =
-  | { kind: 'EARLY'; date: string; forfeitedAmount: number; refundableAmount: number }
+  | { kind: 'EARLY' | 'LATE'; date: string; forfeitedAmount: number; refundableAmount: number }
   | { kind: 'ADMIN_REVIEW'; date: string };
 
 export interface RefundSettlement {

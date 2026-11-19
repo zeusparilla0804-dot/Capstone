@@ -66,13 +66,19 @@ export class InvoicePageComponent {
     return this.refundCalendar.format(new Date());
   }
 
+  protected assessedRefundAmount(doc: Invoice): number | undefined {
+    if (doc.refund?.status === 'PENDING_REFUND') return doc.refund.amount;
+    if (doc.cancellation?.kind === 'LATE') return doc.cancellation.refundableAmount;
+    return undefined;
+  }
+
   protected recordRefund(doc: Invoice): void {
     if (this.savingRefund() || this.loading() || this.invoice() !== doc || !this.canRecordRefund(doc)) return;
 
     const refund = doc.refund;
     const isReview = refund?.status === 'ADMIN_REVIEW';
     const details = this.refundForm.getRawValue();
-    const amount = refund?.status === 'PENDING_REFUND' ? refund.amount : details.amount;
+    const amount = this.assessedRefundAmount(doc) ?? details.amount;
     const { refundDate } = details;
     const reference = details.reference.trim();
     const reviewNote = details.reviewNote.trim();

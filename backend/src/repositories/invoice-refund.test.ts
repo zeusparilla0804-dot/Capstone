@@ -90,6 +90,14 @@ test('an assessed refund is recorded once and the original payment ledger is pre
     const decision = await recordInvoiceRefund(8, 2, { amount: 0, reviewNote: ' Signed agreement reviewed. ' });
     assert.deepEqual(decision, { status: 'NO_REFUND_DUE', amount: 0, reviewNote: 'Signed agreement reviewed.' });
     assert.deepEqual(audit, { action: 'REFUND_DECISION_RECORDED', id: 8, data: { reservationId: 42, ...decision } });
+
+    stored = undefined;
+    assessment = { kind: 'LATE', date: '2026-01-01', forfeitedAmount: 2500, refundableAmount: 2500 };
+    const latePayout = { ...payout, amount: 2500, reviewNote: '50% down payment forfeiture per signed agreement.' };
+    await assert.rejects(recordInvoiceRefund(8, 2, { ...latePayout, reviewNote: undefined }), /signed agreement/);
+    await assert.rejects(recordInvoiceRefund(8, 2, { ...latePayout, amount: 3000 }), /assessed refund amount/);
+    assert.equal(stored, undefined);
+    assert.equal((await recordInvoiceRefund(8, 2, latePayout)).amount, 2500);
   } finally {
     await closeDatabase();
   }

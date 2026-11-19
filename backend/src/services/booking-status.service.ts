@@ -21,10 +21,11 @@ function assessCancellation(eventDate: string, total: number, paid: number, date
   const paidCents = Math.round(paid * 100);
   if (paidCents <= 0) return undefined;
   const daysAhead = (Date.parse(`${eventDate}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86_400_000;
-  if (!customerRequested || daysAhead < 7) return { kind: 'ADMIN_REVIEW', date };
+  if (!customerRequested || daysAhead < 0) return { kind: 'ADMIN_REVIEW', date };
   const depositCents = Math.min(paidCents, Math.round(requiredReservationDeposit(total) * 100));
-  const forfeitedCents = Math.round(depositCents * 0.20);
-  return { kind: 'EARLY', date, forfeitedAmount: forfeitedCents / 100, refundableAmount: (paidCents - forfeitedCents) / 100 };
+  const early = daysAhead >= 7;
+  const forfeitedCents = Math.round(depositCents * (early ? 0.20 : 0.50));
+  return { kind: early ? 'EARLY' : 'LATE', date, forfeitedAmount: forfeitedCents / 100, refundableAmount: (paidCents - forfeitedCents) / 100 };
 }
 
 const transitions: Record<BookingStatus, readonly BookingStatus[]> = {

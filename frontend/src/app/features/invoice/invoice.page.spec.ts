@@ -174,6 +174,33 @@ describe('Invoice refund records', () => {
     expect(page.querySelector('.invoice-refund-form')).toBeNull();
   });
 
+  it('shows the late forfeiture and records the assessed refund after signed agreement review', () => {
+    const page = openInvoice(true, {
+      ...cancelledInvoice,
+      cancellation: { kind: 'LATE', date: '2026-11-18', forfeitedAmount: 25000, refundableAmount: 25000 },
+      refund: { status: 'ADMIN_REVIEW' },
+    });
+    expect(page.querySelector('.invoice-totals')?.textContent).toContain('Forfeiture under review');
+    expect(page.querySelector('.invoice-refund')?.textContent).toContain('Admin Review');
+    const form = page.querySelector<HTMLFormElement>('.invoice-refund-form')!;
+    const amount = form.elements.namedItem('amount') as HTMLInputElement;
+    expect(amount.readOnly).toBe(true);
+    expect(amount.value).toBe('25000');
+    fill(form, 'refundDate', '2026-11-19');
+    fill(form, 'reference', 'VOUCHER-123');
+    submit(form);
+    http.expectNone(refundUrl);
+    fill(form, 'reviewNote', 'Signed agreement reviewed');
+    submit(form);
+    const response = http.expectOne({ method: 'POST', url: refundUrl });
+    expect(response.request.body).toEqual({
+      amount: 25000, refundDate: '2026-11-19', reference: 'VOUCHER-123', reviewNote: 'Signed agreement reviewed',
+    });
+    response.flush({ success: true, data: { status: 'REFUNDED', amount: 25000 } });
+    fixture.detectChanges();
+    expect(page.querySelector('.invoice-totals')?.textContent).toContain('Retained from down payment');
+  });
+
   it('rejects a late refund above the amount paid and preserves the entered record if saving fails', () => {
     const page = openInvoice(true, { ...cancelledInvoice, refund: { status: 'ADMIN_REVIEW' } });
     const form = page.querySelector<HTMLFormElement>('.invoice-refund-form');
@@ -370,6 +397,7 @@ describe('InvoicePageComponent', () => {
     expect(agreement.textContent).toContain('remaining balance is due on the event date');
     expect(agreement.textContent).toContain('at least 7 calendar days before the event');
     expect(agreement.textContent).toContain('20% of the verified down payment');
+    expect(agreement.textContent).toContain('50% of the verified down payment');
 
     const signatures = agreement.querySelectorAll('.invoice-signature');
     expect(signatures).toHaveLength(2);

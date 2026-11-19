@@ -24,7 +24,8 @@ function readCancellationAssessment(value: unknown): CancellationAssessment | un
     const data = JSON.parse(value) as Partial<CancellationAssessment> | null;
     if (!data || typeof data.date !== 'string') return undefined;
     if (data.kind === 'ADMIN_REVIEW') return { kind: data.kind, date: data.date };
-    if (data.kind !== 'EARLY' || typeof data.forfeitedAmount !== 'number' || typeof data.refundableAmount !== 'number') return undefined;
+    if (data.kind !== 'EARLY' && data.kind !== 'LATE') return undefined;
+    if (typeof data.forfeitedAmount !== 'number' || typeof data.refundableAmount !== 'number') return undefined;
     return { kind: data.kind, date: data.date, forfeitedAmount: data.forfeitedAmount, refundableAmount: data.refundableAmount };
   } catch { return undefined; }
 }
@@ -105,9 +106,10 @@ export async function saveInvoiceRefund(invoiceId: number, adminId: number, sett
       if (paid <= 0) throw new AppError(409, 'This invoice has no verified payments to refund.');
       if (amount > paid) throw new AppError(400, 'Refund amount cannot exceed the verified payments.');
 
-      const assessment = refundWithoutSettlement(readCancellationAssessment(source.recordset[0]?.cancellation_assessment));
+      const cancellation = readCancellationAssessment(source.recordset[0]?.cancellation_assessment);
+      const assessment = refundWithoutSettlement(cancellation);
       if (assessment.status === 'NO_REFUND_DUE') throw new AppError(409, 'No refund is due for this cancellation.');
-      if (assessment.status === 'PENDING_REFUND' && amount !== assessment.amount) {
+      if (cancellation && cancellation.kind !== 'ADMIN_REVIEW' && amount !== cancellation.refundableAmount) {
         throw new AppError(400, 'Enter the assessed refund amount for this cancellation.');
       }
       if (assessment.status === 'ADMIN_REVIEW' && !reviewNote) {

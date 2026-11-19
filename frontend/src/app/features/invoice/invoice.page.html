@@ -167,9 +167,12 @@
             </div>
           } @else if (doc.cancellation; as cancellation) {
             <div><dt>Cancellation date</dt><dd>{{ cancellation.date + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</dd></div>
-            @if (cancellation.kind === 'EARLY') {
-              <div><dt>Retained from down payment</dt><dd>{{ cancellation.forfeitedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-              @if (!doc.refund) {
+            @if (cancellation.kind !== 'ADMIN_REVIEW') {
+              @let awaitingReview = cancellation.kind === 'LATE' && (!doc.refund || doc.refund.status === 'ADMIN_REVIEW');
+              <div><dt>{{ awaitingReview ? 'Forfeiture under review' : 'Retained from down payment' }}</dt><dd>{{ cancellation.forfeitedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              @if (awaitingReview) {
+                <div><dt>Refund amount under review</dt><dd>{{ cancellation.refundableAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              } @else if (!doc.refund) {
                 <div><dt>Refundable amount</dt><dd>{{ cancellation.refundableAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
               }
             }
@@ -221,19 +224,25 @@
 
             @if (canRecordRefund(doc)) {
               @let isReview = refund.status === 'ADMIN_REVIEW';
-              @let amount = refund.status === 'PENDING_REFUND' ? refund.amount : refundForm.controls.amount.value;
+              @let assessedAmount = assessedRefundAmount(doc);
+              @let amount = assessedAmount ?? refundForm.controls.amount.value;
               <form class="invoice-refund-form no-print" [formGroup]="refundForm" (ngSubmit)="recordRefund(doc)"
                 aria-labelledby="refund-form-title" aria-describedby="refund-form-help" [attr.aria-busy]="savingRefund()">
                 <h3 id="refund-form-title">{{ isReview ? 'Record refund decision' : 'Record refund' }}</h3>
                 <p id="refund-form-help">
-                  {{ isReview
-                    ? 'Enter the amount returned to the customer or enter zero if the signed agreement requires no refund.'
-                    : 'Return the funds directly to the customer before recording the refund here.' }}
+                  @if (isReview && assessedAmount !== undefined) {
+                    Review the signed agreement before recording the assessed refund.
+                    @if (amount) { Return the funds to the customer before recording the refund here. }
+                  } @else if (isReview) {
+                    Enter the amount returned to the customer or enter zero if the signed agreement requires no refund.
+                  } @else {
+                    Return the funds directly to the customer before recording the refund here.
+                  }
                 </p>
                 <fieldset class="invoice-refund-form__fields" [disabled]="savingRefund()">
                   <div class="form-field">
                     <label for="refund-amount">Refund amount (PHP)</label>
-                    @if (isReview) {
+                    @if (assessedAmount === undefined) {
                       <input id="refund-amount" name="amount" type="number" formControlName="amount" min="0" [max]="doc.amountPaid" step="0.01" required />
                     } @else {
                       <input id="refund-amount" name="amount" type="number" [value]="amount" readonly />
@@ -273,7 +282,7 @@
             <li>The remaining balance is due on the event date.</li>
             <li>
               If you request cancellation at least 7 calendar days before the event, LA Chef retains 20% of the verified down payment.
-              For later requests, LA Chef reviews forfeiture or refund under the signed agreement.
+              For requests made within 6 calendar days before the event or on the event date, LA Chef retains 50% of the verified down payment after reviewing the signed agreement.
             </li>
           </ol>
         }

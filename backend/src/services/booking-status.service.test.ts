@@ -256,13 +256,19 @@ test('admin cancellation records the early forfeiture assessment at the Manila c
     assert.equal(db.amountPaid, amountPaid);
   }
   t.mock.timers.setTime(Date.parse('2026-10-24T16:00:00.000Z'));
-  const late = new BookingDb();
-  Object.assign(late, { status: 'CONFIRMED', eventDate: '2026-10-31', amountPaid: 75 });
-  await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
-    reason: 'Customer requested cancellation', mode: 'GENERIC_ADMIN', customerCancellationDate: '2026-10-25', request: late.request });
-  assert.deepEqual(JSON.parse(String(late.audit[0]?.['auditNewValues'])).cancellation, {
-    kind: 'ADMIN_REVIEW', date: '2026-10-25',
-  });
+  for (const scenario of [
+    { eventDate: '2026-10-31', amountPaid: 75, expected: { kind: 'LATE', forfeitedAmount: 25, refundableAmount: 50 } },
+    { eventDate: '2026-10-25', amountPaid: 50, expected: { kind: 'LATE', forfeitedAmount: 25, refundableAmount: 25 } },
+    { eventDate: '2026-10-27', amountPaid: 25, expected: { kind: 'LATE', forfeitedAmount: 12.5, refundableAmount: 12.5 } },
+    { eventDate: '2026-10-24', amountPaid: 50, expected: { kind: 'ADMIN_REVIEW' } },
+  ]) {
+    const late = new BookingDb();
+    Object.assign(late, { status: 'CONFIRMED', eventDate: scenario.eventDate, amountPaid: scenario.amountPaid });
+    await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
+      reason: 'Customer requested cancellation', mode: 'GENERIC_ADMIN', customerCancellationDate: '2026-10-25', request: late.request });
+    assert.deepEqual(JSON.parse(String(late.audit[0]?.['auditNewValues'])).cancellation, { ...scenario.expected, date: '2026-10-25' });
+    assert.equal(late.amountPaid, scenario.amountPaid);
+  }
   const staffCancellation = new BookingDb();
   Object.assign(staffCancellation, { status: 'PAYMENT_VERIFIED', eventDate: '2026-11-20', amountPaid: 50 });
   await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
