@@ -2,11 +2,82 @@ import type { MenuSelectionSnapshot, PackageMenuDefinition, PackageMenuField } f
 import { AppError } from '../utils/app-error.js';
 import { text } from '../utils/validation.js';
 
-const proteinFields = (proteins: readonly string[]): PackageMenuField[] => proteins.map(protein => ({
-  key: protein.toLowerCase(), label: `${protein} dish`,
+const proteinDishes = {
+  Beef: [
+    'Roast Beef with Mashed Potato',
+    'Roast Beef Royale',
+    'Beef Salpicao',
+    'Beef with Broccoli',
+    'Beef Morcon',
+    'Beef in Mushroom Sauce',
+    'Hungarian Beef Stew',
+    'Beef Caldereta',
+  ],
+  Pork: [
+    'Pork Spareribs in BBQ Sauce',
+    'Roast Pork Hamonado',
+    'Pork Hawaiian',
+    'Pork in Gravy Sauce',
+    'Grilled Liempo',
+    'Braised Pork Royale',
+    'Pork Caldereta',
+    'Roast Pork with Mashed Potato',
+    'Oriental BBQ Spareribs',
+  ],
+  Chicken: [
+    'Chicken Teriyaki',
+    'Chicken Stroganoff',
+    'Hawaiian Chicken',
+    'Buttered Chicken',
+    'Chicken Pastel',
+    'Chicken Inasal',
+    'Buffalo Wings',
+    'Oriental Chicken',
+    'Garlic Roasted Chicken',
+  ],
+  Fish: [
+    'Sweet & Sour Fish Fillet',
+    'Fish & Tofu with Oyster Sauce',
+    'Steamed Fish in Lemon Butter Sauce',
+    'Breaded Fish Fillet with Garlic Mayo',
+    'Breaded Fish Fillet with Tartar Sauce',
+    'Breaded Fish Fillet with Honey Mustard Sauce',
+  ],
+} as const;
+
+const sideDishes = {
+  Pasta: ['Bolognese', 'Carbonara', 'Alfredo', 'Chicken & Ham Pasta', 'Chunky Chicken Pasta'],
+  Noodles: ['Pansit Malabon', 'Pansit Palabok', 'Bam-I Guisado', 'Garlic Sotanghon Guisado'],
+  Vegetables: [
+    'Buttered Mixed Vegetables with Quail Egg',
+    'Stir-Fried Oriental Vegetables',
+    'Buttered Corn & Carrots',
+    'Honey-Glazed Vegetables',
+    'Potato Marble',
+    'Chopsuey',
+  ],
+} as const;
+
+const soupDishes = ['Crab & Corn Soup', 'Mushroom Soup', 'Pumpkin Soup'];
+const desserts = [
+  'Coffee Jelly with Cream',
+  'Fruit Salad',
+  'Mango Tapioca',
+  'Leche Flan',
+  'Buko Pandan',
+  'Cocktail Salad',
+  'Melon Jelly',
+  'Corn Salad',
+  'Oreo Cheesecake',
+  'Mango Panna Cotta',
+];
+const mainDishes = Object.values(proteinDishes).flat();
+
+const proteinFields = (proteins: readonly (keyof typeof proteinDishes)[]): PackageMenuField[] => proteins.map(protein => ({
+  key: protein.toLowerCase(), label: `${protein} dish`, dishChoices: proteinDishes[protein],
 }));
 const mainFields = (count: number): PackageMenuField[] => Array.from({ length: count }, (_, index) => ({
-  key: `main${index + 1}`, label: `Main dish ${index + 1}`,
+  key: `main${index + 1}`, label: `Main dish ${index + 1}`, dishChoices: mainDishes,
 }));
 
 export function packageMenu(packageName: string): PackageMenuDefinition | undefined {
@@ -32,21 +103,27 @@ export function packageMenu(packageName: string): PackageMenuDefinition | undefi
     case 'ruby': case 'ruby package': mains = mainFields(4); soup = true; vegetable = true; includedItems = ['Steamed rice']; break;
     case 'bronze': case 'bronze package':
       mains = [{ key: 'firstMainProtein', label: 'First main dish category', options: ['Beef', 'Pork'] },
-        { key: 'firstMainDish', label: 'Beef or pork dish' }, ...proteinFields(['Chicken', 'Fish'])];
+        { key: 'firstMainDish', label: 'Beef or pork dish', dishChoices: {
+          categoryField: 'firstMainProtein', byCategory: { Beef: proteinDishes.Beef, Pork: proteinDishes.Pork },
+        } }, ...proteinFields(['Chicken', 'Fish'])];
       break;
     case 'silver': case 'silver package': mains = proteinFields(['Beef', 'Pork', 'Chicken', 'Fish']); soup = true; break;
     case 'gold': case 'gold package': mains = proteinFields(['Beef', 'Pork', 'Chicken', 'Fish']); soup = true; vegetable = true; break;
     default: return undefined;
   }
+  const sideCategories = vegetable ? ['Pasta', 'Noodles'] as const : ['Pasta', 'Noodles', 'Vegetables'] as const;
   return {
     fields: [
       ...mains,
       ...(appetizer ? [{ key: 'appetizer', label: 'Appetizer' }] : []),
-      ...(soup ? [{ key: 'soup', label: 'Soup' }] : []),
-      { key: 'sideKind', label: 'Side dish category', options: vegetable ? ['Pasta', 'Noodles'] : ['Pasta', 'Noodles', 'Vegetables'] },
-      { key: 'sideDish', label: 'Preferred side dish' },
-      ...(vegetable ? [{ key: 'vegetable', label: 'Vegetable dish' }] : []),
-      { key: 'dessert', label: 'Dessert' },
+      ...(soup ? [{ key: 'soup', label: 'Soup', dishChoices: soupDishes }] : []),
+      { key: 'sideKind', label: 'Side dish category', options: sideCategories },
+      { key: 'sideDish', label: 'Preferred side dish', dishChoices: {
+        categoryField: 'sideKind',
+        byCategory: Object.fromEntries(sideCategories.map(category => [category, sideDishes[category]])),
+      } },
+      ...(vegetable ? [{ key: 'vegetable', label: 'Vegetable dish', dishChoices: sideDishes.Vegetables }] : []),
+      { key: 'dessert', label: 'Dessert', dishChoices: desserts },
       { key: 'drink', label: 'Drink' },
     ],
     includedItems,

@@ -2,6 +2,10 @@ export interface PackageMenuField {
   key: string;
   label: string;
   options?: readonly string[];
+  dishChoices?: readonly string[] | {
+    categoryField: string;
+    byCategory: Readonly<Record<string, readonly string[]>>;
+  };
 }
 
 export interface PackageMenuDefinition {
