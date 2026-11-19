@@ -1,6 +1,7 @@
 import { DOCUMENT } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { CateringPackage } from '../../../core/models';
+import { packageTemplateName } from '../../../core/utils/package-template';
 import { packagePricingExplanation } from '../../../core/utils/package-pricing-display';
 
 const CLASSIC_INCLUSIONS = [
@@ -209,28 +210,28 @@ export class PackageExperienceComponent {
   protected readonly currentImageIndex = signal(0);
   protected readonly inclusionsExpanded = signal(false);
   protected readonly isClassic = computed(
-    () => /^PHP\s*480\s*Per\s*Head$/i.test(this.cateringPackage().name.trim()),
+    () => /^PHP\s*480\s*Per\s*Head$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isExpanded = computed(
-    () => /^PHP\s*580\s*Per\s*Head$/i.test(this.cateringPackage().name.trim()),
+    () => /^PHP\s*580\s*Per\s*Head$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isFullBuffet = computed(
-    () => /^PHP\s*680\s*Per\s*Head$/i.test(this.cateringPackage().name.trim()),
+    () => /^PHP\s*680\s*Per\s*Head$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isAmethyst = computed(
-    () => /^amethyst(?: package)?$/i.test(this.cateringPackage().name.trim()),
+    () => /^amethyst(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isRuby = computed(
-    () => /^ruby(?: package)?$/i.test(this.cateringPackage().name.trim()),
+    () => /^ruby(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isBronze = computed(
-    () => /^bronze(?: package)?$/i.test(this.cateringPackage().name.trim()),
+    () => /^bronze(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isSilver = computed(
-    () => /^silver(?: package)?$/i.test(this.cateringPackage().name.trim()),
+    () => /^silver(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly isGold = computed(
-    () => /^gold(?: package)?$/i.test(this.cateringPackage().name.trim()),
+    () => /^gold(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()),
   );
   protected readonly inclusionItems = computed(
     () => this.isClassic() ? CLASSIC_INCLUSIONS : this.isExpanded() ? EXPANDED_INCLUSIONS : this.isFullBuffet() ? FULL_BUFFET_INCLUSIONS : this.isGold() ? GOLD_INCLUSIONS
@@ -238,12 +239,12 @@ export class PackageExperienceComponent {
       : this.isBronze() ? BRONZE_INCLUSIONS
       : this.isRuby() ? RUBY_INCLUSIONS
       : this.isAmethyst() ? AMETHYST_INCLUSIONS
-      : /^diamond(?: package)?$/i.test(this.cateringPackage().name.trim())
+      : /^diamond(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim())
         ? DIAMOND_INCLUSIONS : this.cateringPackage().features,
   );
   protected readonly boldInclusionCount = computed(
     () => this.isClassic() || this.isExpanded() || this.isFullBuffet() ? 4 : this.isGold() ? 9 : this.isSilver() ? 3 : this.isBronze() ? 4 : this.isRuby() ? 6 : this.isAmethyst() ? 5
-      : /^diamond(?: package)?$/i.test(this.cateringPackage().name.trim()) ? 3 : 0,
+      : /^diamond(?: package)?$/i.test(packageTemplateName(this.cateringPackage()).trim()) ? 3 : 0,
   );
   protected readonly inclusionPreviewCount = computed(() => this.isClassic() || this.isExpanded() || this.isFullBuffet() ? 4 : this.isGold() ? 9 : this.isBronze() ? 4 : this.isRuby() ? 6 : this.isAmethyst() ? 5 : 3);
   protected readonly isReverse = computed(() => this.position() % 2 === 1);

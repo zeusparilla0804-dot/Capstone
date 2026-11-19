@@ -17,6 +17,19 @@ const debutPackage: CateringPackage = {
 };
 
 describe('PackageExperienceComponent', () => {
+  it('keeps menu inclusions after a package rename and renders the updated price', () => {
+    TestBed.configureTestingModule({ imports: [PackageExperienceComponent] });
+    const fixture = TestBed.createComponent(PackageExperienceComponent);
+    fixture.componentRef.setInput('cateringPackage', {
+      ...debutPackage, name: 'Celebration Buffet', menuKey: 'classic', category: 'standard',
+      pricingType: 'PER_HEAD', pricePerGuest: 525, basePrice: null,
+    });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Celebration Buffet');
+    expect(element.textContent).toContain('pork, chicken, and fish');
+    expect(element.textContent).toContain('PHP 525 per guest');
+  });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();

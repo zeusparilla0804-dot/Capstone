@@ -57,7 +57,7 @@ test('maps per-head and base-plus-excess catalog rows without coercing nullable 
   ]);
 
   assert.equal(packages[1]?.menu?.fields.filter(field => /^main\d$/.test(field.key)).length, 3);
-  assert.deepEqual(packages.map(({ menu: _menu, ...item }) => item), [
+  assert.deepEqual(packages.map(({ menu: _menu, menuKey: _menuKey, ...item }) => item), [
     {
       id: 1,
       name: 'PHP 480 Catering Package',
@@ -87,4 +87,13 @@ test('maps per-head and base-plus-excess catalog rows without coercing nullable 
       features: [],
     },
   ]);
+});
+
+test('renamed packages retain their menu and use the updated catalog price', () => {
+  const [pkg] = mapPackageRows([{
+    package_id: 10, package_name: 'Family Celebration', menu_key: 'classic',
+    event_type: 'Standard Catering', pricing_type: 'PER_HEAD', price_per_head: 525,
+  }]);
+  assert.equal(pkg.pricePerGuest, 525);
+  assert.deepEqual(pkg.menu?.fields.slice(0, 3).map(field => field.key), ['pork', 'chicken', 'fish']);
 });

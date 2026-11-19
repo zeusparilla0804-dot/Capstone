@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildMenuSnapshot, packageMenu, parseMenuSelections, readMenuSnapshot } from './package-menu.service.js';
 
+test('booking menu validation follows the saved menu key after a rename', () => {
+  const choices = { pork: 'Pork Hawaiian', chicken: 'Buttered Chicken', fish: 'Sweet & Sour Fish Fillet',
+    sideKind: 'Pasta', sideDish: 'Carbonara', dessert: 'Fruit Salad', drink: 'Iced tea' };
+  const snapshot = buildMenuSnapshot('Family Celebration', choices, 'classic');
+  assert.equal(snapshot?.items[0].label, 'Pork dish');
+  assert.equal(snapshot?.items[0].value, 'Pork Hawaiian');
+  assert.throws(() => buildMenuSnapshot('Gold Package', choices, 'classic-invalid'), /do not match/);
+});
+
 test('menu requests follow each published package inclusion and its number of main dishes', () => {
   const classic = packageMenu('PHP 480 Per Head')!;
   assert.deepEqual(classic.fields.slice(0, 3).map(field => field.label), ['Pork dish', 'Chicken dish', 'Fish dish']);

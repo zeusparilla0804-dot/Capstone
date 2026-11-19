@@ -76,6 +76,7 @@ export const EXPECTED_MIGRATIONS = [
   '025_admin_notification_read.sql',
   '026_reservation_menu_selection.sql',
   '027_invoice_refunds.sql',
+  '028_package_menu_keys.sql',
 ];
 
 const HISTORICAL_COMPATIBLE_MIGRATIONS = new Set(['007_starter_catalog.sql']);
@@ -160,6 +161,7 @@ const columns: ColumnShape[] = [
 
   integer('PACKAGE', 'package_id', false, true), integer('PACKAGE', 'event_id'),
   nvarchar('PACKAGE', 'package_name', 150), nvarchar('PACKAGE', 'description', 1000, true),
+  column('PACKAGE', 'menu_key', 'varchar', 30, 0, 0, true),
   column('PACKAGE', 'pricing_type', 'varchar', 20, 0, 0, false),
   decimal('PACKAGE', 'price_per_head', true), decimal('PACKAGE', 'base_price', true),
   integer('PACKAGE', 'included_guests', true), decimal('PACKAGE', 'excess_guest_price', true),
@@ -340,7 +342,7 @@ const constraintShapes: ConstraintShape[] = [
   ...constraints('EVENT', 'PK', ['PK_EVENT']), ...constraints('EVENT', 'UQ', ['UQ_EVENT_event_type']),
   ...constraints('PACKAGE', 'PK', ['PK_PACKAGE']), ...constraints('PACKAGE', 'UQ', ['UQ_PACKAGE_event_name']),
   ...constraints('PACKAGE', 'F', ['FK_PACKAGE_EVENT']), ...constraints('PACKAGE', 'D', ['DF_PACKAGE_is_active', 'DF_PACKAGE_pricing_type']),
-  ...constraints('PACKAGE', 'C', ['CK_PACKAGE_pricing_model', 'CK_PACKAGE_guest_limits']),
+  ...constraints('PACKAGE', 'C', ['CK_PACKAGE_pricing_model', 'CK_PACKAGE_guest_limits', 'CK_PACKAGE_menu_key']),
   ...constraints('MENU_ITEM', 'PK', ['PK_MENU_ITEM']), ...constraints('MENU_ITEM', 'UQ', ['UQ_MENU_ITEM_package_item']),
   ...constraints('MENU_ITEM', 'F', ['FK_MENU_ITEM_PACKAGE']),
   ...constraints('RESERVATION', 'PK', ['PK_RESERVATION']),

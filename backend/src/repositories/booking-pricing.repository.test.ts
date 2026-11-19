@@ -64,7 +64,7 @@ test('booking creation stores unit prices and quantities and charges catalog sub
     const values = Object.fromEntries(Object.entries(this.parameters).map(([key, parameter]) => [key, parameter.value]));
     const result = (recordset: unknown[] = []) => ({ recordset, rowsAffected: [1] });
     if (!/COUNT_BIG/.test(command) && /FROM dbo\.BOOKING_POLICY|policyCustomerId|UPDATE dbo\.BOOKING_POLICY/.test(command)) return result();
-    if (/FROM dbo\.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'PHP 480 Per Head', description: '', pricing_type: 'PER_HEAD', price_per_head: 480, event_type: 'Standard', min_guest: null, max_guest: null }]);
+    if (/FROM dbo\.PACKAGE p/.test(command)) return result([{ package_id: 1, package_name: 'Family Celebration', menu_key: 'classic', description: '', pricing_type: 'PER_HEAD', price_per_head: 525, event_type: 'Standard', min_guest: null, max_guest: null }]);
     if (/COUNT_BIG/i.test(command)) return result([{ activeBookingCount: 0, largestGuestCount: 0, hasMediumEvent: 0 }]);
     if (/FROM dbo\.ADD_ON/.test(command)) return result([
       { add_on_id: 1, add_on_name: 'Tiffany Chair', description: '', price: 100 },
@@ -89,8 +89,8 @@ test('booking creation stores unit prices and quantities and charges catalog sub
     assert.equal(booking.menuSelection?.items[0]?.value, 'Pork preference');
     assert.equal((booking as any).paymentMethod, 'cash');
     assert.deepEqual(saved.map(item => [item['price'], item['quantity']]), [[100, 12], [14000, 2]]);
-    assert.equal(booking.total, 34000);
-    assert.equal(due, 34000);
+    assert.equal(booking.total, 34450);
+    assert.equal(due, 34450);
     assert.deepEqual(booking.addOns.map(item => item.price), [1200, 28000]);
   } finally { await closeDatabase(); }
 });

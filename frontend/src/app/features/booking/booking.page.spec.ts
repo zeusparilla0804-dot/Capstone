@@ -124,6 +124,13 @@ describe('BookingPageComponent submission validation', () => {
 
   afterEach(() => { TestBed.resetTestingModule(); restoreDialogs(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
+  it('shows the current price even when the package name contains its old price', () => {
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    expect(component.packagePricingLabel({ ...standardPackage, pricePerGuest: 625 })).toBe('₱625 Per Head');
+    expect(component.packagePricingLabel({ ...pkg, name: 'Celebration', pricePerGuest: 750 })).toBe('Celebration – ₱750 Per Head');
+    expect(component.packagePricingLabel({ ...unboundedPackage, basePrice: 90000 })).toBe('Amethyst Package – ₱90,000');
+  });
+
   it('returns to the dashboard with the submitted reference after a successful request', async () => {
     const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;

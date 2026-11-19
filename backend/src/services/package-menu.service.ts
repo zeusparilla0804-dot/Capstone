@@ -80,8 +80,21 @@ const mainFields = (count: number): PackageMenuField[] => Array.from({ length: c
   key: `main${index + 1}`, label: `Main dish ${index + 1}`, dishChoices: mainDishes,
 }));
 
-export function packageMenu(packageName: string): PackageMenuDefinition | undefined {
+export const MENU_PACKAGE_NAMES = {
+  classic: 'PHP 480 Per Head', expanded: 'PHP 580 Per Head', 'full-buffet': 'PHP 680 Per Head',
+  amethyst: 'Amethyst Package', diamond: 'Diamond Package', ruby: 'Ruby Package',
+  bronze: 'Bronze Package', silver: 'Silver Package', gold: 'Gold Package',
+} as const;
+
+export function packageMenuKey(packageName: string): string | undefined {
   const name = packageName.trim().toLowerCase().replace(/\s+/g, ' ');
+  return Object.entries(MENU_PACKAGE_NAMES).find(([key, label]) =>
+    name === key || name === label.toLowerCase() || name === label.toLowerCase().replace(/ package$/, ''))?.[0];
+}
+
+export function packageMenu(packageName: string): PackageMenuDefinition | undefined {
+  const key = packageMenuKey(packageName);
+  const name = key ? MENU_PACKAGE_NAMES[key as keyof typeof MENU_PACKAGE_NAMES].toLowerCase() : '';
   let mains: PackageMenuField[];
   let soup = false;
   let vegetable = false;
@@ -140,9 +153,9 @@ export function parseMenuSelections(value: unknown): Record<string, string> | un
   return Object.fromEntries(entries.map(([key, entry]) => [key, text(entry, 'Menu dish', { min: 2, max: 120 })]));
 }
 
-export function buildMenuSnapshot(packageName: string, selections: Record<string, string> | undefined): MenuSelectionSnapshot | undefined {
+export function buildMenuSnapshot(packageName: string, selections: Record<string, string> | undefined, menuKey?: string | null): MenuSelectionSnapshot | undefined {
   if (selections === undefined) return undefined;
-  const definition = packageMenu(packageName);
+  const definition = packageMenu(menuKey === undefined ? packageName : menuKey ?? '');
   if (!definition || Object.keys(selections).some(key => !definition.fields.some(field => field.key === key))) {
     throw new AppError(400, 'Menu selections do not match the selected package.');
   }

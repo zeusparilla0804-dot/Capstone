@@ -613,11 +613,11 @@ export class BookingPageComponent {
   }
 
   protected packagePricingLabel(pkg: CateringPackage): string {
-    const name = pkg.name.replace(/\bPHP\s*/gi, '₱');
-    if (/₱\s*\d/.test(name)) return name;
+    const name = /^(?:PHP|₱)\s*\d[\d,.]*\s*per\s*head$/i.test(pkg.name.trim()) ? '' : pkg.name;
+    const prefix = name ? `${name} – ` : '';
     return pkg.pricingType === 'BASE_PLUS_EXCESS'
-      ? `${name} – ₱${this.formatAmount(pkg.basePrice)}`
-      : `${name} – ₱${this.formatAmount(pkg.pricePerGuest)} Per Head`;
+      ? `${prefix}₱${this.formatAmount(pkg.basePrice)}`
+      : `${prefix}₱${this.formatAmount(pkg.pricePerGuest)} Per Head`;
   }
 
   protected packagePricingExplanation(pkg: CateringPackage): string {

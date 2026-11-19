@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { pathToFileURL } from 'node:url';
 import sql from 'mssql';
+import { packageMenuKey } from '../services/package-menu.service.js';
 import { closeDatabase, getDbPool } from '../config/database.js';
 import type { PackagePricingType } from '../types/domain.types.js';
 
@@ -310,6 +311,7 @@ export function createSqlCatalogWriter(pool: sql.ConnectionPool): CatalogWriter 
             WHERE event_id=@eventId AND package_name=@name`);
         const packageRequest = new sql.Request(transaction)
           .input('eventId', sql.Int, eventId).input('name', sql.NVarChar(150), item.name)
+          .input('menuKey', sql.VarChar(30), packageMenuKey(item.name) ?? null)
           .input('description', sql.NVarChar(1000), item.description)
           .input('pricingType', sql.VarChar(20), item.pricingType)
           .input('pricePerGuest', sql.Decimal(12,2), item.pricePerGuest)
@@ -321,15 +323,15 @@ export function createSqlCatalogWriter(pool: sql.ConnectionPool): CatalogWriter 
         if (existing.recordset[0]) {
           packageId = Number(existing.recordset[0].package_id);
           await packageRequest.input('packageId', sql.Int, packageId).query(`UPDATE dbo.PACKAGE SET
-            description=@description,pricing_type=@pricingType,price_per_head=@pricePerGuest,
+            menu_key=COALESCE(menu_key,@menuKey),description=@description,pricing_type=@pricingType,price_per_head=@pricePerGuest,
             base_price=@basePrice,included_guests=@includedGuests,excess_guest_price=@excessGuestPrice,
             min_guest=@minGuests,max_guest=@maxGuests,is_active=1 WHERE package_id=@packageId`);
         } else {
           const inserted = await packageRequest.query(`INSERT dbo.PACKAGE(
-              event_id,package_name,description,pricing_type,price_per_head,base_price,included_guests,
+              event_id,package_name,menu_key,description,pricing_type,price_per_head,base_price,included_guests,
               excess_guest_price,min_guest,max_guest,is_active)
             OUTPUT INSERTED.package_id VALUES(
-              @eventId,@name,@description,@pricingType,@pricePerGuest,@basePrice,@includedGuests,
+              @eventId,@name,@menuKey,@description,@pricingType,@pricePerGuest,@basePrice,@includedGuests,
               @excessGuestPrice,@minGuests,@maxGuests,1)`);
           packageId = Number(inserted.recordset[0].package_id);
         }

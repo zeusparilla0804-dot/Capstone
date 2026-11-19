@@ -145,7 +145,37 @@ async function verifyFreshSchemaAndData(databaseName: string): Promise<void> {
     for (const [table, count] of Object.entries(counts)) {
       assert.equal(count, 0, `Fresh provisioning unexpectedly populated dbo.${table}.`);
     }
+    await verifyPackageMenuMigration(pool);
   });
+}
+
+async function verifyPackageMenuMigration(pool: sql.ConnectionPool): Promise<void> {
+  const script = await readFile(path.join(backendRoot, 'migrations', '028_package_menu_keys.sql'), 'utf8');
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const request = () => new sql.Request(transaction);
+    await request().query(`INSERT dbo.PACKAGE(event_id,package_name,pricing_type,price_per_head)
+      SELECT TOP(1) event_id,'PHP 480 Per Head','PER_HEAD',480 FROM dbo.EVENT;
+      INSERT dbo.PACKAGE(event_id,package_name,pricing_type,price_per_head)
+      SELECT TOP(1) event_id,'Custom menu','PER_HEAD',700 FROM dbo.EVENT;
+      INSERT dbo.PACKAGE(event_id,package_name,pricing_type,price_per_head)
+      SELECT TOP(1) event_id,NCHAR(9)+N'PHP  '+NCHAR(160)+N'580 Per'+NCHAR(9)+N'Head ','PER_HEAD',580 FROM dbo.EVENT;`);
+    await request().batch(script);
+    const initial = await request().query(`SELECT menu_key FROM dbo.PACKAGE WHERE package_name='PHP 480 Per Head'`);
+    assert.equal(initial.recordset[0]?.menu_key, 'classic', 'Existing package must receive its menu key.');
+    const spaced = await request().query(`SELECT menu_key FROM dbo.PACKAGE WHERE price_per_head=580`);
+    assert.equal(spaced.recordset[0]?.menu_key, 'expanded', 'Backfill must preserve previously supported whitespace-normalized names.');
+    await request().query(`UPDATE dbo.PACKAGE SET package_name='Family Celebration',price_per_head=525 WHERE menu_key='classic'`);
+    await request().batch(script);
+    const renamed = await request().query(`SELECT menu_key,price_per_head FROM dbo.PACKAGE WHERE package_name='Family Celebration'`);
+    assert.equal(renamed.recordset[0]?.menu_key, 'classic', 'Migration rerun must preserve a renamed package menu.');
+    assert.equal(Number(renamed.recordset[0]?.price_per_head), 525);
+    const custom = await request().query(`SELECT menu_key FROM dbo.PACKAGE WHERE package_name='Custom menu'`);
+    assert.equal(custom.recordset[0]?.menu_key, null, 'Unknown packages must not be assigned an unrelated menu.');
+  } finally {
+    await transaction.rollback();
+  }
 }
 
 async function verifyE2eAndBaselineRerun(databaseName: string): Promise<void> {

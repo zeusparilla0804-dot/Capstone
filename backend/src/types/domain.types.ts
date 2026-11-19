@@ -25,6 +25,7 @@ export interface PackageRecord {
   maxGuests: number | null;
   features: { label: string }[];
   menu?: PackageMenuDefinition;
+  menuKey?: string;
 }
 export interface AddOnRecord { id: number; name: string; description: string; price: number; eventTypes?: readonly string[]; quantity?: number; unitPrice?: number; }
 export interface CreateBookingDto { eventType: string; eventDate: string; eventTime: string; venue: string; guestCount: number; packageId: number; addOnIds: number[]; addOnQuantities?: Record<string, number>; paymentMethod?: string; specialRequest?: string; menuSelections?: Record<string, string>; submissionKey?: string; }

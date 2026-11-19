@@ -2,7 +2,7 @@ import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
 import type { AddOnRecord, PackageRecord } from '../types/domain.types.js';
 import { addOnEventTypes } from '../services/add-on-event-policy.js';
-import { packageMenu } from '../services/package-menu.service.js';
+import { packageMenu, packageMenuKey } from '../services/package-menu.service.js';
 import { packageImages } from './package-images.repository.js';
 
 type PackageRow = Record<string, unknown>;
@@ -15,10 +15,12 @@ export function mapPackageRows(rows: PackageRow[]): PackageRecord[] {
   const packages = new Map<number, PackageRecord>();
   for (const row of rows) {
     const id = Number(row['package_id']);
+    const menuKey = row['menu_key'] === undefined ? packageMenuKey(String(row['package_name'])) : row['menu_key'];
+    const menu = packageMenu(String(menuKey ?? ''));
     const item: PackageRecord = packages.get(id) ?? {
       id,
       name: String(row['package_name']),
-      ...(packageMenu(String(row['package_name'])) ? { menu: packageMenu(String(row['package_name'])) } : {}),
+      ...(menu ? { menuKey: String(menuKey), menu } : {}),
       category: String(row['event_type']).toLowerCase(),
       description: String(row['description'] ?? ''),
       pricingType: String(row['pricing_type']) as PackageRecord['pricingType'],
@@ -39,7 +41,7 @@ export function mapPackageRows(rows: PackageRow[]): PackageRecord[] {
 export async function findPackages(): Promise<PackageRecord[]> {
   const pool = await getDbPool();
   const result = await pool.request().query(`
-    SELECT p.package_id, p.package_name, p.description, p.pricing_type, p.price_per_head,
+    SELECT p.package_id, p.package_name, p.menu_key, p.description, p.pricing_type, p.price_per_head,
       p.base_price, p.included_guests, p.excess_guest_price, p.min_guest, p.max_guest,
       e.event_type, m.item_name
     FROM dbo.PACKAGE p JOIN dbo.EVENT e ON e.event_id = p.event_id
@@ -53,7 +55,7 @@ export async function findPackages(): Promise<PackageRecord[]> {
 export async function findPackageById(id: number, request?: sql.Request): Promise<PackageRecord | undefined> {
   const runner = request ?? (await getDbPool()).request();
   const result = await runner.input('id', sql.Int, id).query(`
-    SELECT p.package_id, p.package_name, p.description, p.pricing_type, p.price_per_head,
+    SELECT p.package_id, p.package_name, p.menu_key, p.description, p.pricing_type, p.price_per_head,
       p.base_price, p.included_guests, p.excess_guest_price, p.min_guest, p.max_guest, e.event_type
     FROM dbo.PACKAGE p JOIN dbo.EVENT e ON e.event_id = p.event_id
     WHERE p.package_id = @id AND p.is_active = 1`);

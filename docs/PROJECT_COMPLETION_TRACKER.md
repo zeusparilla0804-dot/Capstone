@@ -1,6 +1,8 @@
 # LA Chef Project Completion Tracker
 
-Last updated: 2026-10-18
+Last updated: 2026-11-19
+
+Latest verification: [Packages & Menu and handover status, November 19](HANDOVER_STATUS_2026-11-19.md). The package rename/menu-link and booking-price fixes pass local suites, builds and disposable SQL verification. They have not been deployed. The live API responds ready, but exact Render rescheduling deployment, inbox delivery, Azure runtime permissions, coordinated database/proof recovery and actual phone/desktop acceptance remain unverified. The older deployment preparation checklist below is not current production completion evidence.
 
 ## Current Position
 
@@ -24,7 +26,7 @@ The current project has completed Level 1. Levels 2 and 3 remain.
 | --- | --- | --- |
 | Approved product scope | Complete | Customer and administrator workflows align with the approved reservation and billing scope. |
 | Core application implementation | Complete | Reservation, capacity, billing, manual payments, payment proofs, account, reports, and administration flows are implemented. |
-| Local automated verification | Complete | Backend: 354 passed and 2 Windows-only skipped; frontend: 178 passed; browser E2E: 19 passed; production builds pass. |
+| Local automated verification | Complete locally | November 19: backend 635 passed, 2 skipped; frontend 646 passed; both builds pass; fresh disposable SQL verification and four configured SQL E2E journeys pass. Actual device acceptance remains open. |
 | Local container/deployment validation | Complete | Docker/Nginx local stack, JSON smoke tests, health checks, headers, and private proof storage pass locally. |
 | Staging environment | Not started | Requires the selected host, staging URL, SQL instance, durable storage, and secret manager. |
 | Least-privilege staging database | Prepared | Guarded provisioning and read-only runtime verification scripts exist; real staging accounts still need provisioning and execution evidence. |

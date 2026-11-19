@@ -24,6 +24,7 @@ export interface CateringPackage {
   readonly hasCustomImages?: boolean;
   readonly features: readonly PackageFeature[];
   readonly menu?: PackageMenuDefinition;
+  readonly menuKey?: string;
   readonly minGuests: number | null;
   readonly maxGuests: number | null;
   readonly isPopular?: boolean;

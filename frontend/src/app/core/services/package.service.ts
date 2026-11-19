@@ -5,6 +5,7 @@ import { ApiResponse, CateringPackage, PackageCategory } from '../models';
 import { environment } from '../../../environments/environment';
 import { categoryFor, defaultPackageGallery } from '../data/package-galleries';
 import { catalogImageUrl } from '../utils/catalog-image-url';
+import { packageTemplateName } from '../utils/package-template';
 
 type PackageApiItem = Omit<CateringPackage, 'imageUrl' | 'category'> & { readonly category: string };
 
@@ -39,7 +40,7 @@ export class PackageService {
               (item) => {
                 const category = categoryFor(item.category);
                 const hasCustomImages = !!item.galleryImageUrls?.length;
-                const galleryImageUrls = hasCustomImages ? item.galleryImageUrls!.map(catalogImageUrl) : defaultPackageGallery(item.name, category);
+                const galleryImageUrls = hasCustomImages ? item.galleryImageUrls!.map(catalogImageUrl) : defaultPackageGallery(packageTemplateName(item), category);
                 return {
                   ...item,
                   id: String(item.id),

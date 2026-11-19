@@ -5,6 +5,19 @@ import { environment } from '../../../environments/environment';
 import { PackageService } from './package.service';
 
 describe('PackageService', () => {
+  it('preserves the saved menu key, current price and gallery after a rename', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const service = TestBed.inject(PackageService);
+    service.load();
+    TestBed.inject(HttpTestingController).expectOne(`${environment.apiBaseUrl}/packages`).flush({ data: [
+      { id: 1, name: 'Family Celebration', menuKey: 'classic', category: 'Standard', pricePerGuest: 525, features: [] },
+    ] });
+    const pkg = service.packages()[0]!;
+    expect(pkg.name).toBe('Family Celebration');
+    expect(pkg.menuKey).toBe('classic');
+    expect(pkg.pricePerGuest).toBe(525);
+    expect(pkg.imageUrl).toContain('standard/classic-ballroom-01.jpg');
+  });
   it('features one standard, wedding, and debut package instead of the first three buffet tiers', () => {
     TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
     const service = TestBed.inject(PackageService);

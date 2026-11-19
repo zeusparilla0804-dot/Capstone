@@ -60,7 +60,7 @@ export async function createBooking(customerId: number, dto: CreateBookingDto): 
     const request = new sql.Request(transaction);
     const pkg = await findPackageById(dto.packageId, request); if (!pkg) throw new AppError(400, 'Selected package is unavailable.');
     if (!packageMatchesEvent(pkg.category, dto.eventType)) throw new AppError(400, 'Selected package does not match the event type.');
-    const menuSelection = buildMenuSnapshot(pkg.name, dto.menuSelections);
+    const menuSelection = buildMenuSnapshot(pkg.name, dto.menuSelections, pkg.menuKey ?? null);
     const { packageTotal, pricingSnapshot } = calculatePackagePrice(pkg, dto.guestCount);
     await bookingAvailabilityService.assertCanAccept(dto.eventDate, dto.guestCount, new sql.Request(transaction));
     const addOns = priceSelectedAddOns(await findAddOns(dto.addOnIds, new sql.Request(transaction)), dto.addOnQuantities);
@@ -149,7 +149,7 @@ export async function updatePendingBooking(
     }
     const menuSelection = dto.menuSelections === undefined
       ? Number(existing.package_id) === dto.packageId ? readMenuSnapshot(existing.menu_selection_json) : undefined
-      : buildMenuSnapshot(pkg.name, dto.menuSelections);
+      : buildMenuSnapshot(pkg.name, dto.menuSelections, pkg.menuKey ?? null);
     const { packageTotal, pricingSnapshot } = calculatePackagePrice(pkg, dto.guestCount);
     await bookingAvailabilityService.assertCanAccept(
       dto.eventDate,
