@@ -1,4 +1,4 @@
-import { EventTimePipe } from '../../shared/pipes/event-time.pipe';
+import { eventTime24, EventTimePipe } from '../../shared/pipes/event-time.pipe';
 import { ChangeDetectionStrategy, Component, computed, effect, HostListener, inject, OnDestroy, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import type { Booking, BookingStatus } from '../../core/models';
@@ -31,7 +31,19 @@ export class CustomerDashboardPageComponent implements OnDestroy {
   protected readonly auth = inject(AuthService);
 
   protected readonly bookings = this.bookingService.bookings;
-  protected readonly upcomingBookings = computed(() => this.bookingService.getBookingsByTab('upcoming').slice(0, 4));
+  protected readonly upcomingBookings = computed(() => {
+    const now = Date.now();
+    return this.bookingService.getBookingsByTab('upcoming')
+      .map(booking => {
+        const eventTime = eventTime24(booking.eventTime);
+        const startsAt = eventTime ? Date.parse(`${booking.eventDate}T${eventTime}:00+08:00`) : NaN;
+        return { booking, startsAt };
+      })
+      .filter(({ startsAt }) => startsAt >= now)
+      .sort((a, b) => a.startsAt - b.startsAt)
+      .slice(0, 4)
+      .map(({ booking }) => booking);
+  });
   protected readonly nextBooking = computed(() => this.upcomingBookings()[0]);
   protected readonly eventHeading = computed(() => {
     const status = this.nextBooking()?.status;

@@ -122,6 +122,13 @@
       <section class="action-confirmation" [class.approval-confirmation]="action.status === 'APPROVED'" aria-labelledby="confirm-action-title">
         <div><h2 id="confirm-action-title">{{ action.label }}</h2><p>@if (action.capacityConfirmation) { This approval confirms that LA Chef can accommodate {{ item.guestCount }} guests on this date. } @else { {{ action.reasonRequired ? 'Record a clear reason. The customer may see this update.' : 'Confirm that you want to apply this status change.' }} }</p></div>
         @if (action.reasonRequired) { <label for="action-reason">Reason<textarea id="action-reason" [(ngModel)]="actionReason" maxlength="1000" rows="4"></textarea></label> }
+        @if (action.status === 'CANCELLED' && item.amountPaid > 0) {
+          <label for="customer-cancellation-date" class="cancellation-date">
+            Customer cancellation request date
+            <input id="customer-cancellation-date" type="date" [(ngModel)]="customerCancellationDate" aria-describedby="customer-cancellation-help" />
+            <small id="customer-cancellation-help">Use the date the customer asked to cancel. Leave blank for admin review.</small>
+          </label>
+        }
         <div class="confirmation-actions"><button class="btn btn-secondary" type="button" (click)="closeAction()" [disabled]="mutationPending()">Keep current status</button><button class="btn btn-primary" type="button" (click)="confirmAction()" [disabled]="mutationPending()" [attr.aria-busy]="mutationPending()">
           @if (mutationPending() && action.status === 'APPROVED') { <span class="approval-spinner" aria-hidden="true"></span> }
           <span aria-live="polite">{{ mutationPending() ? (action.status === 'APPROVED' ? 'Approving...' : 'Updating...') : action.capacityConfirmation ? 'Approve and confirm capacity' : 'Confirm action' }}</span>

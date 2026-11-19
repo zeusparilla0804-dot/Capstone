@@ -49,6 +49,8 @@ describe('CustomerDashboardPageComponent', () => {
   let restoreDialogs: () => void;
 
   beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T16:05:00Z'));
     restoreDialogs = stubNativeDialogs();
     bookings = signal<readonly Booking[]>([
       booking({ id: '20', eventName: 'Later Birthday', eventDate: '2027-02-14' }),
@@ -63,7 +65,7 @@ describe('CustomerDashboardPageComponent', () => {
       error,
       loadMine,
       getBookingsByTab: (tab: string) => tab === 'upcoming'
-        ? [...bookings()].filter(item => !['completed', 'cancelled', 'rejected'].includes(item.status)).sort((a, b) => a.eventDate.localeCompare(b.eventDate))
+        ? bookings().filter(item => !['completed', 'cancelled', 'rejected', 'expired'].includes(item.status))
         : [],
     };
     const auth = {
@@ -83,7 +85,7 @@ describe('CustomerDashboardPageComponent', () => {
     fixture.detectChanges();
   });
 
-  afterEach(() => { restoreDialogs(); });
+  afterEach(() => { restoreDialogs(); vi.useRealTimers(); });
 
   it('uses the approved warm ivory customer portal background', () => {
     const page = fixture.nativeElement.querySelector('.dashboard-layout') as HTMLElement;
@@ -153,6 +155,25 @@ describe('CustomerDashboardPageComponent', () => {
     expect(text).not.toMatch(/quotation/i);
     expect(text).toContain('Reservation review');
     expect(text).toContain('Reservation total');
+  });
+
+  it('shows the next four active events in Manila start order', () => {
+    bookings.set([
+      booking({ id: '16', eventName: 'Yesterday Pending', eventDate: '2026-11-04', eventTime: '23:59' }),
+      booking({ id: '15', eventName: 'Elapsed Today', eventDate: '2026-11-05', eventTime: '12:01 AM', status: 'awaiting_payment' }),
+      booking({ id: '14', eventName: 'Tomorrow', eventDate: '2026-11-06', eventTime: '06:00' }),
+      booking({ id: '13', eventName: 'Afternoon', eventDate: '2026-11-05', eventTime: '2:00 PM' }),
+      booking({ id: '12', eventName: 'Morning', eventDate: '2026-11-05', eventTime: '07:00' }),
+      booking({ id: '11', eventName: 'Starting Now', eventDate: '2026-11-05', eventTime: '00:05' }),
+      booking({ id: '10', eventName: 'Next Week', eventDate: '2026-11-12', eventTime: '09:00' }),
+    ]);
+    fixture.detectChanges();
+
+    const dashboard = fixture.nativeElement as HTMLElement;
+    expect(dashboard.querySelector('.next-event__card h3')?.textContent).toBe('Starting Now');
+    const names = Array.from(dashboard.querySelectorAll('.booking-table__row [data-label="Event"]'))
+      .map(cell => cell.textContent?.trim());
+    expect(names).toEqual(['Starting Now', 'Morning', 'Afternoon', 'Tomorrow']);
   });
 
   it('uses the approved image-led event feature and warm ivory billing panel', () => {

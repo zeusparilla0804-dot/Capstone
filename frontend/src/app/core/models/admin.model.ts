@@ -22,13 +22,30 @@ export interface AdminPayment{readonly id:number;readonly reservationId:number;r
 export interface EventTypeOption{readonly id:number;readonly name:string;}
 
 export interface AdminReservationReportFilter{readonly dateFrom:string;readonly dateTo:string;readonly status:AdminBookingStatus|'';readonly eventType:string;}
-export type AdminPaymentReportStatus=''|'PENDING'|'PARTIALLY_PAID'|'PAID';
+export type AdminPaymentReportStatus=''|'PENDING'|'PARTIALLY_PAID'|'PAID'|'CANCELLED';
 export type AdminPaymentReportMethod=''|'CASH'|'BANK_TRANSFER'|'E-WALLET';
 export interface AdminPaymentReportFilter{readonly dateFrom:string;readonly dateTo:string;readonly status:AdminPaymentReportStatus;readonly method:AdminPaymentReportMethod;}
 export interface AdminReservationReportItem{readonly reference:string;readonly customer:string;readonly eventDate:string;readonly eventTime:string;readonly eventType:string;readonly guestCount:number;readonly venue:string;readonly packageName:string;readonly status:AdminBookingStatus;}
 export interface AdminPaymentReportItem{readonly invoiceNumber:string;readonly bookingReference:string;readonly customer:string;readonly issuedDate:string;readonly latestPaymentDate:string;readonly method:string;readonly amountDue:number;readonly amountPaid:number;readonly outstandingBalance:number;readonly status:AdminPaymentReportStatus;}
 export interface AdminReservationReport{readonly filters:AdminReservationReportFilter;readonly summary:{readonly reservationCount:number;readonly totalGuests:number;};readonly items:readonly AdminReservationReportItem[];readonly upcomingItems:readonly AdminReservationReportItem[];}
 export interface AdminPaymentReport{readonly filters:AdminPaymentReportFilter;readonly summary:{readonly totalBilled:number;readonly verifiedPayments:number;readonly outstandingBalance:number;};readonly items:readonly AdminPaymentReportItem[];}
+
+export type AdminCollectionReportFilter = Omit<AdminPaymentReportFilter, 'status'>;
+export interface AdminCollectionReportItem {
+  readonly id: string;
+  readonly invoiceNumber: string;
+  readonly bookingReference: string;
+  readonly customer: string;
+  readonly paymentDate: string;
+  readonly method: string;
+  readonly amount: number;
+  readonly source: 'transaction' | 'legacy';
+}
+export interface AdminCollectionReport {
+  readonly filters: AdminCollectionReportFilter;
+  readonly summary: { readonly totalCollected: number; readonly paymentCount: number };
+  readonly items: readonly AdminCollectionReportItem[];
+}
 
 export type AdminBookingStatus = 'PENDING'|'APPROVED'|'AWAITING_PAYMENT'|'PAYMENT_SUBMITTED'|'PAYMENT_VERIFIED'|'CONFIRMED'|'COMPLETED'|'REJECTED'|'CANCELLED'|'EXPIRED';
 export interface AdminBookingHistory{readonly id:number;readonly previousStatus:AdminBookingStatus|null;readonly nextStatus:AdminBookingStatus;readonly actorType:'ADMIN'|'CUSTOMER'|'SYSTEM';readonly actorId:number|null;readonly reason:string|null;readonly createdAt:string;}

@@ -42,4 +42,6 @@ test('admin report routes are guarded and register export routes explicitly', ()
   assert.match(source, /\.get\('\/reports\/payments\/export',\s*adminReportController\.paymentExport\)/);
   assert.match(source, /\.get\('\/reports\/reservations',\s*adminReportController\.reservations\)/);
   assert.match(source, /\.get\('\/reports\/payments',\s*adminReportController\.payments\)/);
+  assert.match(source, /\.get\('\/reports\/collections',\s*adminReportController\.collections\)/);
+  assert.match(source, /\.get\('\/reports\/collections\/export',\s*adminReportController\.collectionExport\)/);
 });

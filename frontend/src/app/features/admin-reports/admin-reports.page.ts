@@ -5,6 +5,8 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import {
+  AdminCollectionReport,
+  AdminCollectionReportFilter,
   AdminPaymentReport,
   AdminPaymentReportFilter,
   AdminReservationReport,
@@ -14,7 +16,7 @@ import { AdminService } from '../../core/services/admin.service';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 
-type ReportTab = 'reservations' | 'payments';
+type ReportTab = 'reservations' | 'collections' | 'payments';
 
 function currentMonth(now = new Date()): { dateFrom: string; dateTo: string } {
   const year = now.getFullYear();
@@ -37,10 +39,13 @@ export class AdminReportsPage {
   protected readonly activeTab = signal<ReportTab>('reservations');
   protected readonly reservationData = signal<AdminReservationReport | null>(null);
   protected readonly paymentData = signal<AdminPaymentReport | null>(null);
+  protected readonly collectionData = signal<AdminCollectionReport | null>(null);
   protected readonly reservationLoading = signal(false);
   protected readonly paymentLoading = signal(false);
+  protected readonly collectionLoading = signal(false);
   protected readonly reservationError = signal('');
   protected readonly paymentError = signal('');
+  protected readonly collectionError = signal('');
   protected readonly exporting = signal(false);
   protected readonly generatedAt = signal(new Date());
 
@@ -58,6 +63,12 @@ export class AdminReportsPage {
     method: new FormControl<AdminPaymentReportFilter['method']>('', { nonNullable: true }),
   });
 
+  protected readonly collectionForm = new FormGroup({
+    dateFrom: new FormControl(this.initialRange.dateFrom, { nonNullable: true, validators: Validators.required }),
+    dateTo: new FormControl(this.initialRange.dateTo, { nonNullable: true, validators: Validators.required }),
+    method: new FormControl<AdminCollectionReportFilter['method']>('', { nonNullable: true }),
+  });
+
   constructor() {
     this.loadReservations();
     this.loadPayments();
@@ -65,10 +76,11 @@ export class AdminReportsPage {
 
   protected selectTab(tab: ReportTab): void {
     this.activeTab.set(tab);
+    if (tab === 'collections' && !this.collectionData()) this.loadCollections();
   }
 
   protected handleTabKey(event: KeyboardEvent, tab: ReportTab): void {
-    const order: readonly ReportTab[] = ['reservations', 'payments'];
+    const order: readonly ReportTab[] = ['reservations', 'collections', 'payments'];
     let next: ReportTab | undefined;
     if (event.key === 'Home') next = order[0];
     else if (event.key === 'End') next = order.at(-1);
@@ -77,7 +89,7 @@ export class AdminReportsPage {
     if (!next) return;
 
     event.preventDefault();
-    this.activeTab.set(next);
+    this.selectTab(next);
     const tabs = (event.currentTarget as HTMLElement | null)?.parentElement;
     tabs?.querySelector<HTMLButtonElement>(`#${next}-tab`)?.focus();
   }
@@ -112,21 +124,42 @@ export class AdminReportsPage {
         this.paymentData.set(response.data);
         this.generatedAt.set(new Date());
       },
-      error: error => this.paymentError.set(this.errorMessage(error, 'Unable to load payment reports. Please try again.')),
+      error: error => this.paymentError.set(this.errorMessage(error, 'Unable to load the invoice report. Please try again.')),
+    });
+  }
+
+  protected loadCollections(): void {
+    if (this.collectionLoading()) return;
+    const filters = this.collectionForm.getRawValue();
+    if (!this.validRange(filters.dateFrom, filters.dateTo, this.collectionError)) return;
+    this.collectionLoading.set(true);
+    this.collectionError.set('');
+    this.api.collectionReport(filters).pipe(
+      finalize(() => this.collectionLoading.set(false)),
+    ).subscribe({
+      next: response => {
+        this.collectionData.set(response.data);
+        this.generatedAt.set(new Date());
+      },
+      error: error => this.collectionError.set(this.errorMessage(error, 'Unable to load the collections report. Please try again.')),
     });
   }
 
   protected exportActive(): void {
     if (this.exporting()) return;
     const tab = this.activeTab();
+    const collectionFilters = this.collectionLoading() || this.collectionError() ? undefined : this.collectionData()?.filters;
     const request = tab === 'reservations'
       ? this.api.exportReservationReport(this.reservationForm.getRawValue())
-      : this.api.exportPaymentReport(this.paymentForm.getRawValue());
+      : tab === 'payments'
+        ? this.api.exportPaymentReport(this.paymentForm.getRawValue())
+        : collectionFilters && this.api.exportCollectionReport(collectionFilters);
+    if (!request) return;
     this.exporting.set(true);
     request.pipe(finalize(() => this.exporting.set(false))).subscribe({
-      next: blob => this.download(blob, `la-chef-${tab}-${this.today()}.csv`),
+      next: blob => this.download(blob, `la-chef-${tab === 'payments' ? 'invoices' : tab}-${this.today()}.csv`),
       error: error => {
-        const target = tab === 'reservations' ? this.reservationError : this.paymentError;
+        const target = tab === 'reservations' ? this.reservationError : tab === 'payments' ? this.paymentError : this.collectionError;
         target.set(this.errorMessage(error, 'Unable to export this report. Please try again.'));
       },
     });

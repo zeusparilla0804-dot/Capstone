@@ -36,8 +36,10 @@ describe('AdminReportsPage', () => {
   let api: {
     reservationReport: ReturnType<typeof vi.fn>;
     paymentReport: ReturnType<typeof vi.fn>;
+    collectionReport: ReturnType<typeof vi.fn>;
     exportReservationReport: ReturnType<typeof vi.fn>;
     exportPaymentReport: ReturnType<typeof vi.fn>;
+    exportCollectionReport: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -47,8 +49,17 @@ describe('AdminReportsPage', () => {
     api = {
       reservationReport: vi.fn(() => of({ success: true, data: reservationReport })),
       paymentReport: vi.fn(() => of({ success: true, data: paymentReport })),
+      collectionReport: vi.fn(() => of({ success: true, data: {
+        filters: { dateFrom: '2026-10-01', dateTo: '2026-10-31', method: '' },
+        summary: { totalCollected: 1000.75, paymentCount: 2 },
+        items: [
+          { id: 'T-41', invoiceNumber: 'INV-1001', bookingReference: 'LC-1001', customer: 'Ana Reyes', paymentDate: '2026-10-05', method: 'BANK_TRANSFER', amount: 400.25, source: 'transaction' },
+          { id: 'T-47', invoiceNumber: 'INV-1001', bookingReference: 'LC-1001', customer: 'Ana Reyes', paymentDate: '2026-10-15', method: 'CASH', amount: 600.50, source: 'transaction' },
+        ],
+      } })),
       exportReservationReport: vi.fn(() => of(new Blob(['reservations']))),
       exportPaymentReport: vi.fn(() => of(new Blob(['payments']))),
+      exportCollectionReport: vi.fn(() => of(new Blob(['collections']))),
     };
     TestBed.configureTestingModule({
       imports: [AdminReportsPage],
@@ -113,18 +124,44 @@ describe('AdminReportsPage', () => {
     expect(root.querySelector<HTMLInputElement>('#reservation-event-type')!.value).toBe('Debut');
   });
 
+  it('displays mixed collections and exports the applied period and method', () => {
+    const root = render();
+    root.querySelector<HTMLButtonElement>('#collections-tab')!.click();
+    fixture.detectChanges();
+    const panel = root.querySelector('#collections-panel')!;
+    expect(panel.querySelector('dl')?.textContent).toContain('1,000.75');
+    const rows = Array.from(panel.querySelectorAll('tbody tr'), row => row.textContent);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatch(/Oct 5, 2026.*Bank transfer.*400.25/);
+    expect(rows[1]).toMatch(/Oct 15, 2026.*Cash.*600.50/);
+
+    const method = panel.querySelector<HTMLSelectElement>('[formControlName="method"]')!;
+    method.value = 'CASH';
+    method.dispatchEvent(new Event('change'));
+    api.exportCollectionReport.mockReturnValue(new Subject<Blob>());
+    root.querySelector<HTMLButtonElement>('[data-action="export-report"]')!.click();
+    expect(api.exportCollectionReport).toHaveBeenCalledWith({
+      dateFrom: '2026-10-01', dateTo: '2026-10-31', method: '',
+    });
+
+    panel.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit'));
+    expect(api.collectionReport).toHaveBeenLastCalledWith({
+      dateFrom: '2026-10-01', dateTo: '2026-10-31', method: 'CASH',
+    });
+  });
+
   it('supports arrow-key navigation between report tabs', () => {
     const root = render();
     const reservations = root.querySelector<HTMLButtonElement>('#reservations-tab')!;
-    const payments = root.querySelector<HTMLButtonElement>('#payments-tab')!;
+    const collections = root.querySelector<HTMLButtonElement>('#collections-tab')!;
     reservations.focus();
     reservations.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     fixture.detectChanges();
 
-    expect(payments.getAttribute('aria-selected')).toBe('true');
-    expect(payments.tabIndex).toBe(0);
+    expect(collections.getAttribute('aria-selected')).toBe('true');
+    expect(collections.tabIndex).toBe(0);
     expect(reservations.tabIndex).toBe(-1);
-    expect(document.activeElement).toBe(payments);
+    expect(document.activeElement).toBe(collections);
   });
 
   it('locks duplicate reservation requests while one is in progress', () => {
@@ -156,7 +193,7 @@ describe('AdminReportsPage', () => {
 
     root.querySelector<HTMLButtonElement>('#payments-tab')!.click();
     fixture.detectChanges();
-    expect(root.querySelector('#payments-panel')?.textContent).toContain('No payment records');
+    expect(root.querySelector('#payments-panel')?.textContent).toContain('No invoices');
   });
 
   it('downloads the active report, names it, revokes the URL, and prints', () => {

@@ -2,21 +2,37 @@ import type sql from 'mssql';
 import { writeAdminAudit } from '../repositories/audit.repository.js';
 import { insertBookingStatusHistory, lockedBookingStatus, runBookingStatusTransaction, setBookingStatusIfCurrent } from '../repositories/booking-status.repository.js';
 import type { BookingActor, BookingStatus } from '../types/admin.types.js';
+import type { CancellationAssessment } from '../types/invoice.types.js';
 import { AppError } from '../utils/app-error.js';
+import { isoDate } from '../utils/validation.js';
 import { queueBookingNotification } from './notification.service.js';
 import { readCapacitySnapshot } from '../repositories/booking-availability.repository.js';
 import { assessDateAvailability } from './booking-availability.service.js';
 import { lockedPayment, supersedeSubmittedProofs } from '../repositories/payment-proof.repository.js';
-import { hasRequiredReservationDeposit } from './reservation-billing-policy.js';
+import { hasRequiredReservationDeposit, requiredReservationDeposit } from './reservation-billing-policy.js';
 import { cashDepositDeadline } from './cash-payment-policy.js';
 import { createInvoiceWithRequest } from '../repositories/invoice.repository.js';
+
+const manilaCalendarDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
+});
+
+function assessCancellation(eventDate: string, total: number, paid: number, date: string, customerRequested: boolean): CancellationAssessment | undefined {
+  const paidCents = Math.round(paid * 100);
+  if (paidCents <= 0) return undefined;
+  const daysAhead = (Date.parse(`${eventDate}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86_400_000;
+  if (!customerRequested || daysAhead < 7) return { kind: 'ADMIN_REVIEW', date };
+  const depositCents = Math.min(paidCents, Math.round(requiredReservationDeposit(total) * 100));
+  const forfeitedCents = Math.round(depositCents * 0.20);
+  return { kind: 'EARLY', date, forfeitedAmount: forfeitedCents / 100, refundableAmount: (paidCents - forfeitedCents) / 100 };
+}
 
 const transitions: Record<BookingStatus, readonly BookingStatus[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
   APPROVED: ['AWAITING_PAYMENT', 'CANCELLED'],
   AWAITING_PAYMENT: ['PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CANCELLED'],
   PAYMENT_SUBMITTED: ['PAYMENT_VERIFIED', 'AWAITING_PAYMENT'],
-  PAYMENT_VERIFIED: ['CONFIRMED'],
+  PAYMENT_VERIFIED: ['CONFIRMED', 'CANCELLED'],
   CONFIRMED: ['COMPLETED', 'CANCELLED'],
   REJECTED: [],
   CANCELLED: [],
@@ -36,6 +52,7 @@ export interface BookingTransitionInput {
   expectedStatus?: BookingStatus;
   mode?: 'GENERIC_ADMIN';
   capacityConfirmed?: boolean;
+  customerCancellationDate?: string;
   request?: sql.Request;
 }
 
@@ -67,6 +84,12 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
   if ((input.nextStatus === 'REJECTED' || input.nextStatus === 'CANCELLED') && !reason) {
     throw new AppError(400, 'A reason is required for rejection or cancellation.');
   }
+  const assessingCancellation = input.actor.type === 'ADMIN' && input.nextStatus === 'CANCELLED';
+  const customerCancellationDate = input.customerCancellationDate === undefined
+    ? undefined : isoDate(input.customerCancellationDate, 'Customer cancellation request date');
+  if (customerCancellationDate && !assessingCancellation) {
+    throw new AppError(400, 'Customer cancellation request date is only used when cancelling a reservation.');
+  }
 
   const work = async (request: sql.Request) => {
     const current = await lockedBookingStatus(input.reservationId, request);
@@ -80,15 +103,16 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       throw new AppError(409, `Cannot change ${previousStatus} booking to ${input.nextStatus}.`);
     }
     let capacityWasConfirmed = false;
-    const preparingForPayment = (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED')
+    const approvingPendingBooking = previousStatus === 'PENDING' && input.nextStatus === 'APPROVED';
+    const preparingForPayment = approvingPendingBooking
       || (previousStatus === 'APPROVED' && input.nextStatus === 'AWAITING_PAYMENT');
-    const payment = preparingForPayment || input.nextStatus === 'COMPLETED'
+    const payment = preparingForPayment || input.nextStatus === 'COMPLETED' || assessingCancellation
       ? await lockedPayment(input.reservationId, request) : undefined;
     if (input.nextStatus === 'COMPLETED' && (!payment ||
       Math.round(Number(payment.amountPaid) * 100) < Math.round(Number(payment.amountDue) * 100))) {
       throw new AppError(409, 'Record and verify the remaining balance before marking this event completed.');
     }
-    if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED') {
+    if (approvingPendingBooking) {
       const snapshot = await readCapacitySnapshot(current.eventDate, { request, lock: true });
       const availability = assessDateAvailability({
         date: current.eventDate,
@@ -105,23 +129,30 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
       capacityWasConfirmed = availability.requiresAdminConfirmation && input.capacityConfirmed === true;
     }
     if (input.nextStatus === 'COMPLETED') {
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const today = manilaCalendarDate.format(new Date());
       if (current.eventDate > today) throw new AppError(409, 'This event can only be completed on its event date or later.', 'EVENT_NOT_FINISHED');
     }
-    if (preparingForPayment && payment?.paymentMethod?.toUpperCase() === 'CASH') {
+    const cashPayment = preparingForPayment && payment?.paymentMethod?.toUpperCase() === 'CASH' ? payment : undefined;
+    if (approvingPendingBooking || cashPayment) {
       // Read the clock after all locks, so a waiting review cannot use a stale cutoff.
       const now = new Date();
-      const today = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit',
-      }).format(now);
-      if (current.eventDate < today) {
-        throw new AppError(409, 'This cash booking event date has passed. Review the booking with the customer.', 'CASH_EVENT_DATE_PASSED');
+      if (current.eventDate < manilaCalendarDate.format(now)) {
+        if (cashPayment) {
+          throw new AppError(409, 'This cash booking event date has passed. Review the booking with the customer.', 'CASH_EVENT_DATE_PASSED');
+        }
+        throw new AppError(409, 'This booking event date has passed. Review the booking with the customer.', 'EVENT_DATE_PASSED');
       }
-      const deadline = cashDepositDeadline(current.eventDate, current.guestCount);
-      if (!hasRequiredReservationDeposit(Number(payment.amountDue), Number(payment.amountPaid))
-        && now.getTime() > Date.parse(deadline.at)) {
-        throw new AppError(409, `The cash down payment deadline was ${deadline.date}, 6:00 PM. Review the booking with the customer.`, 'CASH_DEPOSIT_DEADLINE_PASSED');
+      if (cashPayment) {
+        const deadline = cashDepositDeadline(current.eventDate, current.guestCount);
+        if (!hasRequiredReservationDeposit(Number(cashPayment.amountDue), Number(cashPayment.amountPaid))
+          && now.getTime() > Date.parse(deadline.at)) {
+          throw new AppError(409, `The cash down payment deadline was ${deadline.date}, 6:00 PM. Review the booking with the customer.`, 'CASH_DEPOSIT_DEADLINE_PASSED');
+        }
       }
+    }
+    const cancellationDay = assessingCancellation ? manilaCalendarDate.format(new Date()) : '';
+    if (customerCancellationDate && customerCancellationDate > cancellationDay) {
+      throw new AppError(400, 'Customer cancellation request date cannot be in the future.');
     }
     if (!await setBookingStatusIfCurrent(input.reservationId, previousStatus, input.nextStatus, request, input.actor.type === 'CUSTOMER' ? input.actor.id : undefined)) {
       throw new AppError(409, 'Booking status changed. Refresh and try again.');
@@ -131,11 +162,16 @@ export async function transitionBooking(input: BookingTransitionInput): Promise<
     }
     await insertBookingStatusHistory({ reservationId: input.reservationId, previousStatus, nextStatus: input.nextStatus, actor: input.actor, reason }, request);
     if (input.actor.type === 'ADMIN') {
+      const cancellation = assessingCancellation && payment
+        ? assessCancellation(current.eventDate, Number(payment.amountDue), Number(payment.amountPaid),
+          customerCancellationDate ?? cancellationDay, !!customerCancellationDate)
+        : undefined;
       await writeAdminAudit({ adminId: input.actor.id, action: 'BOOKING_STATUS_CHANGED', entityType: 'BOOKING', entityId: input.reservationId,
         oldValues: { status: previousStatus }, newValues: { status: input.nextStatus, reason: reason ?? null,
+          ...(cancellation ? { cancellation } : {}),
           ...(capacityWasConfirmed ? { capacityConfirmed: true } : {}) } }, request);
     }
-    if (previousStatus === 'PENDING' && input.nextStatus === 'APPROVED' && input.actor.type === 'ADMIN') {
+    if (approvingPendingBooking && input.actor.type === 'ADMIN') {
       const invoiceId = await createInvoiceWithRequest(input.reservationId, input.actor.id, request);
       if (!invoiceId) throw new AppError(404, 'Booking not found.');
       await transitionBooking({ reservationId: input.reservationId, expectedStatus: 'APPROVED', nextStatus: 'AWAITING_PAYMENT',

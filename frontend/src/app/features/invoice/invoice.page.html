@@ -56,7 +56,7 @@
             }
             @if (paymentComplete(doc)) {
               <div><dt>Payment complete</dt><dd>{{ doc.payments[0].date | date: 'mediumDate': 'UTC' }}</dd></div>
-            } @else {
+            } @else if (!isCancelled(doc)) {
             <div>
               <dt>Balance due</dt>
               <dd>{{ doc.dueDate ? (doc.dueDate | date: 'mediumDate': 'UTC') : 'Not set' }}</dd>
@@ -160,31 +160,47 @@
             <div><dt>Required down payment (50%)</dt><dd>{{ deposit(doc).requiredDeposit | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
             <div data-testid="remaining-down-payment"><dt>Remaining down payment</dt><dd>{{ deposit(doc).remainingDeposit | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
           }
-          <div class="balance">
-            <dt>Balance Due</dt>
-            <dd>{{ doc.remainingBalance | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
-          </div>
+          @if (!isCancelled(doc)) {
+            <div class="balance">
+              <dt>Balance Due</dt>
+              <dd>{{ doc.remainingBalance | currency: 'PHP': 'symbol-narrow': '1.2-2' }}</dd>
+            </div>
+          } @else if (doc.cancellation; as cancellation) {
+            <div><dt>Cancellation date</dt><dd>{{ cancellation.date + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</dd></div>
+            @if (cancellation.kind === 'EARLY') {
+              <div><dt>Retained from down payment</dt><dd>{{ cancellation.forfeitedAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+              <div><dt>Refundable amount</dt><dd>{{ cancellation.refundableAmount | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+            }
+          }
         </dl>
         @if (incompleteDeposit(doc)) { <p class="invoice-deposit-help">The remaining down payment is included in Balance Due. This receipt acknowledges the payment received; the required down payment is not yet complete.</p> }
       </section>
 
       <section class="invoice-agreement" aria-labelledby="agreement-title">
         <div class="invoice-agreement__heading">
-          <h2 id="agreement-title">{{ isReceipt(doc) ? 'Payment acknowledgment' : 'Terms and agreement' }}</h2>
-          <p>{{ paymentComplete(doc) ? 'Payment received in full. No outstanding balance.' : isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
+          @if (isCancelled(doc)) {
+            <h2 id="agreement-title">Cancellation</h2>
+            @if (doc.amountPaid > 0) {
+              <p>{{ doc.cancellation?.kind === 'EARLY' ? 'The refundable amount is shown above. Contact LA Chef for refund arrangements.' : 'Contact LA Chef for a review of any forfeiture or refund under the signed agreement.' }}</p>
+            }
+          } @else {
+            <h2 id="agreement-title">{{ isReceipt(doc) ? 'Payment acknowledgment' : 'Terms and agreement' }}</h2>
+            <p>{{ paymentComplete(doc) ? 'Payment received in full. No outstanding balance.' : isReceipt(doc) ? 'This receipt records the verified payments listed below. Any remaining balance is still due.' : 'Please review these reservation and payment terms before signing.' }}</p>
+          }
         </div>
 
-        @if (!isReceipt(doc)) {
+        @if (!isReceipt(doc) && !isCancelled(doc)) {
           <ol>
             <li>A 50% down payment is required to confirm the reservation.</li>
             <li>The remaining balance is due on the event date.</li>
             <li>
-              Upon signing this agreement, cancellation by the client will result in forfeiture
-              of 50% of the total reservation amount.
+              If you request cancellation at least 7 calendar days before the event, LA Chef retains 20% of the verified down payment.
+              For later requests, LA Chef reviews forfeiture or refund under the signed agreement.
             </li>
           </ol>
         }
 
+        @if (!isCancelled(doc)) {
         <div class="invoice-signatures" aria-label="Agreement signatures">
           <div class="invoice-signature">
             <span class="invoice-signature__line"><span class="invoice-signature__name">{{ doc.customer.name }}</span></span>
@@ -195,6 +211,7 @@
             <strong>Authorized LA Chef representative</strong>
           </div>
         </div>
+        }
       </section>
 
       @if (doc.payments.length) {

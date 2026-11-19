@@ -7,7 +7,7 @@ export interface ReservationReportQuery {
   eventType: string;
 }
 
-export type PaymentReportStatus = '' | 'PENDING' | 'PARTIALLY_PAID' | 'PAID';
+export type PaymentReportStatus = '' | 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
 export type PaymentReportMethod = '' | 'CASH' | 'BANK_TRANSFER' | 'E-WALLET';
 
 export interface PaymentReportQuery {
@@ -16,6 +16,8 @@ export interface PaymentReportQuery {
   status: PaymentReportStatus;
   method: PaymentReportMethod;
 }
+
+export type CollectionReportQuery = Omit<PaymentReportQuery, 'status'>;
 
 export interface ReservationReportItem {
   reference: string;
@@ -53,4 +55,21 @@ export interface AdminPaymentReport {
   filters: PaymentReportQuery;
   summary: { totalBilled: number; verifiedPayments: number; outstandingBalance: number };
   items: PaymentReportItem[];
+}
+
+export interface CollectionReportItem {
+  id: string;
+  invoiceNumber: string;
+  bookingReference: string;
+  customer: string;
+  paymentDate: string;
+  method: string;
+  amount: number;
+  source: 'transaction' | 'legacy';
+}
+
+export interface AdminCollectionReport {
+  filters: CollectionReportQuery;
+  summary: { totalCollected: number; paymentCount: number };
+  items: CollectionReportItem[];
 }

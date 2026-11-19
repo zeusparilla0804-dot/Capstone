@@ -24,6 +24,7 @@ test('report queries default to the current UTC month and normalize allowed filt
   assert.deepEqual(parsePaymentReportQuery({ dateFrom: '2026-10-01', dateTo: '2026-10-31', status: 'paid', method: 'bank_transfer' }, clock), {
     dateFrom: '2026-10-01', dateTo: '2026-10-31', status: 'PAID', method: 'BANK_TRANSFER',
   });
+  assert.equal(parsePaymentReportQuery({ status: 'cancelled' }, clock).status, 'CANCELLED');
 });
 
 test('report queries reject partial invalid reversed excessive and unsupported filters', () => {
@@ -35,7 +36,7 @@ test('report queries reject partial invalid reversed excessive and unsupported f
     { status: 'DELETED' },
   ];
   for (const raw of invalid) assert.throws(() => parseReservationReportQuery(raw, clock), AppError);
-  for (const raw of [{ method: 'CARD' }, { status: 'CANCELLED' }]) {
+  for (const raw of [{ method: 'CARD' }, { status: 'DELETED' }]) {
     assert.throws(() => parsePaymentReportQuery(raw, clock), AppError);
   }
 });
@@ -44,6 +45,8 @@ test('report service preserves zeroed valid empty results', async () => {
   const service = createAdminReportService({
     reservations: async filters => ({ filters, summary: { reservationCount: 0, totalGuests: 0 }, items: [], upcomingItems: [] }),
     payments: async filters => ({ filters, summary: { totalBilled: 0, verifiedPayments: 0, outstandingBalance: 0 }, items: [] }),
+    collections: async (filters: { dateFrom: string; dateTo: string; method: '' | 'CASH' | 'BANK_TRANSFER' | 'E-WALLET' }) =>
+      ({ filters, summary: { totalCollected: 0, paymentCount: 0 }, items: [] }),
   }, clock);
   assert.equal((await service.reservationReport({})).summary.reservationCount, 0);
   assert.deepEqual((await service.paymentReport({})).summary, { totalBilled: 0, verifiedPayments: 0, outstandingBalance: 0 });
@@ -62,6 +65,10 @@ test('CSV exports use stable safe UTF-8 CRLF output without credential fields', 
       summary: { totalBilled: 1000, verifiedPayments: 400, outstandingBalance: 600 },
       items: [{ invoiceNumber: '-INV', bookingReference: 'LC-1', customer: 'Jane', issuedDate: '2026-10-01', latestPaymentDate: '2026-10-02', method: 'CASH', amountDue: 1000, amountPaid: 400, outstandingBalance: 600, status: 'PARTIALLY_PAID' }],
     }),
+    collections: async (filters: { dateFrom: string; dateTo: string; method: '' | 'CASH' | 'BANK_TRANSFER' | 'E-WALLET' }) =>
+      ({ filters, summary: { totalCollected: 100.25, paymentCount: 1 }, items: [
+        { id: 'L-1', invoiceNumber: 'INV-1', bookingReference: 'LC-1', customer: 'Ana', paymentDate: '2026-10-05', method: 'E-WALLET', amount: 100.25, source: 'legacy' as const },
+      ] }),
   }, clock);
 
   const reservations = await service.reservationCsv({});
@@ -78,4 +85,10 @@ test('CSV exports use stable safe UTF-8 CRLF output without credential fields', 
   const payments = await service.paymentCsv({});
   assert.match(payments, /'-INV/);
   assert.doesNotMatch(payments, /password|token|session/i);
+
+  const collections = await service.collectionCsv({ method: 'e_wallet' });
+  assert.equal(collections, '\uFEFFPayment date,Method,Amount collected,Invoice,Reservation,Customer,Source\r\n2026-10-05,E-WALLET,100.25,INV-1,LC-1,Ana,Legacy payment record\r\n');
+  const collectionReport = await service.collectionReport({ method: 'e_wallet' });
+  assert.deepEqual(collectionReport.filters, { dateFrom: '2026-10-01', dateTo: '2026-10-31', method: 'E-WALLET' });
+  assert.equal(collectionReport.summary.totalCollected, 100.25);
 });

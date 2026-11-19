@@ -4,6 +4,7 @@ import { map } from 'rxjs';
 import { environment } from '../../../environments/environment';
 export interface AdminPackageImage { readonly id: number; readonly packageId: number; readonly url: string; }
 import { AdminAddOn, AdminAuditLogItem, AdminBooking, AdminBookingDetail, AdminCustomer, AdminCustomerBooking, AdminCustomerPayment, AdminCustomerProfile, AdminCustomerStatus, AdminCustomerUpdateInput, AdminDashboard, AdminEmailOutboxItem, AdminEmailPreview, AdminPackage, AdminPackageInput, AdminPayment, AdminPaymentProof, AdminPaymentProofDetail, AdminPaymentReport, AdminPaymentReportFilter, AdminReservationReport, AdminReservationReportFilter, ApiResponse, EventTypeOption, Invoice, PageResult } from '../models';
+import type { AdminCollectionReport, AdminCollectionReportFilter } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class AdminService {
@@ -17,11 +18,12 @@ export class AdminService {
   updateBookingTime(id: number, eventTime: string, expectedTime: string | null) {
     return this.http.patch<ApiResponse<{ eventTime: string }>>(`${this.base}/bookings/${id}/time`, { eventTime, expectedTime }, this.options);
   }
-  updateBookingStatus(id: number, status: string, reason?: string, capacityConfirmed?: boolean) {
+  updateBookingStatus(id: number, status: string, reason?: string, capacityConfirmed?: boolean, customerCancellationDate?: string) {
     const body = {
       status,
       ...(reason === undefined ? {} : { reason }),
       ...(capacityConfirmed === undefined ? {} : { capacityConfirmed }),
+      ...(customerCancellationDate ? { customerCancellationDate } : {}),
     };
     return this.http.patch<ApiResponse<never>>(`${this.base}/bookings/${id}/status`, body, this.options);
   }
@@ -43,8 +45,10 @@ export class AdminService {
   payments(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminPayment>>>(`${this.base}/payments`, { ...this.options, params: this.params(filters) }); }
   reservationReport(filters: AdminReservationReportFilter) { return this.http.get<ApiResponse<AdminReservationReport>>(`${this.base}/reports/reservations`, { ...this.options, params: this.params(filters) }); }
   paymentReport(filters: AdminPaymentReportFilter) { return this.http.get<ApiResponse<AdminPaymentReport>>(`${this.base}/reports/payments`, { ...this.options, params: this.params(filters) }); }
+  collectionReport(filters: AdminCollectionReportFilter) { return this.http.get<ApiResponse<AdminCollectionReport>>(`${this.base}/reports/collections`, { ...this.options, params: this.params(filters) }); }
   exportReservationReport(filters: AdminReservationReportFilter) { return this.http.get(`${this.base}/reports/reservations/export`, { ...this.options, params: this.params(filters), responseType: 'blob' }); }
   exportPaymentReport(filters: AdminPaymentReportFilter) { return this.http.get(`${this.base}/reports/payments/export`, { ...this.options, params: this.params(filters), responseType: 'blob' }); }
+  exportCollectionReport(filters: AdminCollectionReportFilter) { return this.http.get(`${this.base}/reports/collections/export`, { ...this.options, params: this.params(filters), responseType: 'blob' }); }
   paymentProofs(filters: Record<string, string | number>) { return this.http.get<ApiResponse<PageResult<AdminPaymentProof>>>(`${this.base}/payment-proofs`, { ...this.options, params: this.params(filters) }); }
   paymentProof(id: string) { return this.http.get<ApiResponse<AdminPaymentProofDetail>>(`${this.base}/payment-proofs/${id}`, this.options).pipe(map(response => ({ ...response, data: { ...response.data, proof: { ...response.data.proof, fileUrl: this.proofFileUrl(response.data.proof.fileUrl) } } }))); }
   verifyPaymentProof(id: string, verifiedAmount: number, reason?: string) { return this.http.post<ApiResponse<AdminPaymentProof>>(`${this.base}/payment-proofs/${id}/verify`, reason ? { verifiedAmount, reason } : { verifiedAmount }, this.options); }

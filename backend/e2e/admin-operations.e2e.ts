@@ -487,8 +487,9 @@ try {
     .query(`
       DECLARE @paymentId int=(SELECT payment_id FROM dbo.PAYMENT WHERE reservation_id=@bookingId);
       INSERT dbo.PAYMENT_TRANSACTION(payment_id,admin_id,amount,payment_method,transaction_ref,payment_date)
-        VALUES(@paymentId,@adminId,100,'BANK_TRANSFER',@reference,CONVERT(datetime2,'2099-12-31T00:00:00'));
-      UPDATE dbo.PAYMENT SET amount_paid=amount_paid+100,payment_method='BANK_TRANSFER',transaction_ref=@reference,
+        VALUES(@paymentId,@adminId,20.50,'CASH',CONCAT(@reference,'-CASH'),CONVERT(datetime2,'2099-12-30T21:34:52')),
+          (@paymentId,@adminId,100,'BANK_TRANSFER',@reference,CONVERT(datetime2,'2099-12-31T00:00:00'));
+      UPDATE dbo.PAYMENT SET amount_paid=amount_paid+120.50,payment_method='BANK_TRANSFER',transaction_ref=@reference,
         payment_date=CONVERT(datetime2,'2099-12-31T00:00:00'),status='PARTIALLY_PAID' WHERE payment_id=@paymentId;
       UPDATE dbo.INVOICE SET status='PARTIALLY_PAID' WHERE reservation_id=@bookingId;
       SELECT CONVERT(varchar(10),i.issued_at,23) reportDate,i.invoice_number invoiceNumber,r.booking_reference bookingReference
@@ -511,12 +512,39 @@ try {
   const invoiceRows = paymentReport.body.data.items.filter((item: { invoiceNumber: string }) => item.invoiceNumber === invoiceNumber);
   assert.equal(invoiceRows.length, 1, 'Multiple transactions must not duplicate a billing report row.');
   assert.equal(invoiceRows[0].amountDue, 2500);
-  assert.equal(invoiceRows[0].amountPaid, requiredDeposit + 100);
-  assert.equal(invoiceRows[0].outstandingBalance, 2500 - requiredDeposit - 100);
+  assert.equal(invoiceRows[0].amountPaid, requiredDeposit + 120.50);
+  assert.equal(invoiceRows[0].outstandingBalance, 2500 - requiredDeposit - 120.50);
   assert.equal(paymentReport.body.data.summary.totalBilled,
     paymentReport.body.data.items.reduce((total: number, item: { amountDue: number }) => total + Number(item.amountDue), 0));
   assert.equal(paymentReport.body.data.summary.verifiedPayments,
     paymentReport.body.data.items.reduce((total: number, item: { amountPaid: number }) => total + Number(item.amountPaid), 0));
+
+  const collectionFilters = new URLSearchParams({ dateFrom: '2099-12-30', dateTo: '2099-12-31' });
+  const collections = await api(base, `/admin/reports/collections?${collectionFilters}`, { headers: { cookie: adminCookie } });
+  const collectionRows = collections.body.data.items.filter((item: { invoiceNumber: string }) => item.invoiceNumber === invoiceNumber);
+  assert.deepEqual(collectionRows.map(({ paymentDate, method, amount }: { paymentDate: string; method: string; amount: number }) =>
+    [paymentDate, method, amount]), [
+    ['2099-12-30', 'CASH', 20.50],
+    ['2099-12-31', 'BANK_TRANSFER', 100],
+  ]);
+  assert.equal(collections.body.data.summary.paymentCount, collections.body.data.items.length);
+  assert.equal(Math.round(collections.body.data.summary.totalCollected * 100),
+    collections.body.data.items.reduce((cents: number, item: { amount: number }) => cents + Math.round(item.amount * 100), 0));
+
+  collectionFilters.set('method', 'CASH');
+  const cashCollections = await api(base, `/admin/reports/collections?${collectionFilters}`, { headers: { cookie: adminCookie } });
+  assert.equal(cashCollections.body.data.items.filter((item: { invoiceNumber: string }) => item.invoiceNumber === invoiceNumber).length, 1);
+  assert.ok(cashCollections.body.data.items.every((item: { method: string }) => item.method === 'CASH'));
+
+  const cashCsv = await api(base, `/admin/reports/collections/export?${collectionFilters}`, { headers: { cookie: adminCookie } });
+  const cashCsvEntries = new TextDecoder().decode(cashCsv.body as ArrayBuffer).split('\r\n');
+  assert.equal(cashCsvEntries[0], 'Payment date,Method,Amount collected,Invoice,Reservation,Customer,Source');
+  assert.ok(cashCsvEntries.some(line => line.startsWith(`2099-12-30,CASH,20.50,${invoiceNumber},${bookingReference},`)));
+  assert.equal(cashCsvEntries.filter(line => line.includes(invoiceNumber)).length, 1);
+
+  collectionFilters.set('dateFrom', '2099-12-31');
+  const nextDayCash = await api(base, `/admin/reports/collections?${collectionFilters}`, { headers: { cookie: adminCookie } });
+  assert.ok(nextDayCash.body.data.items.every((item: { invoiceNumber: string }) => item.invoiceNumber !== invoiceNumber));
 
   const emptyReport = await api(base, '/admin/reports/reservations?dateFrom=2098-01-01&dateTo=2098-01-01', { headers: { cookie: adminCookie } });
   assert.deepEqual(emptyReport.body.data.summary, { reservationCount: 0, totalGuests: 0 });
@@ -539,7 +567,7 @@ try {
     assert.ok(customerAuditActions.includes(expected), `Missing customer audit action: ${expected}`);
   }
 
-  const remaining = 2500 - requiredDeposit - 100;
+  const remaining = 2500 - requiredDeposit - 120.50;
   const finalProof = await api(base, `/bookings/${created.booking}/payment-proofs`, { method: 'POST', headers: { cookie: restoredCustomerCookie }, body: await proofForm(`${marker}-FULL-BALANCE`, remaining, new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })) }, 201);
   await api(base, `/admin/payment-proofs/${finalProof.body.data.id}/verify`, { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: remaining }) });
   const settled = await api(base, `/invoices/${created.invoice}`, { headers: { cookie: restoredCustomerCookie } });

@@ -25,7 +25,7 @@ const transitions: [BookingStatus, readonly BookingStatus[]][] = [
   ['APPROVED', ['AWAITING_PAYMENT', 'CANCELLED']],
   ['AWAITING_PAYMENT', ['PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CANCELLED']],
   ['PAYMENT_SUBMITTED', ['PAYMENT_VERIFIED', 'AWAITING_PAYMENT']],
-  ['PAYMENT_VERIFIED', ['CONFIRMED']],
+  ['PAYMENT_VERIFIED', ['CONFIRMED', 'CANCELLED']],
   ['CONFIRMED', ['COMPLETED', 'CANCELLED']],
   ['REJECTED', []],
   ['CANCELLED', []],
@@ -36,7 +36,7 @@ const transitions: [BookingStatus, readonly BookingStatus[]][] = [
 class BookingDb {
   status: BookingStatus = 'PENDING';
   customerId = 7;
-  eventDate = '2026-12-01';
+  eventDate = '2098-12-01';
   guestCount = 100;
   paymentMethod: string | undefined;
   amountPaid = 0;
@@ -235,10 +235,59 @@ for (const [previousStatus, nextStatus] of [['PENDING', 'APPROVED'], ['APPROVED'
     t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T16:00:00Z') });
     for (const paymentMethod of ['BANK_TRANSFER', 'E-WALLET', undefined]) {
       const db = new BookingDb();
-      Object.assign(db, { status: previousStatus, paymentMethod, eventDate: '2026-11-04' });
+      const eventDate = nextStatus === 'APPROVED' ? '2026-11-05' : '2026-11-04';
+      Object.assign(db, { status: previousStatus, paymentMethod, eventDate });
       await transitionBooking({ reservationId: 5, nextStatus, actor: { type: 'ADMIN', id: 2 }, request: db.request });
       assert.equal(db.status, 'AWAITING_PAYMENT');
     }
+  });
+}
+
+test('admin cancellation records the early forfeiture assessment at the Manila calendar cutoff', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-24T15:59:59.999Z') });
+  for (const [amountPaid, forfeitedAmount, refundableAmount] of [[75, 10, 65], [25, 5, 20]]) {
+    const db = new BookingDb();
+    Object.assign(db, { status: 'CONFIRMED', eventDate: '2026-10-31', amountPaid });
+    await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
+      reason: 'Customer requested cancellation', mode: 'GENERIC_ADMIN', customerCancellationDate: '2026-10-24', request: db.request });
+    assert.deepEqual(JSON.parse(String(db.audit[0]?.['auditNewValues'])).cancellation, {
+      kind: 'EARLY', date: '2026-10-24', forfeitedAmount, refundableAmount,
+    });
+    assert.equal(db.amountPaid, amountPaid);
+  }
+  t.mock.timers.setTime(Date.parse('2026-10-24T16:00:00.000Z'));
+  const late = new BookingDb();
+  Object.assign(late, { status: 'CONFIRMED', eventDate: '2026-10-31', amountPaid: 75 });
+  await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
+    reason: 'Customer requested cancellation', mode: 'GENERIC_ADMIN', customerCancellationDate: '2026-10-25', request: late.request });
+  assert.deepEqual(JSON.parse(String(late.audit[0]?.['auditNewValues'])).cancellation, {
+    kind: 'ADMIN_REVIEW', date: '2026-10-25',
+  });
+  const staffCancellation = new BookingDb();
+  Object.assign(staffCancellation, { status: 'PAYMENT_VERIFIED', eventDate: '2026-11-20', amountPaid: 50 });
+  await transitionBooking({ reservationId: 5, nextStatus: 'CANCELLED', actor: { type: 'ADMIN', id: 2 },
+    reason: 'LA Chef needs to cancel', mode: 'GENERIC_ADMIN', request: staffCancellation.request });
+  assert.deepEqual(JSON.parse(String(staffCancellation.audit[0]?.['auditNewValues'])).cancellation, {
+    kind: 'ADMIN_REVIEW', date: '2026-10-25',
+  });
+});
+
+for (const paymentMethod of ['BANK_TRANSFER', 'E-WALLET', undefined]) {
+  test(`pending approval with ${paymentMethod ?? 'no payment method'} stops after the Manila event date`, async t => {
+    t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-04T15:59:59.999Z') });
+    const db = new BookingDb();
+    Object.assign(db, { paymentMethod, eventDate: '2026-11-04' });
+    db.afterCapacityLock = () => t.mock.timers.setTime(Date.parse('2026-11-04T16:00:00Z'));
+
+    await assert.rejects(
+      transitionBooking({ reservationId: 5, nextStatus: 'APPROVED', actor: { type: 'ADMIN', id: 2 }, request: db.request }),
+      error => assertCodedStatus(error, 409, 'EVENT_DATE_PASSED'),
+    );
+    assert.equal(db.status, 'PENDING');
+    assert.equal(db.history.length, 0);
+    assert.equal(db.audit.length, 0);
+    assert.equal(db.invoices.length, 0);
+    assert.equal(db.outbox.length, 0);
   });
 }
 
@@ -520,7 +569,7 @@ test('booking status history appears in admin booking detail', async () => {
   assert.equal(detail?.status, 'PENDING');
   assert.equal(detail?.statusHistory?.[0]?.nextStatus, 'APPROVED');
   assert.deepEqual(detail?.capacity, {
-    date: '2026-12-01',
+    date: '2098-12-01',
     guestCount: 100,
     status: 'NEEDS_CONFIRMATION',
     activeBookingCount: 2,
@@ -634,8 +683,8 @@ test('booking status endpoint validates status and reason before dispatch', asyn
     assert.equal(calls.length, 0);
     assert.equal(errors.length, 2);
     errors.forEach(error => assertStatus(error, 400));
-    await invoke({ status: 'CANCELLED', reason: ' Customer request ' });
-    assert.deepEqual(calls, [[3, 5, 'CANCELLED', 'Customer request', undefined]]);
+    await invoke({ status: 'CANCELLED', reason: ' Customer request ', customerCancellationDate: '2026-11-19' });
+    assert.deepEqual(calls, [[3, 5, 'CANCELLED', 'Customer request', undefined, '2026-11-19']]);
   } finally {
     updateMock.mock.restore();
   }

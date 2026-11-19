@@ -31,6 +31,7 @@ export interface ClaimedEmail extends EmailOutboxRecord {
 export interface EmailOutboxRepository {
   insert(input: QueueNotificationInput, request?: sql.Request): Promise<string>;
   claim(now: Date, settings: EmailWorkerSettings): Promise<ClaimedEmail[]>;
+  customerEmailForDelivery(item: ClaimedEmail): Promise<{ email: string; verifiedEmail: string | null } | undefined>;
   finish(claimed: ClaimedEmail, outcome: EmailFinishOutcome, now: Date): Promise<boolean>;
   findById(id: string): Promise<EmailOutboxRecord | undefined>;
   bookingContext(reservationId: number, request: sql.Request): Promise<BookingNotificationContext | undefined>;
@@ -75,6 +76,18 @@ const projection = `CONVERT(varchar(20), notification_id) id,recipient,normalize
   CONVERT(varchar(20), related_entity_id) relatedEntityId,status,attempt_count attemptCount,
   next_attempt_at nextAttemptAt,last_error lastError,created_at createdAt,sent_at sentAt,updated_at updatedAt`;
 
+const customerDeliverySources = new Map<string, string>([
+  ['CUSTOMER', `WHERE c.customer_id=TRY_CONVERT(int,@relatedEntityId)`],
+  ['BOOKING', `JOIN dbo.RESERVATION r ON r.customer_id=c.customer_id
+    WHERE r.reservation_id=TRY_CONVERT(int,@relatedEntityId)`],
+  ['INVOICE', `JOIN dbo.RESERVATION r ON r.customer_id=c.customer_id
+    JOIN dbo.INVOICE i ON i.reservation_id=r.reservation_id
+    WHERE i.invoice_id=TRY_CONVERT(int,@relatedEntityId)`],
+  ['PAYMENT_PROOF', `JOIN dbo.RESERVATION r ON r.customer_id=c.customer_id
+    JOIN dbo.PAYMENT_PROOF p ON p.reservation_id=r.reservation_id AND p.customer_id=r.customer_id
+    WHERE p.payment_proof_id=@relatedEntityId`],
+]);
+
 export function createEmailOutboxRepository(deps: Dependencies): EmailOutboxRepository {
   return {
     async insert(input, suppliedRequest) {
@@ -115,6 +128,18 @@ export function createEmailOutboxRepository(deps: Dependencies): EmailOutboxRepo
             INSERTED.last_error lastError,INSERTED.created_at createdAt,INSERTED.sent_at sentAt,INSERTED.updated_at updatedAt`);
         return result.recordset.map(row => record(row) as ClaimedEmail);
       });
+    },
+
+    async customerEmailForDelivery(item) {
+      if (!item.relatedEntityType || !item.relatedEntityId) return undefined;
+      const source = customerDeliverySources.get(item.relatedEntityType);
+      if (!source) return undefined;
+      const result = await (await deps.readRequest())
+        .replaceInput('relatedEntityId', sql.BigInt, item.relatedEntityId)
+        .query<{ email: string; verifiedEmail: string | null }>(`/* customer email delivery recipient */
+          SELECT c.email,c.verified_email verifiedEmail FROM dbo.CUSTOMER c
+          ${source} AND c.status='ACTIVE'`);
+      return result.recordset[0];
     },
 
     async finish(claimed, outcome, now) {

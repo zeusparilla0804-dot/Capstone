@@ -1,12 +1,23 @@
 import sql from 'mssql';
 import { getDbPool } from '../config/database.js';
-import type { InvoiceDetails } from '../types/invoice.types.js';
+import type { CancellationAssessment, InvoiceDetails } from '../types/invoice.types.js';
 import { queueBookingNotification } from '../services/notification.service.js';
 import { writeAdminAudit } from './audit.repository.js';
 import { readMenuSnapshot } from '../services/package-menu.service.js';
 import { bankSnapshotColumns, mapBankSnapshot } from './payment-bank.repository.js';
 
 const dateValue = (value: Date | string | undefined) => value ? new Date(value).toISOString() : undefined;
+
+function readCancellationAssessment(value: unknown): CancellationAssessment | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    const data = JSON.parse(value) as Partial<CancellationAssessment> | null;
+    if (!data || typeof data.date !== 'string') return undefined;
+    if (data.kind === 'ADMIN_REVIEW') return { kind: data.kind, date: data.date };
+    if (data.kind !== 'EARLY' || typeof data.forfeitedAmount !== 'number' || typeof data.refundableAmount !== 'number') return undefined;
+    return { kind: data.kind, date: data.date, forfeitedAmount: data.forfeitedAmount, refundableAmount: data.refundableAmount };
+  } catch { return undefined; }
+}
 
 interface InvoicePackageLine {
   description: string;
@@ -125,11 +136,19 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
   const main = await request.query(`SELECT i.invoice_id,i.invoice_number,i.issued_at,i.due_at,i.status,i.subtotal,
       i.discount_amount,i.total_amount,r.reservation_id,r.status reservation_status,r.booking_reference,r.event_date,r.event_time,
       r.venue_address,r.guest_count,r.menu_selection_json,e.event_type,c.customer_id,CONCAT(c.first_name,' ',c.last_name) customer_name,
-      c.email,c.contact_number,issuer.full_name issuer_name,COALESCE(pay.amount_paid,0) amount_paid
+      c.email,c.contact_number,issuer.full_name issuer_name,COALESCE(pay.amount_paid,0) amount_paid,
+      cancellation.assessment cancellation_assessment
     FROM dbo.INVOICE i JOIN dbo.RESERVATION r ON r.reservation_id=i.reservation_id
     JOIN dbo.EVENT e ON e.event_id=r.event_id JOIN dbo.CUSTOMER c ON c.customer_id=r.customer_id
     LEFT JOIN dbo.PAYMENT pay ON pay.reservation_id=r.reservation_id
     LEFT JOIN dbo.ADMIN issuer ON issuer.admin_id=i.issued_by
+    OUTER APPLY (
+      SELECT TOP (1) JSON_QUERY(CASE WHEN ISJSON(a.new_values)=1 THEN a.new_values END,'$.cancellation') assessment
+      FROM dbo.ADMIN_AUDIT_LOG a
+      WHERE r.status='CANCELLED' AND a.entity_type='BOOKING' AND a.entity_id=r.reservation_id
+        AND a.action='BOOKING_STATUS_CHANGED'
+      ORDER BY a.audit_id DESC
+    ) cancellation
     WHERE i.invoice_id=@invoiceId AND (@customerId IS NULL OR c.customer_id=@customerId)`);
   const row = main.recordset[0];
   if (!row) return undefined;
@@ -141,9 +160,11 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
       WHERE p.reservation_id=@reservationId ORDER BY pt.payment_date DESC,pt.payment_transaction_id DESC`);
   const paid = Number(row.amount_paid);
   const total = Number(row.total_amount);
+  const cancelled = row.reservation_status === 'CANCELLED' || row.status === 'CANCELLED';
+  const settledPaymentStatus = paid >= total ? 'PAID' : paid > 0 ? 'PARTIALLY_PAID' : row.status;
   return {
     invoiceId: Number(row.invoice_id), invoiceNumber: row.invoice_number, issueDate: dateValue(row.issued_at)!,
-    dueDate: dateValue(row.due_at), status: paid >= total ? 'PAID' : paid > 0 ? 'PARTIALLY_PAID' : row.status,
+    dueDate: cancelled ? undefined : dateValue(row.due_at), status: cancelled ? 'CANCELLED' : settledPaymentStatus,
     customer: { id: Number(row.customer_id), name: row.customer_name, email: row.email, phone: row.contact_number },
     issuer: { name: row.issuer_name ?? '' },
     booking: {
@@ -153,7 +174,8 @@ export async function findInvoice(invoiceId: number, customerId?: number): Promi
     },
     items: items.recordset.map((item) => ({ description: item.description, quantity: item.quantity, unitPrice: Number(item.unit_price), amount: Number(item.line_total) })),
     subtotal: Number(row.subtotal), discount: Number(row.discount_amount), totalAmount: total, amountPaid: paid,
-    remainingBalance: Math.max(total - paid, 0),
+    remainingBalance: cancelled ? 0 : Math.max(total - paid, 0),
+    cancellation: cancelled ? readCancellationAssessment(row.cancellation_assessment) : undefined,
     payments: payments.recordset.map((payment) => ({
       id: Number(payment.id), date: dateValue(payment.payment_date)!, reference: payment.transaction_ref ?? undefined,
       method: payment.payment_method, amount: Number(payment.amount), status: payment.status, ...mapBankSnapshot(payment),

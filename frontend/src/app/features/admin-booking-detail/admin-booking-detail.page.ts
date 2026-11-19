@@ -35,7 +35,10 @@ const actions: Record<AdminBookingStatus, readonly BookingAction[]> = {
   ],
   AWAITING_PAYMENT: [{ status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true }],
   PAYMENT_SUBMITTED: [],
-  PAYMENT_VERIFIED: [{ status: 'CONFIRMED', label: 'Confirm reservation', tone: 'primary' }],
+  PAYMENT_VERIFIED: [
+    { status: 'CONFIRMED', label: 'Confirm reservation', tone: 'primary' },
+    { status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true },
+  ],
   CONFIRMED: [
     { status: 'COMPLETED', label: 'Mark completed', tone: 'primary' },
     { status: 'CANCELLED', label: 'Cancel reservation', tone: 'secondary', reasonRequired: true },
@@ -79,6 +82,7 @@ export class AdminBookingDetailPage {
     || this.proofHistory()?.items.some(proof => proof.status === 'SUBMITTED') === true);
   protected readonly methodLabel = paymentMethodLabel;
   protected actionReason = '';
+  protected customerCancellationDate = '';
   protected readonly editingTime = signal(false);
   protected editedEventTime = '';
   protected readonly canEditTime = computed(() => !!this.booking() && ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED'].includes(this.booking()!.status));
@@ -208,6 +212,7 @@ export class AdminBookingDetailPage {
     if (!action) return;
     this.pendingAction.set(action);
     this.actionReason = '';
+    this.customerCancellationDate = '';
     this.actionError.set('');
     this.feedback.set('');
   }
@@ -225,7 +230,9 @@ export class AdminBookingDetailPage {
     const bookingReference = this.booking()?.reference ?? '';
     const request = action.capacityConfirmation
       ? this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined, true)
-      : this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined);
+      : action.status === 'CANCELLED' && this.customerCancellationDate
+        ? this.api.updateBookingStatus(this.bookingId, action.status, reason, undefined, this.customerCancellationDate)
+        : this.api.updateBookingStatus(this.bookingId, action.status, reason || undefined);
     request
       .pipe(finalize(() => this.mutationPending.set(false)))
       .subscribe({

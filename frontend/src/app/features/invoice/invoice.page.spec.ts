@@ -46,6 +46,33 @@ const invoice: Invoice = {
 };
 
 describe('InvoicePageComponent', () => {
+  it('keeps verified payments visible without requesting a balance on a cancelled reservation', () => {
+    (fixture.componentInstance as any).invoice.set({
+      ...invoice, booking: { ...invoice.booking, status: 'CANCELLED' },
+    });
+    fixture.detectChanges();
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.invoice-heading app-status-badge')?.textContent).toContain('Cancelled');
+    expect(page.querySelector('.invoice-totals .balance')).toBeNull();
+    expect(page.querySelector('.invoice-heading')?.textContent).not.toContain('Balance due');
+    expect(page.querySelector('.invoice-agreement')?.textContent).toContain('Contact LA Chef');
+    expect(page.querySelector('.payment-history')?.textContent).toContain('GCASH-0042');
+  });
+
+  it('shows the approved early-cancellation assessment without marking the refund paid', () => {
+    (fixture.componentInstance as any).invoice.set({
+      ...invoice, status: 'CANCELLED', remainingBalance: 0,
+      cancellation: { kind: 'EARLY', date: '2026-11-30', forfeitedAmount: 10000, refundableAmount: 40000 },
+    });
+    fixture.detectChanges();
+    const totals = fixture.nativeElement.querySelector('.invoice-totals')?.textContent;
+    expect(totals).toContain('Retained from down payment');
+    expect(totals).toContain('10,000.00');
+    expect(totals).toContain('Refundable amount');
+    expect(totals).toContain('40,000.00');
+    expect(totals).not.toContain('Balance Due');
+  });
+
   it('shows the saved menu snapshot alongside the original invoice identity on a receipt', () => {
     (fixture.componentInstance as any).invoice.set({ ...invoice, booking: { ...invoice.booking, menuSelection: {
       items: [{ key: 'pork', label: 'Pork dish', value: 'Saved pork preference' }], includedItems: ['Steamed rice'],
@@ -186,7 +213,8 @@ describe('InvoicePageComponent', () => {
     expect(agreement).not.toBeNull();
     expect(agreement.textContent).toContain('50% down payment is required to confirm the reservation');
     expect(agreement.textContent).toContain('remaining balance is due on the event date');
-    expect(agreement.textContent).toContain('cancellation by the client will result in forfeiture of 50% of the total reservation amount');
+    expect(agreement.textContent).toContain('at least 7 calendar days before the event');
+    expect(agreement.textContent).toContain('20% of the verified down payment');
 
     const signatures = agreement.querySelectorAll('.invoice-signature');
     expect(signatures).toHaveLength(2);

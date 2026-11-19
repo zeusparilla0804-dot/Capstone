@@ -14,15 +14,18 @@ const [{ findInvoice }, { closeDatabase }] = await Promise.all([
 ]);
 
 test('invoice and receipt use the issuing administrator and retain the recorded payment ledger', async t => {
+  let reservationStatus = 'CONFIRMED';
   const pool = { connected: true, close: async () => {}, request: () => new sql.Request() };
   t.mock.method(sql.ConnectionPool.prototype, 'connect', async () => pool);
   t.mock.method(sql.Request.prototype, 'query', async (command: string) => {
     if (command.includes('SELECT i.invoice_id,i.invoice_number')) {
       assert.match(command, /issuer\.admin_id=i\.issued_by/);
       assert.match(command, /@customerId IS NULL OR c\.customer_id=@customerId/);
-      return { recordset: [{ invoice_id: 8, invoice_number: 'INV-8', issued_at: '2026-11-10', status: 'ISSUED',
+      return { recordset: [{ invoice_id: 8, invoice_number: 'INV-8', issued_at: '2026-11-10', due_at: '2026-12-10', status: 'ISSUED',
         subtotal: 10000, discount_amount: 0, total_amount: 10000, amount_paid: 5000,
-        reservation_id: 42, reservation_status: 'CONFIRMED', booking_reference: 'BK-42',
+        cancellation_assessment: reservationStatus === 'CANCELLED'
+          ? JSON.stringify({ kind: 'EARLY', date: '2026-11-30', forfeitedAmount: 1000, refundableAmount: 4000 }) : null,
+        reservation_id: 42, reservation_status: reservationStatus, booking_reference: 'BK-42',
         event_type: 'Wedding', event_date: '2026-12-10', event_time: '1970-01-01T12:00:00Z',
         guest_count: 50, customer_id: 7, customer_name: 'Preview Customer', issuer_name: 'Issuing Administrator' }] };
     }
@@ -41,6 +44,15 @@ test('invoice and receipt use the issuing administrator and retain the recorded 
     assert.equal(doc?.amountPaid, 5000);
     assert.equal(doc?.remainingBalance, 5000);
     assert.equal(doc?.payments[0].reference, 'CASH-42');
+
+    reservationStatus = 'CANCELLED';
+    const cancelled = await findInvoice(8, 7);
+    assert.equal(cancelled?.status, 'CANCELLED');
+    assert.equal(cancelled?.dueDate, undefined);
+    assert.equal(cancelled?.remainingBalance, 0);
+    assert.equal(cancelled?.amountPaid, 5000);
+    assert.deepEqual(cancelled?.cancellation, { kind: 'EARLY', date: '2026-11-30', forfeitedAmount: 1000, refundableAmount: 4000 });
+    assert.deepEqual(cancelled?.payments, doc?.payments);
   } finally { await closeDatabase(); }
 });
 

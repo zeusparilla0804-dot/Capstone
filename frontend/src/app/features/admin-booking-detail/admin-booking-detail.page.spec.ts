@@ -344,7 +344,7 @@ describe('AdminBookingDetailPage', () => {
     };
     const expected: Record<string, readonly string[]> = {
       PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'], APPROVED: ['AWAITING_PAYMENT', 'CANCELLED'],
-      AWAITING_PAYMENT: ['CANCELLED'], PAYMENT_SUBMITTED: [], PAYMENT_VERIFIED: [],
+      AWAITING_PAYMENT: ['CANCELLED'], PAYMENT_SUBMITTED: [], PAYMENT_VERIFIED: ['CANCELLED'],
       CONFIRMED: ['COMPLETED', 'CANCELLED'], COMPLETED: [], REJECTED: [], CANCELLED: [], EXPIRED: []
     };
     for (const [status, allowed] of Object.entries(expected)) {

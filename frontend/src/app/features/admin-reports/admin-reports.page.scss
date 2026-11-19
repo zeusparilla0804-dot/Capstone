@@ -17,6 +17,7 @@
 
 .report-panel { padding-top: 26px; }
 .report-filters { display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)) auto; align-items: end; gap: 14px; padding-bottom: 26px; border-bottom: 1px solid var(--portal-divider); }
+.report-filters--collections { grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; }
 .report-filters label { display: grid; gap: 7px; min-width: 0; color: var(--portal-text); font-size: 12px; font-weight: 500; }
 .report-filters input,
 .report-filters select { width: 100%; min-height: 44px; border: 1px solid #d7d3ca; border-radius: 6px; background: #fff; color: var(--portal-text); padding: 0 12px; font-family: var(--font-admin); font-size: 13px; font-weight: 400; }
@@ -51,6 +52,7 @@
 .report-table .is-number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media screen and (min-width: 768px) {
+  .report-table--collections { min-width: 730px; }
   .report-table--reservations { table-layout: fixed; min-width: 1000px; }
   .report-table--reservations th { padding: 0 12px 14px; }
   .report-table--reservations td { padding: 18px 12px; overflow-wrap: break-word; }

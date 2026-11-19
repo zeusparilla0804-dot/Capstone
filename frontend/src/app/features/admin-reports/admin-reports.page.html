@@ -1,10 +1,10 @@
-<app-admin-shell title="Reports" description="Review reservation activity and billing performance within a selected period.">
+<app-admin-shell title="Reports" description="Review reservations, verified collections, and invoice balances.">
   <div admin-actions class="report-actions" aria-label="Report actions">
     <button class="btn btn-secondary" type="button" data-action="print-report" (click)="printReport()">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8V4h10v4M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M7 14h10v6H7v-6Z" /></svg>
       Print
     </button>
-    <button class="btn btn-primary" type="button" data-action="export-report" [disabled]="exporting()" (click)="exportActive()">
+    <button class="btn btn-primary" type="button" data-action="export-report" [disabled]="exporting() || (activeTab() === 'collections' && (!collectionData() || collectionLoading() || !!collectionError()))" (click)="exportActive()">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 20h14" /></svg>
       {{ exporting() ? 'Preparing...' : 'Export CSV' }}
     </button>
@@ -13,7 +13,8 @@
   <section class="report-workspace">
     <div class="report-tabs" role="tablist" aria-label="Report type">
       <button id="reservations-tab" type="button" role="tab" [attr.aria-selected]="activeTab() === 'reservations'" [attr.tabindex]="activeTab() === 'reservations' ? 0 : -1" aria-controls="reservations-panel" (click)="selectTab('reservations')" (keydown)="handleTabKey($event, 'reservations')">Reservations</button>
-      <button id="payments-tab" type="button" role="tab" [attr.aria-selected]="activeTab() === 'payments'" [attr.tabindex]="activeTab() === 'payments' ? 0 : -1" aria-controls="payments-panel" (click)="selectTab('payments')" (keydown)="handleTabKey($event, 'payments')">Payments</button>
+      <button id="collections-tab" type="button" role="tab" [attr.aria-selected]="activeTab() === 'collections'" [attr.tabindex]="activeTab() === 'collections' ? 0 : -1" aria-controls="collections-panel" (click)="selectTab('collections')" (keydown)="handleTabKey($event, 'collections')">Collections</button>
+      <button id="payments-tab" type="button" role="tab" [attr.aria-selected]="activeTab() === 'payments'" [attr.tabindex]="activeTab() === 'payments' ? 0 : -1" aria-controls="payments-panel" (click)="selectTab('payments')" (keydown)="handleTabKey($event, 'payments')">Invoices</button>
     </div>
 
     @if (activeTab() === 'reservations') {
@@ -31,7 +32,7 @@
         } @else if (reservationLoading() && !reservationData()) {
           <p class="report-state" role="status">Loading reservation report...</p>
         } @else if (reservationData(); as report) {
-          <div class="print-heading"><h2>Reservation report</h2><p>{{ report.filters.dateFrom | date:'mediumDate':'UTC' }} to {{ report.filters.dateTo | date:'mediumDate':'UTC' }} &middot; Generated {{ generatedAt() | date:'medium' }}</p></div>
+          <div class="print-heading"><h2>Reservation report</h2><p>{{ report.filters.dateFrom + 'T00:00:00Z' | date:'mediumDate':'UTC' }} to {{ report.filters.dateTo + 'T00:00:00Z' | date:'mediumDate':'UTC' }} &middot; Generated {{ generatedAt() | date:'medium' }}</p></div>
           <dl class="report-summary" aria-label="Reservation summary">
             <div><dt>Reservations</dt><dd>{{ report.summary.reservationCount }}</dd></div>
             <div><dt>Total guests</dt><dd>{{ report.summary.totalGuests }}</dd></div>
@@ -42,7 +43,7 @@
             @if (report.upcomingItems.length) {
               <div class="upcoming-list">
                 @for (item of report.upcomingItems; track item.reference) {
-                  <article><time [attr.datetime]="item.eventDate">{{ item.eventDate | date:'MMM d':'UTC' }}</time><div><strong>{{ item.eventType }}</strong><span>{{ item.customer }} &middot; {{ item.venue }}</span></div><span>{{ item.guestCount }} guests</span></article>
+                  <article><time [attr.datetime]="item.eventDate">{{ item.eventDate + 'T00:00:00Z' | date:'MMM d':'UTC' }}</time><div><strong>{{ item.eventType }}</strong><span>{{ item.customer }} &middot; {{ item.venue }}</span></div><span>{{ item.guestCount }} guests</span></article>
                 }
               </div>
             } @else { <p class="report-state">No approved or confirmed events fall within this period.</p> }
@@ -50,38 +51,78 @@
 
           @if (report.items.length) {
             <div class="report-table-wrap"><table class="report-table report-table--reservations"><thead><tr><th>Reference</th><th>Customer</th><th>Event</th><th>Date & time</th><th class="is-number">Guests</th><th>Venue</th><th>Package</th><th>Status</th></tr></thead><tbody>
-              @for (item of report.items; track item.reference) { <tr><td data-label="Reference"><strong>{{ item.reference }}</strong></td><td data-label="Customer">{{ item.customer }}</td><td data-label="Event">{{ item.eventType }}</td><td data-label="Date & time">{{ item.eventDate | date:'mediumDate':'UTC' }}<small>{{ item.eventTime | eventTime }}</small></td><td data-label="Guests" class="is-number">{{ item.guestCount }}</td><td data-label="Venue">{{ item.venue }}</td><td data-label="Package">{{ item.packageName }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
+              @for (item of report.items; track item.reference) { <tr><td data-label="Reference"><strong>{{ item.reference }}</strong></td><td data-label="Customer">{{ item.customer }}</td><td data-label="Event">{{ item.eventType }}</td><td data-label="Date & time">{{ item.eventDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}<small>{{ item.eventTime | eventTime }}</small></td><td data-label="Guests" class="is-number">{{ item.guestCount }}</td><td data-label="Venue">{{ item.venue }}</td><td data-label="Package">{{ item.packageName }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
             </tbody></table></div>
           } @else { <p class="report-state report-state--empty">No reservation records match these filters.</p> }
+        }
+      </div>
+    } @else if (activeTab() === 'collections') {
+      <div id="collections-panel" class="report-panel" role="tabpanel" aria-labelledby="collections-tab">
+        <form class="report-filters report-filters--collections" [formGroup]="collectionForm" (ngSubmit)="loadCollections()">
+          <label>Payment from<input type="date" formControlName="dateFrom" /></label>
+          <label>Payment through<input type="date" formControlName="dateTo" /></label>
+          <label>Payment method<select formControlName="method"><option value="">All methods</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash (historical)</option></select></label>
+          <button class="btn btn-secondary" type="submit" [disabled]="collectionLoading()">{{ collectionLoading() ? 'Loading...' : 'Apply filters' }}</button>
+        </form>
+
+        @if (collectionError()) {
+          <div class="report-state report-state--error" role="alert"><p>{{ collectionError() }}</p><button class="btn btn-secondary btn-sm" type="button" data-action="retry" (click)="loadCollections()">Try again</button></div>
+        } @else if (collectionLoading() && !collectionData()) {
+          <p class="report-state" role="status">Loading collections report...</p>
+        } @else if (collectionData(); as report) {
+          <div class="print-heading"><h2>Collections report</h2><p>{{ report.filters.dateFrom + 'T00:00:00Z' | date:'mediumDate':'UTC' }} to {{ report.filters.dateTo + 'T00:00:00Z' | date:'mediumDate':'UTC' }} &middot; Generated {{ generatedAt() | date:'medium' }}</p></div>
+          <dl class="report-summary" aria-label="Collections summary">
+            <div><dt>Total collected</dt><dd>{{ report.summary.totalCollected | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+            <div><dt>Verified payments</dt><dd>{{ report.summary.paymentCount }}</dd></div>
+          </dl>
+
+          @if (report.items.length) {
+            <div class="report-table-wrap"><table class="report-table report-table--collections">
+              <thead><tr><th>Payment date</th><th>Method</th><th class="is-number">Amount collected</th><th>Invoice</th><th>Reservation</th><th>Customer</th><th>Source</th></tr></thead>
+              <tbody>
+                @for (item of report.items; track item.id) {
+                  <tr>
+                    <td data-label="Payment date">{{ item.paymentDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</td>
+                    <td data-label="Method">{{ item.method | paymentMethodLabel }}</td>
+                    <td data-label="Amount collected" class="is-number">{{ item.amount | currency:'PHP':'symbol-narrow':'1.2-2' }}</td>
+                    <td data-label="Invoice">{{ item.invoiceNumber || '—' }}</td>
+                    <td data-label="Reservation"><strong>{{ item.bookingReference }}</strong></td>
+                    <td data-label="Customer">{{ item.customer }}</td>
+                    <td data-label="Source">{{ item.source === 'legacy' ? 'Legacy payment record' : 'Payment transaction' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table></div>
+          } @else { <p class="report-state report-state--empty">No verified payments match these filters.</p> }
         }
       </div>
     } @else {
       <div id="payments-panel" class="report-panel" role="tabpanel" aria-labelledby="payments-tab">
         <form id="payment-report-filters" class="report-filters" [formGroup]="paymentForm" (ngSubmit)="loadPayments()">
-          <label>From<input type="date" formControlName="dateFrom" /></label>
-          <label>To<input type="date" formControlName="dateTo" /></label>
-          <label>Status<select formControlName="status"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option></select></label>
-          <label>Method<select formControlName="method"><option value="">All methods</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash (historical)</option></select></label>
+          <label>Issued from<input type="date" formControlName="dateFrom" /></label>
+          <label>Issued through<input type="date" formControlName="dateTo" /></label>
+          <label>Status<select formControlName="status"><option value="">All statuses</option><option value="PENDING">Pending</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option><option value="CANCELLED">Cancelled</option></select></label>
+          <label>Latest or selected method<select formControlName="method"><option value="">All methods</option><option value="CASH">Cash</option><option value="BANK_TRANSFER">Bank transfer</option><option value="E-WALLET">GCash (historical)</option></select></label>
           <button class="btn btn-secondary" type="submit" [disabled]="paymentLoading()">{{ paymentLoading() ? 'Loading...' : 'Apply filters' }}</button>
         </form>
 
         @if (paymentError()) {
           <div class="report-state report-state--error" role="alert"><p>{{ paymentError() }}</p><button class="btn btn-secondary btn-sm" type="button" data-action="retry" (click)="loadPayments()">Try again</button></div>
         } @else if (paymentLoading() && !paymentData()) {
-          <p class="report-state" role="status">Loading payment report...</p>
+          <p class="report-state" role="status">Loading invoice report...</p>
         } @else if (paymentData(); as report) {
-          <div class="print-heading"><h2>Payment report</h2><p>{{ report.filters.dateFrom | date:'mediumDate':'UTC' }} to {{ report.filters.dateTo | date:'mediumDate':'UTC' }} &middot; Generated {{ generatedAt() | date:'medium' }}</p></div>
-          <dl class="report-summary report-summary--payments" aria-label="Payment summary">
+          <div class="print-heading"><h2>Invoice report</h2><p>Issued {{ report.filters.dateFrom + 'T00:00:00Z' | date:'mediumDate':'UTC' }} to {{ report.filters.dateTo + 'T00:00:00Z' | date:'mediumDate':'UTC' }} &middot; Generated {{ generatedAt() | date:'medium' }}</p></div>
+          <dl class="report-summary report-summary--payments" aria-label="Invoice summary">
             <div><dt>Total billed</dt><dd>{{ report.summary.totalBilled | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-            <div><dt>Verified payments</dt><dd>{{ report.summary.verifiedPayments | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
-            <div><dt>Outstanding balance</dt><dd>{{ report.summary.outstandingBalance | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+            <div><dt>Paid to date</dt><dd>{{ report.summary.verifiedPayments | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
+            <div><dt>Active outstanding balance</dt><dd>{{ report.summary.outstandingBalance | currency:'PHP':'symbol-narrow':'1.2-2' }}</dd></div>
           </dl>
 
           @if (report.items.length) {
-            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Invoice</th><th>Reservation</th><th>Customer</th><th>Issued</th><th>Method</th><th class="is-number">Amount due</th><th class="is-number">Paid</th><th class="is-number">Outstanding</th><th>Status</th></tr></thead><tbody>
-              @for (item of report.items; track item.invoiceNumber) { <tr><td data-label="Invoice"><strong>{{ item.invoiceNumber }}</strong></td><td data-label="Reservation">{{ item.bookingReference }}</td><td data-label="Customer">{{ item.customer }}</td><td data-label="Issued">{{ item.issuedDate | date:'mediumDate':'UTC' }}@if (item.latestPaymentDate) { <small>Last paid {{ item.latestPaymentDate | date:'mediumDate':'UTC' }}</small> }</td><td data-label="Method">{{ item.method | paymentMethodLabel }}</td><td data-label="Amount due" class="is-number">{{ item.amountDue | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Paid" class="is-number">{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Outstanding" class="is-number">{{ item.outstandingBalance | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
+            <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Invoice</th><th>Reservation</th><th>Customer</th><th>Issued</th><th>Latest or selected method</th><th class="is-number">Amount billed</th><th class="is-number">Paid to date</th><th class="is-number">Outstanding</th><th>Status</th></tr></thead><tbody>
+              @for (item of report.items; track item.invoiceNumber) { <tr><td data-label="Invoice"><strong>{{ item.invoiceNumber }}</strong></td><td data-label="Reservation">{{ item.bookingReference }}</td><td data-label="Customer">{{ item.customer }}</td><td data-label="Issued">{{ item.issuedDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}@if (item.latestPaymentDate) { <small>Last paid {{ item.latestPaymentDate + 'T00:00:00Z' | date:'mediumDate':'UTC' }}</small> }</td><td data-label="Latest or selected method">{{ item.method | paymentMethodLabel }}</td><td data-label="Amount billed" class="is-number">{{ item.amountDue | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Paid to date" class="is-number">{{ item.amountPaid | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Outstanding" class="is-number">{{ item.outstandingBalance | currency:'PHP':'symbol-narrow':'1.2-2' }}</td><td data-label="Status"><app-status-badge [status]="item.status" /></td></tr> }
             </tbody></table></div>
-          } @else { <p class="report-state report-state--empty">No payment records match these filters.</p> }
+          } @else { <p class="report-state report-state--empty">No invoices match these filters.</p> }
         }
       </div>
     }

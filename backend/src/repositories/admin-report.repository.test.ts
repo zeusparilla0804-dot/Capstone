@@ -16,7 +16,10 @@ class Recorder {
   private readonly params: Record<string, unknown> = {};
   constructor(private readonly recordsets: Record<string, unknown>[][]) {}
   replaceInput(name: string, _type: unknown, value: unknown) { this.params[name] = value; return this; }
-  async query(command: string) { this.calls.push({ command, params: { ...this.params } }); return { recordsets: this.recordsets }; }
+  async query(command: string) {
+    this.calls.push({ command, params: { ...this.params } });
+    return { recordsets: this.recordsets, recordset: this.recordsets[0] };
+  }
 }
 
 test('reservation report binds filters and separates future approved or confirmed items', async () => {
@@ -45,4 +48,39 @@ test('payment report filters by invoice issue date and cannot multiply billing r
   assert.doesNotMatch(call.command, /JOIN\s+dbo\.PAYMENT_TRANSACTION\s+pt/i);
   assert.equal(report.summary.totalBilled, 2000);
   assert.equal(report.items[0]!.amountPaid, 750);
+});
+
+test('invoice report keeps cancelled payments in history and excludes them from active receivables', async () => {
+  const request = new Recorder([[{ totalBilled: 1000, verifiedPayments: 400, outstandingBalance: 0 }], [
+    { invoiceNumber: 'INV-1', amountDue: 1000, amountPaid: 400, outstandingBalance: 0, status: 'CANCELLED' },
+  ]]);
+  const repository = createAdminReportRepository({ readRequest: async () => request as unknown as sql.Request });
+  const report = await repository.payments({ dateFrom: '2026-10-01', dateTo: '2026-10-31', status: 'CANCELLED', method: '' });
+
+  assert.match(request.calls[0]!.command, /r\.status='CANCELLED'\s+OR\s+i\.status='CANCELLED'/i);
+  assert.match(request.calls[0]!.command, /CASE\s+WHEN\s+.*?THEN 0\s+WHEN i\.total_amount>pay\.amount_paid/i);
+  assert.deepEqual(report.summary, { totalBilled: 1000, verifiedPayments: 400, outstandingBalance: 0 });
+  assert.equal(report.items[0]!.status, 'CANCELLED');
+});
+
+test('collections bind payment-date and method filters and preserve distinct installments', async () => {
+  const request = new Recorder([[
+    { id: 'T-41', invoiceNumber: 'INV-1', bookingReference: 'LC-1', customer: 'Ana', paymentDate: '2026-10-05', method: 'BANK_TRANSFER', amount: '400.25', source: 'transaction', totalCollected: '1000.75' },
+    { id: 'T-47', invoiceNumber: 'INV-1', bookingReference: 'LC-1', customer: 'Ana', paymentDate: '2026-10-15', method: 'CASH', amount: '600.50', source: 'transaction', totalCollected: '1000.75' },
+  ]]);
+  const repository = createAdminReportRepository({ readRequest: async () => request as unknown as sql.Request });
+  const filters = { dateFrom: '2026-10-01', dateTo: '2026-10-31', method: '' } as const;
+  const report = await repository.collections(filters);
+  const call = request.calls[0]!;
+
+  assert.deepEqual(call.params, filters);
+  assert.match(call.command, /FROM dbo\.PAYMENT_TRANSACTION pt/i);
+  assert.match(call.command, /credit\.paymentDate\s*>=\s*CONVERT\(date,@dateFrom\)/i);
+  assert.match(call.command, /CONVERT\(date,credit\.paymentDate\)\s*<=\s*CONVERT\(date,@dateTo\)/i);
+  assert.match(call.command, /credit\.method=@method/i);
+  assert.match(call.command, /NOT EXISTS\s*\(SELECT 1 FROM dbo\.PAYMENT_TRANSACTION\s+\w+\s+WHERE\s+\w+\.payment_id=pay\.payment_id\)/i);
+  assert.deepEqual(report.summary, { totalCollected: 1000.75, paymentCount: 2 });
+  assert.deepEqual(report.items.map(({ paymentDate, method, amount }) => [paymentDate, method, amount]), [
+    ['2026-10-05', 'BANK_TRANSFER', 400.25], ['2026-10-15', 'CASH', 600.50],
+  ]);
 });

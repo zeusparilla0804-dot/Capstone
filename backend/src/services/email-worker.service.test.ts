@@ -26,6 +26,13 @@ const input = { recipient: ' Customer@Example.test ', templateKey: 'BOOKING_RECE
 
 class OutboxDb {
   rows: any[] = [];
+  customers = new Map([
+    ['1', { email: 'Customer@Example.test', verifiedEmail: 'customer@example.test' as string | null, status: 'ACTIVE' }],
+  ]);
+  bookings = new Map([['5', '1']]);
+  invoices = new Map([['8', '5']]);
+  paymentProofs = new Map([['9007199254740993', '5']]);
+  recipientReadError?: Error;
   commands: { command: string; params: Record<string, any>; transactional: boolean }[] = [];
   events: string[] = [];
   request(transactional = false): sql.Request {
@@ -59,6 +66,19 @@ class OutboxDb {
           Object.assign(row, { status: p.outcome, lastError: p.lastError, nextAttemptAt: p.nextAttemptAt,
             sentAt: p.sentAt, updatedAt: p.now }); return result([], 1);
         }
+        if (/customer email delivery recipient/.test(command)) {
+          if (this.recipientReadError) throw this.recipientReadError;
+          let customerId = p.relatedEntityId;
+          if (command.includes('dbo.RESERVATION')) {
+            let bookingId = p.relatedEntityId;
+            if (command.includes('dbo.INVOICE')) bookingId = this.invoices.get(bookingId);
+            if (command.includes('dbo.PAYMENT_PROOF')) bookingId = this.paymentProofs.get(bookingId);
+            customerId = this.bookings.get(bookingId);
+          }
+          const customer = this.customers.get(customerId);
+          assert.match(command, /c\.status\s*=\s*'ACTIVE'/);
+          return result(customer?.status === 'ACTIVE' ? [customer] : []);
+        }
         if (/FROM dbo.EMAIL_OUTBOX/.test(command)) return result(this.rows.filter(row => row.id === p.outboxId));
         throw new Error(`Unexpected SQL: ${command}`);
       }
@@ -85,7 +105,7 @@ class OutboxDb {
       from: { name: 'LA Chef Event Catering Services', address: 'chef@example.test' },
       renderPasswordResetEmail, renderUpcomingEventReminder, renderEmailVerificationCode });
   }
-  async seed() { await this.notification().queueNotification(input); }
+  async seed() { await this.notification().queueNotification({ ...input, relatedEntityId: '5' }); }
 }
 
 test('email outbox queues immediate PENDING intent and preserves exact bigint and recipient', async () => {
@@ -126,6 +146,115 @@ test('email outbox configured delivery marks SENT and clears old retry/error met
   assert.equal(messages[0].to, 'Customer@Example.test'); assert.equal(messages[0].from.name, 'LA Chef Event Catering Services');
   assert.equal('attachments' in messages[0], false); assert.equal(messages[0].disableFileAccess, true); assert.equal(messages[0].disableUrlAccess, true);
   assert.ok(messages[0].text.includes('BK-5')); assert.ok(messages[0].html.includes('BK-5'));
+});
+
+for (const notification of [
+  { templateKey: 'BOOKING_RECEIVED', relatedEntityType: 'BOOKING', relatedEntityId: '5', payload: input.payload },
+  { templateKey: 'INVOICE_ISSUED', relatedEntityType: 'INVOICE', relatedEntityId: '8',
+    payload: { ...input.payload, invoiceNumber: 'INV-8' } },
+  { templateKey: 'PAYMENT_PROOF_VERIFIED', relatedEntityType: 'PAYMENT_PROOF', relatedEntityId: '9007199254740993',
+    payload: { ...input.payload, amount: '50.00' } },
+  { templateKey: 'ACCOUNT_REGISTERED', relatedEntityType: 'CUSTOMER', relatedEntityId: '1',
+    payload: { displayName: 'Customer' } },
+  { templateKey: 'UPCOMING_EVENT_REMINDER', relatedEntityType: 'BOOKING', relatedEntityId: '5', payload: input.payload },
+]) {
+  test(`${notification.templateKey} skips its stale address even when that address belongs to another customer`, async () => {
+    const db = new OutboxDb();
+    await db.notification().queueNotification({ recipient: input.recipient, ...notification });
+    db.customers.set('2', { ...db.customers.get('1')! });
+    db.customers.set('1', { email: 'new@example.test', verifiedEmail: 'new@example.test', status: 'ACTIVE' });
+    const sent: unknown[] = [];
+    const result = await db.worker({ sendMail: async (message: unknown) => { sent.push(message); } }, {}, undefined,
+      (async () => ({ subject: 'Event', text: 'Reminder', html: '<p>Reminder</p>' })) as any).processEmailBatch(now);
+
+    assert.deepEqual(sent, []);
+    assert.equal(result.failed, 1);
+    assert.equal(db.rows[0].lastError, 'CUSTOMER_RECIPIENT_INELIGIBLE');
+    assert.equal(db.rows[0].nextAttemptAt, null);
+  });
+}
+
+test('email worker sends related customer notices when the exact owner still has the verified address', async () => {
+  const db = new OutboxDb();
+  await db.notification().queueNotification({ ...input, templateKey: 'INVOICE_ISSUED', relatedEntityType: 'INVOICE',
+    relatedEntityId: '8', payload: { ...input.payload, invoiceNumber: 'INV-8' } });
+  await db.notification().queueNotification({ ...input, templateKey: 'PAYMENT_PROOF_VERIFIED', relatedEntityType: 'PAYMENT_PROOF',
+    payload: { ...input.payload, amount: '50.00' } });
+  db.rows[1].id = '2';
+  await db.notification().queueNotification({ recipient: input.recipient, templateKey: 'ACCOUNT_REGISTERED',
+    relatedEntityType: 'CUSTOMER', relatedEntityId: '1', payload: { displayName: 'Customer' } });
+  db.rows[2].id = '3';
+  const recipients: unknown[] = [];
+  const result = await db.worker({ sendMail: async (message: any) => { recipients.push(message.to); } }).processEmailBatch(now);
+
+  assert.equal(result.sent, 3);
+  assert.deepEqual(recipients, Array(3).fill('Customer@Example.test'));
+});
+
+for (const [scenario, update] of [
+  ['unavailable customer', (db: OutboxDb) => db.customers.delete('1')],
+  ['inactive customer', (db: OutboxDb) => { db.customers.get('1')!.status = 'INACTIVE'; }],
+  ['unverified address', (db: OutboxDb) => { db.customers.get('1')!.verifiedEmail = null; }],
+  ['verification for a different address', (db: OutboxDb) => { db.customers.get('1')!.verifiedEmail = 'old@example.test'; }],
+  ['missing booking identity', (db: OutboxDb) => { db.rows[0].relatedEntityId = null; db.rows[0].relatedEntityType = null; }],
+  ['a different actual recipient', (db: OutboxDb) => { db.rows[0].recipient = 'unrelated@example.test'; }],
+] as const) {
+  test(`email worker suppresses an ordinary booking email with ${scenario}`, async () => {
+    const db = new OutboxDb();
+    await db.seed();
+    update(db);
+    const messages: unknown[] = [];
+    const result = await db.worker({ sendMail: async (message: unknown) => { messages.push(message); } }).processEmailBatch(now);
+
+    assert.deepEqual(messages, []);
+    assert.equal(result.failed, 1);
+    assert.equal(db.rows[0].lastError, 'CUSTOMER_RECIPIENT_INELIGIBLE');
+  });
+}
+
+test('email worker rechecks the ordinary recipient on delivery retry', async () => {
+  const db = new OutboxDb();
+  await db.seed();
+  let deliveryAttempts = 0;
+  const worker = db.worker({ sendMail: async () => { deliveryAttempts++; throw { code: 'ECONNECTION' }; } });
+  assert.equal((await worker.processEmailBatch(now)).retried, 1);
+
+  db.customers.get('1')!.email = 'changed@example.test';
+  const result = await worker.processEmailBatch(new Date(+now + settings.retryBaseMs));
+  assert.equal(deliveryAttempts, 1);
+  assert.equal(result.failed, 1);
+  assert.equal(db.rows[0].lastError, 'CUSTOMER_RECIPIENT_INELIGIBLE');
+});
+
+test('email worker retries a failed recipient lookup before attempting transport', async () => {
+  const db = new OutboxDb();
+  await db.seed();
+  db.recipientReadError = new Error('SQL error with private connection details');
+  let sends = 0;
+  const worker = db.worker({ sendMail: async () => { sends++; return {}; } });
+
+  const first = await worker.processEmailBatch(now);
+  assert.equal(sends, 0);
+  assert.equal(first.retried, 1);
+  assert.equal(db.rows[0].lastError, 'CUSTOMER_RECIPIENT_CHECK_UNAVAILABLE');
+  db.recipientReadError = undefined;
+
+  const next = await worker.processEmailBatch(new Date(+now + settings.retryBaseMs));
+  assert.equal(next.sent, 1);
+  assert.equal(sends, 1);
+});
+
+test('email worker preserves password change notices for admin and customer reset flows', async () => {
+  const db = new OutboxDb();
+  for (const [index, recipient] of ['admin@example.test', 'someone@example.test'].entries()) {
+    await db.notification().queueNotification({ recipient, templateKey: 'PASSWORD_CHANGED', payload: { displayName: 'Account owner' } });
+    db.rows[index].id = String(index + 1);
+  }
+  const recipients: unknown[] = [];
+  const result = await db.worker({ sendMail: async (message: any) => { recipients.push(message.to); } }).processEmailBatch(now);
+
+  assert.equal(result.sent, 2);
+  assert.deepEqual(recipients, ['admin@example.test', 'someone@example.test']);
 });
 
 test('Resend delivery retries throttling and reuses the outbox idempotency key before marking SENT', async () => {

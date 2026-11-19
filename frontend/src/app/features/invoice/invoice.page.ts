@@ -37,7 +37,12 @@ export class InvoicePageComponent {
     return doc.amountPaid > 0 && doc.payments.length > 0;
   }
 
+  protected isCancelled(doc: Invoice): boolean {
+    return doc.booking.status?.toUpperCase() === 'CANCELLED' || doc.status.toUpperCase() === 'CANCELLED';
+  }
+
   protected paymentStatus(doc: Invoice): string {
+    if (this.isCancelled(doc)) return 'CANCELLED';
     if (!this.isReceipt(doc)) return doc.status;
     if (this.incompleteDeposit(doc)) return 'down_payment_incomplete';
     return adminPaymentDisplayStatus({ total: doc.totalAmount, amountPaid: doc.amountPaid, status: doc.status }) ?? doc.status;
@@ -49,8 +54,8 @@ export class InvoicePageComponent {
 
   protected deposit(doc: Invoice) { return depositProgress(doc.totalAmount, doc.amountPaid); }
   protected incompleteDeposit(doc: Invoice): boolean {
-    return this.isReceipt(doc) && !['CANCELLED', 'REJECTED', 'EXPIRED', 'COMPLETED'].includes(doc.booking.status?.toUpperCase() ?? '')
-      && doc.status.toUpperCase() !== 'CANCELLED' && this.deposit(doc).remainingDeposit > 0;
+    return this.isReceipt(doc) && !this.isCancelled(doc) && !['REJECTED', 'EXPIRED', 'COMPLETED'].includes(doc.booking.status?.toUpperCase() ?? '')
+      && this.deposit(doc).remainingDeposit > 0;
   }
 
   protected load(): void {

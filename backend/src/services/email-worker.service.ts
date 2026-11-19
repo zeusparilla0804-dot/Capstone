@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { environment } from '../config/environment.js';
+import { environment, validEmailAddress } from '../config/environment.js';
 import {
   emailOutboxRepository,
   type ClaimedEmail,
@@ -38,12 +38,22 @@ const retiredCustomQuotationTemplates = new Set<EmailTemplateKey>([
   'CUSTOM_QUOTE_EXPIRED',
 ]);
 
+const accountSecurityTemplates = new Set<EmailTemplateKey>([
+  'EMAIL_VERIFICATION_CODE',
+  'PASSWORD_RESET_REQUESTED',
+  'PASSWORD_CHANGED',
+]);
+
+const customerRecipientCheckUnavailable = 'CUSTOMER_RECIPIENT_CHECK_UNAVAILABLE';
+
 function failureDetails(error: unknown): { transient: boolean; summary: string } {
   const value = error as { code?: unknown; responseCode?: unknown };
   const code = typeof value?.code === 'string' ? value.code.replace(/[^A-Z0-9_-]/gi, '').slice(0, 40) : undefined;
   const responseCode = typeof value?.responseCode === 'number' ? value.responseCode : undefined;
   const permanentCodes = new Set(['EAUTH', 'EENVELOPE', 'EMESSAGE']);
-  const transientCodes = new Set(['ETIMEDOUT', 'ECONNECTION', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'ESOCKET']);
+  const transientCodes = new Set([
+    'ETIMEDOUT', 'ECONNECTION', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'ESOCKET', customerRecipientCheckUnavailable,
+  ]);
   const transient = responseCode !== undefined ? responseCode >= 400 && responseCode < 500 : !!code && transientCodes.has(code);
   const safeCode = code && (transientCodes.has(code) || permanentCodes.has(code)) ? code : 'DELIVERY_ERROR';
   const smtp = responseCode !== undefined && responseCode >= 400 && responseCode <= 599 ? ` SMTP ${responseCode}` : '';
@@ -87,6 +97,18 @@ export function createEmailWorker(deps: WorkerDependencies) {
             : item.templateKey === 'EMAIL_VERIFICATION_CODE' ? 'VERIFICATION_CODE_UNAVAILABLE' : 'RESET_TOKEN_UNAVAILABLE';
           if (await deps.repository.finish(item, { status: 'FAILED', error }, now)) result.failed++;
           continue;
+        }
+        if (!accountSecurityTemplates.has(item.templateKey)) {
+          const customer = await deps.repository.customerEmailForDelivery(item).catch(() => {
+            throw Object.assign(new Error('Customer recipient lookup failed.'), { code: customerRecipientCheckUnavailable });
+          });
+          const recipient = item.recipient.toLowerCase();
+          const currentEmail = customer?.email.trim().toLowerCase();
+          const verifiedEmail = customer?.verifiedEmail?.trim().toLowerCase();
+          if (!validEmailAddress(item.recipient) || recipient !== currentEmail || recipient !== verifiedEmail) {
+            if (await deps.repository.finish(item, { status: 'FAILED', error: 'CUSTOMER_RECIPIENT_INELIGIBLE' }, now)) result.failed++;
+            continue;
+          }
         }
         const response = await transport.sendMail({
           idempotencyKey: `la-chef-outbox-${item.id}`,
