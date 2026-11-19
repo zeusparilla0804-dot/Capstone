@@ -6,6 +6,7 @@ import adminNotificationRoutes from './admin-notifications.routes.js';
 export default Router().use(requireAdmin)
  .use('/notifications',adminNotificationRoutes)
  .patch('/bookings/:id/time',c.updateBookingTime)
+ .patch('/bookings/:id/schedule',c.rescheduleBooking)
  .get('/reports/reservations/export',adminReportController.reservationExport)
  .get('/reports/payments/export',adminReportController.paymentExport)
  .get('/reports/collections/export',adminReportController.collectionExport)

@@ -44,6 +44,8 @@ export function createEventReminderRepository(deps: EventReminderRepositoryDepen
                 WHERE existing.template_key=@templateKey
                   AND existing.related_entity_type=@relatedEntityType
                   AND existing.related_entity_id=r.reservation_id
+                  AND JSON_VALUE(CASE WHEN ISJSON(existing.payload)=1 THEN existing.payload END,'$.eventDate')=CONVERT(varchar(10),r.event_date,23)
+                  AND COALESCE(existing.last_error,'')<>'REMINDER_NO_LONGER_APPLICABLE'
               )`);
         return result.rowsAffected[0] ?? 0;
       });

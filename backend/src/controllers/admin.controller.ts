@@ -44,6 +44,7 @@ function statusInput(body:unknown):{status:BookingStatus;reason?:string;capacity
 }
 export const adminController={
  updateBookingTime: async(q:Request,s:Response,n:NextFunction)=>{try{s.json({success:true,data:await bookingTimeService.update(q.admin!.id,id(q),q.body)});}catch(e){n(e);}},
+ rescheduleBooking: async(q:Request,s:Response,n:NextFunction)=>{try{s.json({success:true,data:await bookingTimeService.reschedule(q.admin!.id,id(q),q.body)});}catch(e){n(e);}},
  paymentProofs: async (q: Request, s: Response, n: NextFunction) => {
   try { s.json({ success: true, data: await paymentVerificationService.listPendingProofs(q.query) }); } catch (e) { n(e); }
  },

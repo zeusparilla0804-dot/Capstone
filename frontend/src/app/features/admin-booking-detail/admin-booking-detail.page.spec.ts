@@ -26,8 +26,10 @@ const detail: AdminBookingDetail = {
 
 describe('AdminBookingDetailPage', () => {
   it('confirms an admin time adjustment to 10 PM before saving the exact original time', () => {
-    const updateTime = vi.fn(() => of({ success: true, data: { eventTime: '22:00' } }));
-    (api as any).updateBookingTime = updateTime;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-19T04:00:00Z'));
+    const updateTime = vi.fn(() => of({ success: true, data: { eventDate: detail.eventDate, eventTime: '22:00' } }));
+    (api as any).rescheduleBooking = updateTime;
     api.booking.mockReturnValue(of({ success: true, data: { ...detail, eventTime: '22:00' } }));
     const component = fixture.componentInstance as any;
     component.editEventTime();
@@ -40,11 +42,38 @@ describe('AdminBookingDetailPage', () => {
     const feedback = TestBed.inject(ActionFeedbackService);
     expect(feedback.confirmation()?.message).toContain('10:00 PM');
     feedback.decide(true);
-    expect(updateTime).toHaveBeenCalledWith(42, '22:00', '18:00');
+    expect(updateTime).toHaveBeenCalledWith(42, {
+      eventDate: detail.eventDate, eventTime: '22:00', expectedDate: detail.eventDate, expectedTime: '18:00',
+    });
     expect(component.booking().eventTime).toBe('22:00');
     component.booking.set({ ...detail, status: 'COMPLETED' });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[data-edit-event-time]')).toBeNull();
+  });
+
+  it('confirms a new date and time before submitting the original schedule for comparison', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-19T04:00:00Z'));
+    const moved = { ...detail, eventDate: '2026-12-15', eventTime: '20:00' };
+    const reschedule = vi.fn(() => of({ success: true, data: { eventDate: moved.eventDate, eventTime: moved.eventTime } }));
+    (api as any).rescheduleBooking = reschedule;
+    api.booking.mockReturnValue(of({ success: true, data: moved }));
+    const component = fixture.componentInstance as any;
+    component.editEventTime();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('#admin-event-date')?.value).toBe(detail.eventDate);
+    component.editedEventDate = moved.eventDate;
+    component.editedEventTime = '8:00 PM';
+    component.requestTimeUpdate();
+    expect(reschedule).not.toHaveBeenCalled();
+    const feedback = TestBed.inject(ActionFeedbackService);
+    expect(feedback.confirmation()?.message).toContain('December 15, 2026');
+    feedback.decide(true);
+    expect(reschedule).toHaveBeenCalledWith(42, {
+      eventDate: moved.eventDate, eventTime: moved.eventTime, expectedDate: detail.eventDate, expectedTime: detail.eventTime,
+    });
+    expect(component.booking().eventDate).toBe(moved.eventDate);
   });
   let fixture: ComponentFixture<AdminBookingDetailPage>;
   let updateResult: Subject<unknown>;
@@ -75,6 +104,7 @@ describe('AdminBookingDetailPage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     TestBed.resetTestingModule();
     restoreDialog();
   });

@@ -59,7 +59,8 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
     }
     return { displayName: payload.displayName.trim() };
   }
-  const optionalFields: readonly string[] = key === 'INVOICE_ISSUED' ? invoiceFields : key === 'PAYMENT_PROOF_VERIFIED' ? paymentReviewFields : [];
+  const optionalFields: readonly string[] = key === 'INVOICE_ISSUED' ? invoiceFields
+    : key === 'PAYMENT_PROOF_VERIFIED' ? paymentReviewFields : key === 'BOOKING_RESCHEDULED' ? ['eventTime'] : [];
   const keys = ['customerName', 'bookingReference', 'eventDate', ...(definition.extras ?? []), ...optionalFields];
   const payload = raw as Record<string, unknown>;
   if (Object.keys(payload).some(field => !keys.includes(field))) throw new AppError(400, 'Notification payload contains unsupported fields.');
@@ -79,6 +80,10 @@ export function validateEmailPayload(key: unknown, raw: unknown): Record<string,
       (result.amount !== undefined && !/^\d{1,10}\.\d{2}$/.test(result.amount)) ||
       (result.quoteTotal !== undefined && !/^\d{1,10}\.\d{2}$/.test(result.quoteTotal))) {
     throw new AppError(400, 'Invalid notification date or amount.');
+  }
+  if (key === 'BOOKING_RESCHEDULED' && (!validDateOnly(result.eventDate!) ||
+    (result.eventTime !== undefined && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(result.eventTime)))) {
+    throw new AppError(400, 'Invalid event schedule.');
   }
   if (key === 'INVOICE_ISSUED' && (
     !validDateOnly(result.eventDate!) ||
@@ -236,6 +241,7 @@ export function renderEmail(key: EmailTemplateKey, raw: unknown): RenderedEmail 
   }
   const lines = [`Hello ${payload.customerName},`, definition.message, `Booking: ${payload.bookingReference}`,
     `Event date: ${payload.eventDate}`];
+  if (key === 'BOOKING_RESCHEDULED' && payload.eventTime) lines.push(`Event time: ${invoiceTime(payload.eventTime)}`);
   if (key === 'INVOICE_ISSUED') lines.push(`Invoice: ${payload.invoiceNumber}`);
   if (key === 'PAYMENT_PROOF_VERIFIED') lines.push(`Verified amount: PHP ${payload.amount}`);
   if (key === 'PAYMENT_PROOF_VERIFIED' && payload.remainingDeposit !== undefined) {

@@ -28,7 +28,7 @@ function requestHarness(rows: unknown[] = [], affected = 0) {
   return { request, parameters, command: () => command };
 }
 
-test('event reminder repository queues one intent per confirmed booking with serializable duplicate protection', async () => {
+test('event reminder repository queues one intent per confirmed event date with serializable duplicate protection', async () => {
   assert.equal(typeof repositoryModule?.createEventReminderRepository, 'function');
   const db = requestHarness([], 2);
   let transactional = false;
@@ -53,6 +53,7 @@ test('event reminder repository queues one intent per confirmed booking with ser
   assert.match(db.command(), /NOT\s+EXISTS/i);
   assert.match(db.command(), /EMAIL_OUTBOX\s+existing\s+WITH\s*\(UPDLOCK,HOLDLOCK\)/i);
   assert.match(db.command(), /related_entity_id\s*=\s*r\.reservation_id/i);
+  assert.match(db.command(), /JSON_VALUE\(.*?'\$\.eventDate'\)=CONVERT\(varchar\(10\),r\.event_date,23\)/);
 });
 
 test('event reminder delivery revalidation requires the same confirmed future reservation date', async () => {

@@ -16,6 +16,7 @@ const feedCte = `WITH feed AS (
   SELECT CONCAT('history:',h.booking_status_history_id),
     CASE WHEN h.reason LIKE 'Payment method %' THEN 'PAYMENT_METHOD_CHANGED' ELSE 'RESERVATION_UPDATED' END,
     CASE WHEN h.reason LIKE 'Payment method %' THEN 'Payment method selected'
+      WHEN h.reason LIKE 'Event rescheduled from %' THEN 'Reservation rescheduled'
       WHEN h.next_status='CANCELLED' THEN 'Reservation cancelled'
       WHEN h.next_status='CONFIRMED' THEN 'Reservation confirmed'
       WHEN h.next_status='COMPLETED' THEN 'Event completed'

@@ -47,17 +47,20 @@
         <dl class="fact-list">
           <div><dt>Venue</dt><dd>{{ item.venue || 'Not provided' }}</dd></div>
           <div><dt>Event date</dt><dd>{{ item.eventDate + 'T00:00:00Z' | date:'MMMM d, y':'UTC' }}</dd></div>
-          <div><dt>Time</dt><dd>
+          <div><dt>{{ editingTime() ? 'Schedule' : 'Time' }}</dt><dd>
             @if (editingTime()) {
               <form class="event-time-form" (ngSubmit)="requestTimeUpdate()">
+                <label for="admin-event-date">Agreed event date</label>
+                <input id="admin-event-date" name="eventDate" type="date" required [min]="scheduleMinimumDate()"
+                  [(ngModel)]="editedEventDate" [disabled]="mutationPending()" />
                 <label for="admin-event-time">Agreed event time</label>
                 <input id="admin-event-time" name="eventTime" type="text" placeholder="7:00 PM" (blur)="normalizeEditedEventTime()" required [(ngModel)]="editedEventTime" [disabled]="mutationPending()" />
-                <small>Use the time agreed with the client, including evening events.</small>
-                <div><button class="btn btn-primary btn-sm" type="submit" [disabled]="mutationPending() || !editedEventTime">Save time</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="mutationPending()" (click)="editingTime.set(false)">Cancel</button></div>
+                @if (scheduleError()) { <p class="admin-action-error" role="alert">{{ scheduleError() }}</p> }
+                <div><button class="btn btn-primary btn-sm" type="submit" [disabled]="mutationPending() || !editedEventDate || !editedEventTime">Save schedule</button><button class="btn btn-secondary btn-sm" type="button" [disabled]="mutationPending()" (click)="editingTime.set(false)">Cancel</button></div>
               </form>
             } @else {
               {{ eventTimeLabel(item.eventTime) }}
-              @if (canEditTime()) { <button class="btn btn-tertiary btn-sm" data-edit-event-time type="button" [disabled]="mutationPending()" (click)="editEventTime()">Edit event time</button> }
+              @if (canEditTime()) { <button class="btn btn-tertiary btn-sm" data-edit-event-time type="button" [disabled]="mutationPending()" (click)="editEventTime()">Reschedule event</button> }
             }
           </dd></div>
           <div><dt>Guests</dt><dd>{{ item.guestCount }}</dd></div>

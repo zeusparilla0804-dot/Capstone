@@ -1,5 +1,5 @@
 import { eventTime24, formatEventTime } from '../../shared/pipes/event-time.pipe';
-import { CurrencyPipe, DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe, formatDate } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -84,38 +84,64 @@ export class AdminBookingDetailPage {
   protected actionReason = '';
   protected customerCancellationDate = '';
   protected readonly editingTime = signal(false);
+  protected readonly scheduleError = signal('');
+  protected editedEventDate = '';
   protected editedEventTime = '';
   protected readonly canEditTime = computed(() => !!this.booking() && ['PENDING', 'APPROVED', 'AWAITING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAYMENT_VERIFIED', 'CONFIRMED'].includes(this.booking()!.status));
 
   protected editEventTime(): void {
     if (!this.canEditTime() || this.mutationPending()) return;
+    this.editedEventDate = this.booking()!.eventDate;
     this.editedEventTime = this.booking()?.eventTime ? formatEventTime(this.booking()!.eventTime) : '';
     this.editingTime.set(true);
+    this.scheduleError.set('');
     this.actionError.set('');
+  }
+
+  protected scheduleMinimumDate(): string {
+    return formatDate(new Date(), 'yyyy-MM-dd', 'en-US', '+0800');
   }
 
   protected requestTimeUpdate(): void {
     const booking = this.booking();
     const time = eventTime24(this.editedEventTime);
+    const date = this.editedEventDate;
     if (!booking || !this.canEditTime() || this.mutationPending()) return;
-    if (!time) { this.actionError.set('Enter a valid event time, for example 7:00 PM.'); return; }
-    if (time === booking.eventTime) { this.editingTime.set(false); return; }
-    this.feedbackDialog.confirm({ title: 'Adjust event time?', confirmLabel: 'Save event time',
-      message: `${booking.reference}\nFrom ${this.eventTimeLabel(booking.eventTime)} to ${this.eventTimeLabel(time)}.\nConfirm that this time has been agreed with the client.`,
+    if (!time) { this.scheduleError.set('Enter a valid event time, for example 7:00 PM.'); return; }
+    if (date === booking.eventDate && time === booking.eventTime) { this.editingTime.set(false); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < this.scheduleMinimumDate()) {
+      this.scheduleError.set('Choose today or a future event date.');
+      return;
+    }
+    const nextDate = formatDate(date + 'T00:00:00Z', 'MMMM d, y', 'en-US', 'UTC');
+    const previousDate = formatDate(booking.eventDate + 'T00:00:00Z', 'MMMM d, y', 'en-US', 'UTC');
+    this.feedbackDialog.confirm({ title: 'Reschedule event?', confirmLabel: 'Save schedule',
+      message: `${booking.reference}\nFrom ${previousDate}, ${this.eventTimeLabel(booking.eventTime)} to ${nextDate}, ${this.eventTimeLabel(time)}.\nConfirm that the client agreed and LA Chef can accommodate the new schedule.`,
     }, () => {
-      if (this.mutationPending() || this.booking() !== booking || eventTime24(this.editedEventTime) !== time) return;
+      if (this.mutationPending() || !this.editingTime() || this.booking() !== booking ||
+        this.editedEventDate !== date || eventTime24(this.editedEventTime) !== time) return;
       this.mutationPending.set(true);
-      this.actionError.set('');
-      this.api.updateBookingTime(this.bookingId, time, booking.eventTime ?? null)
+      this.scheduleError.set('');
+      this.api.rescheduleBooking(this.bookingId, { eventDate: date, eventTime: time,
+        expectedDate: booking.eventDate, expectedTime: booking.eventTime ?? null })
         .pipe(finalize(() => this.mutationPending.set(false))).subscribe({
           next: response => {
-            this.booking.set({ ...booking, eventTime: response.data.eventTime });
+            this.booking.set({ ...booking, ...response.data });
             this.editingTime.set(false);
-            this.feedback.set('Event time updated.');
+            this.feedback.set('Event rescheduled.');
             this.api.booking(this.bookingId).subscribe({ next: result => this.booking.set(result.data),
-              error: () => this.actionError.set('Time saved. Refresh to load the updated history.') });
+              error: () => this.actionError.set('Schedule saved. Refresh to load the updated history.') });
           },
-          error: error => { this.actionError.set(error?.error?.message || 'Unable to update the event time.'); if (error?.status === 409) { this.editingTime.set(false); this.load(); } },
+          error: error => {
+            const message = error?.error?.message || 'Unable to save the event schedule.';
+            if (error?.error?.code === 'BOOKING_SCHEDULE_STALE') {
+              this.editingTime.set(false);
+              this.load();
+              this.actionError.set(message);
+            } else {
+              this.scheduleError.set(message);
+            }
+          },
         });
     });
   }

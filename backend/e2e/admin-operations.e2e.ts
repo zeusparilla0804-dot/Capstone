@@ -567,6 +567,27 @@ try {
     assert.ok(customerAuditActions.includes(expected), `Missing customer audit action: ${expected}`);
   }
 
+  const movedDate = new Date(Date.now() + 18 * 86_400_000).toISOString().slice(0, 10);
+  const schedulePath = `/admin/bookings/${created.booking}/schedule`;
+  const schedule = { expectedDate: eventDate, expectedTime: adjustedBooking.body.data.eventTime, eventDate: movedDate, eventTime: '19:30' };
+  const scheduleRequest = { method: 'PATCH', headers: { cookie: adminCookie }, body: JSON.stringify(schedule) };
+  await api(base, schedulePath, { ...scheduleRequest, headers: { cookie: restoredCustomerCookie } }, 401);
+  const moved = await api(base, schedulePath, scheduleRequest);
+  assert.deepEqual(moved.body.data, { eventDate: movedDate, eventTime: '19:30' });
+  await api(base, schedulePath, scheduleRequest);
+  const movedInvoice = await api(base, `/invoices/${created.invoice}`, { headers: { cookie: restoredCustomerCookie } });
+  assert.equal(movedInvoice.body.data.invoiceNumber, invoiceNumber);
+  assert.equal(movedInvoice.body.data.booking.eventDate, movedDate);
+  assert.equal(movedInvoice.body.data.booking.eventTime, '19:30');
+  assert.equal(movedInvoice.body.data.dueDate.slice(0, 10), movedDate);
+  assert.equal(movedInvoice.body.data.amountPaid, requiredDeposit + 120.50);
+  const scheduleNotices = await pool.request().input('id', sql.Int, created.booking).query(`
+    SELECT JSON_VALUE(payload,'$.eventDate') eventDate,JSON_VALUE(payload,'$.eventTime') eventTime
+    FROM dbo.EMAIL_OUTBOX WHERE related_entity_type='BOOKING' AND related_entity_id=@id AND template_key='BOOKING_RESCHEDULED'`);
+  assert.deepEqual(scheduleNotices.recordset, [{ eventDate: movedDate, eventTime: '19:30' }]);
+  assert.equal(await eventReminderRepository.isDeliverable(created.booking!, eventDate, reminderFrom), false);
+  assert.equal(await eventReminderRepository.queueDue(movedDate, movedDate), 1);
+
   const remaining = 2500 - requiredDeposit - 120.50;
   const finalProof = await api(base, `/bookings/${created.booking}/payment-proofs`, { method: 'POST', headers: { cookie: restoredCustomerCookie }, body: await proofForm(`${marker}-FULL-BALANCE`, remaining, new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })) }, 201);
   await api(base, `/admin/payment-proofs/${finalProof.body.data.id}/verify`, { method: 'POST', headers: { cookie: adminCookie }, body: JSON.stringify({ verifiedAmount: remaining }) });
