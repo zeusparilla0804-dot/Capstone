@@ -3,10 +3,18 @@ import { after, before, test } from 'node:test';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 
-import app from './app.js';
-import { passwordRecoveryService } from './services/password-recovery.service.js';
-import { emailVerificationService } from './services/email-verification.service.js';
-import { authService } from './services/auth.service.js';
+process.env.NODE_ENV = 'test';
+process.env.FRONTEND_URL ??= 'http://localhost:4200';
+process.env.PAYMENT_PROOF_UPLOAD_ROOT ??= 'test-proofs';
+process.env.DB_SERVER ??= 'localhost';
+process.env.DB_DATABASE ??= 'test';
+process.env.DB_USER ??= 'test';
+process.env.DB_PASSWORD ??= 'test';
+
+const { default: app } = await import('./app.js');
+const { passwordRecoveryService } = await import('./services/password-recovery.service.js');
+const { emailVerificationService } = await import('./services/email-verification.service.js');
+const { authService } = await import('./services/auth.service.js');
 
 let server: Server;
 let origin: string;

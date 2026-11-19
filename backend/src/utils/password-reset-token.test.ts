@@ -1,10 +1,21 @@
-import 'dotenv/config';
-
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 
-import { readFrontendOrigin, readPasswordResetConfiguration } from '../config/environment.js';
+process.env.NODE_ENV = 'test';
+process.env.FRONTEND_URL ??= 'http://localhost:4200';
+process.env.PAYMENT_PROOF_UPLOAD_ROOT ??= 'test-proofs';
+process.env.DB_SERVER ??= 'localhost';
+process.env.DB_DATABASE ??= 'test';
+process.env.DB_USER ??= 'test';
+process.env.DB_PASSWORD ??= 'test';
+
+const { readFrontendOrigin, readPasswordResetConfiguration } = await import('../config/environment.js');
+const {
+  createPasswordResetToken,
+  reconstructPasswordResetToken,
+  validatePasswordResetToken,
+} = await import('./password-reset-token.js');
 
 test('production frontend origin requires HTTPS and rejects URL credentials', () => {
   assert.equal(readFrontendOrigin('https://lachef.example/reset-password', 'production'), 'https://lachef.example');
@@ -13,12 +24,6 @@ test('production frontend origin requires HTTPS and rejects URL credentials', ()
   assert.throws(() => readFrontendOrigin('javascript:alert(1)', 'production'), /HTTPS/);
   assert.throws(() => readFrontendOrigin('https://user:secret@lachef.example', 'production'), /credentials/);
 });
-import {
-  createPasswordResetToken,
-  reconstructPasswordResetToken,
-  validatePasswordResetToken,
-} from './password-reset-token.js';
-
 const secret = '0123456789abcdef0123456789abcdef';
 
 test('creates unique role-bound reset tokens with storage hashes', () => {
