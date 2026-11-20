@@ -75,16 +75,14 @@ describe('Booking menu preferences', () => {
     const side = fixture.nativeElement.querySelector('#menu-sideDish') as HTMLSelectElement;
     const category = fixture.nativeElement.querySelector('#menu-sideKind') as HTMLSelectElement;
     expect(side.value).toBe('Bolognese');
-    expect(fixture.nativeElement.querySelector('#dish-photos-sideDish')?.textContent).toContain('Bolognese');
+    expect(fixture.nativeElement.querySelector('#dish-photos-sideDish')).toBeNull();
     category.value = 'Noodles';
     category.dispatchEvent(new Event('change'));
     fixture.detectChanges();
 
     expect(side.value).toBe('LA Chef’s choice');
     expect(Array.from(side.options).map(option => option.value)).toEqual(['', 'LA Chef’s choice', 'Pansit Malabon']);
-    const gallery = fixture.nativeElement.querySelector('#dish-photos-sideDish');
-    expect(gallery?.querySelectorAll('img')).toHaveLength(1);
-    expect(gallery.textContent).toContain('Pansit Malabon');
+    expect(fixture.nativeElement.querySelector('#dish-photos-sideDish')).toBeNull();
     side.value = 'Pansit Malabon';
     side.dispatchEvent(new Event('change'));
     expect(fixture.componentInstance.values()).toEqual({ sideKind: 'Noodles', sideDish: 'Pansit Malabon' });
@@ -104,9 +102,11 @@ describe('Booking menu preferences', () => {
     const page: HTMLElement = fixture.nativeElement;
     const side = page.querySelector<HTMLSelectElement>('#menu-sideDish')!;
     expect(Array.from(side.options).map(option => option.value)).toContain('Chopsuey');
-    const gallery = page.querySelector('#dish-photos-sideDish');
-    expect(gallery?.querySelectorAll('img')).toHaveLength(3);
-    if (!gallery) throw new Error('Expected side dish photos to be visible immediately');
+    expect(page.querySelector('#dish-photos-sideDish')).toBeNull();
+    page.querySelector<HTMLButtonElement>('[aria-controls="dish-photos-sideDish"]')!.click();
+    fixture.detectChanges();
+    const gallery = page.querySelector('#dish-photos-sideDish')!;
+    expect(gallery.querySelectorAll('img')).toHaveLength(3);
     Array.from(gallery.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Pansit Malabon')!.click();
     fixture.detectChanges();
 
