@@ -7,4 +7,84 @@ select:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 [aria-invalid=true] { border-color: #b42318; }
 .booking-menu__feedback { min-height: 18px; color: #b42318; font-size: 12px; line-height: 1.5; }
 .booking-menu__included strong { margin-right: 8px; color: var(--color-text); font-weight: 500; }
-@media (max-width: 600px) { .booking-menu__fields { grid-template-columns: minmax(0, 1fr); } select { font-size: 16px; } }
+
+.booking-menu__field-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-height: 32px;
+}
+
+.booking-menu__photos-toggle {
+  min-height: 32px;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.booking-menu__gallery {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+}
+
+.booking-menu__gallery-note {
+  margin: 0 0 12px;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.booking-menu__photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: 10px;
+  max-block-size: min(28rem, 58dvh);
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  list-style: none;
+}
+
+.booking-menu__photo-option {
+  display: grid;
+  width: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.booking-menu__photo-option:hover,
+.booking-menu__photo-option[aria-pressed=true] { border-color: var(--color-primary); }
+.booking-menu__photo-option:focus-visible,
+.booking-menu__photos-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.booking-menu__photo-option img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover; }
+.booking-menu__photo-option span { padding: 8px; }
+.booking-menu__photo-note { display: block; margin: 4px 4px 0; color: var(--color-text-muted); font-size: 12px; }
+.booking-menu__credits { margin: 8px 4px 0; color: var(--color-text-muted); font-size: 12px; }
+.booking-menu__credits summary { width: fit-content; cursor: pointer; }
+@media (max-width: 600px) {
+  .booking-menu__fields { grid-template-columns: minmax(0, 1fr); }
+  .booking-menu__photo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  select { font-size: 16px; }
+}

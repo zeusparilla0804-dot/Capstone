@@ -2,6 +2,34 @@ import { TestBed } from '@angular/core/testing';
 import { BookingMenuComponent } from './booking-menu';
 
 describe('Booking menu preferences', () => {
+  it('shows reference photos for available dishes and picks the original menu option', () => {
+    const fixture = TestBed.createComponent(BookingMenuComponent);
+    fixture.componentRef.setInput('definition', { fields: [
+      { key: 'chicken', label: 'Chicken dish', dishChoices: ['Chicken Inasal', 'Chicken Teriyaki'] },
+      { key: 'dessert', label: 'Dessert', dishChoices: ['Leche Flan'] },
+    ], includedItems: ['Steamed rice'] });
+    fixture.componentInstance.changed.subscribe(values => fixture.componentRef.setInput('values', values));
+    fixture.detectChanges();
+    const page: HTMLElement = fixture.nativeElement;
+    const open = page.querySelector<HTMLButtonElement>('[aria-controls="dish-photos-chicken"]')!;
+    expect(page.querySelectorAll('img')).toHaveLength(0);
+    open.click();
+    fixture.detectChanges();
+
+    const gallery = page.querySelector<HTMLElement>('#dish-photos-chicken')!;
+    const choices = Array.from(gallery.querySelectorAll<HTMLButtonElement>('button'));
+    expect(gallery.querySelectorAll('img')).toHaveLength(2);
+    expect(gallery.textContent).toContain('Reference photos');
+    expect(gallery.textContent).not.toContain('Leche Flan');
+    choices.find(choice => choice.textContent?.trim() === 'Chicken Teriyaki')!.click();
+    fixture.detectChanges();
+
+    expect(page.querySelector<HTMLSelectElement>('#menu-chicken')!.value).toBe('Chicken Teriyaki');
+    expect(fixture.componentInstance.values()).toEqual({ chicken: 'Chicken Teriyaki' });
+    expect(open.getAttribute('aria-expanded')).toBe('false');
+    expect(page.querySelector('#dish-photos-chicken')).toBeNull();
+  });
+
   it('displays a saved category when the menu is first opened for editing', () => {
     const fixture = TestBed.createComponent(BookingMenuComponent);
     fixture.componentRef.setInput('definition', { fields: [

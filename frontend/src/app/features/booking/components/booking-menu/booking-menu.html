@@ -1,8 +1,17 @@
 <div class="booking-menu">
   <div class="booking-menu__fields">
     @for (field of definition().fields; track field.key) {
+      @let dishPhotos = photos(field);
       <div class="form-field">
-        <label [for]="'menu-' + field.key">{{ field.label }} *</label>
+        <div class="booking-menu__field-heading">
+          <label [for]="'menu-' + field.key">{{ field.label }} *</label>
+          <button #galleryOpener class="booking-menu__photos-toggle" type="button"
+            [hidden]="!dishPhotos.length" [attr.aria-label]="(openGallery() === field.key ? 'Hide dish photos for ' : 'View dish photos for ') + field.label"
+            [attr.aria-expanded]="openGallery() === field.key" [attr.aria-controls]="'dish-photos-' + field.key"
+            (click)="toggleGallery(field.key)">
+            {{ openGallery() === field.key ? 'Hide photos' : 'View dish photos' }}
+          </button>
+        </div>
         <select [id]="'menu-' + field.key" required
           [attr.aria-invalid]="!!error(field)" [attr.aria-describedby]="'menu-error-' + field.key"
           (change)="edit(field, $event)" (blur)="markEdited(field.key)">
@@ -13,6 +22,35 @@
         </select>
         <small [id]="'menu-error-' + field.key" class="booking-menu__feedback" aria-live="polite">{{ error(field) }}</small>
       </div>
+      @if (openGallery() === field.key && dishPhotos.length) {
+        <section class="booking-menu__gallery" [id]="'dish-photos-' + field.key" [attr.aria-label]="field.label + ' photos'">
+          <p class="booking-menu__gallery-note">Reference photos. LA Chef’s presentation may vary.</p>
+          <ul class="booking-menu__photo-grid">
+            @for (entry of dishPhotos; track entry.dish) {
+              <li>
+                <button class="booking-menu__photo-option" type="button" [attr.aria-pressed]="values()[field.key] === entry.dish"
+                  (click)="pickPhoto(field, entry.dish, galleryOpener)">
+                  <img [src]="entry.photo.imageUrl" alt="" width="320" height="240" loading="lazy" decoding="async" />
+                  <span>{{ entry.dish }}</span>
+                </button>
+                @if (entry.photo.note) { <small class="booking-menu__photo-note">{{ entry.photo.note }}</small> }
+              </li>
+            }
+          </ul>
+          <details class="booking-menu__credits">
+            <summary>Photo credits</summary>
+            <p>Photos resized and framed for display.</p>
+            <ul>
+              @for (entry of dishPhotos; track entry.dish) {
+                <li><a [href]="entry.photo.source" target="_blank" rel="noopener">{{ entry.photo.title }}</a> by {{ entry.photo.artist }},
+                  @if (entry.photo.licenseUrl) { <a [href]="entry.photo.licenseUrl" target="_blank" rel="noopener">{{ entry.photo.license }}</a> }
+                  @else { {{ entry.photo.license }} }
+                </li>
+              }
+            </ul>
+          </details>
+        </section>
+      }
     }
   </div>
   <p class="booking-menu__included"><strong>Also included</strong> {{ definition().includedItems.join(' · ') }}</p>

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
 import type { PackageMenuDefinition, PackageMenuField } from '../../../../core/models';
 import { chefMenuChoice } from '../../../../core/models/menu.model';
+import { menuDishPhotos } from '../../../../core/data/menu-dish-photos';
 
 @Component({
   selector: 'app-booking-menu',
@@ -14,20 +15,47 @@ export class BookingMenuComponent {
   readonly showErrors = input(false);
   readonly changed = output<Readonly<Record<string, string>>>();
   private readonly edited = signal<ReadonlySet<string>>(new Set());
+  protected readonly openGallery = signal<string | null>(null);
 
   constructor() {
-    effect(() => { this.definition(); this.edited.set(new Set()); });
+    effect(() => {
+      this.definition();
+      this.edited.set(new Set());
+      this.openGallery.set(null);
+    });
   }
 
   protected edit(field: PackageMenuField, event: Event): void {
+    this.select(field, (event.target as HTMLSelectElement).value);
+  }
+
+  protected toggleGallery(key: string): void {
+    this.openGallery.update(open => open === key ? null : key);
+  }
+
+  protected pickPhoto(field: PackageMenuField, dish: string, opener: HTMLButtonElement): void {
+    this.select(field, dish);
+    this.openGallery.set(null);
+    opener.focus();
+  }
+
+  protected photos(field: PackageMenuField) {
+    if (!field.dishChoices) return [];
+    return this.choices(field).flatMap(dish => {
+      const photo = menuDishPhotos.get(dish);
+      return photo ? [{ dish, photo }] : [];
+    });
+  }
+
+  private select(field: PackageMenuField, value: string): void {
     this.edited.update(keys => new Set([...keys, field.key]));
-    const value = (event.target as HTMLSelectElement).value;
     const values = { ...this.values(), [field.key]: value };
     if (field.options && value !== this.values()[field.key]) {
       for (const dish of this.definition().fields) {
         const choices = dish.dishChoices;
         if (choices && 'categoryField' in choices && choices.categoryField === field.key) {
           values[dish.key] = chefMenuChoice;
+          if (this.openGallery() === dish.key) this.openGallery.set(null);
         }
       }
     }
