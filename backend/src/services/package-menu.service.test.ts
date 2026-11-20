@@ -51,7 +51,8 @@ test('publishes catalog dishes for the fields and categories offered by each pac
   assert.ok(side.byCategory['Pasta'].includes('Bolognese'));
   assert.ok(side.byCategory['Noodles'].includes('Pansit Malabon'));
   assert.ok(side.byCategory['Vegetables'].includes('Chopsuey'));
-  assert.equal(classic.fields.find(field => field.key === 'drink')?.dishChoices, undefined);
+  assert.deepEqual(classic.fields.find(field => field.key === 'drink')?.dishChoices,
+    ['Iced Tea', 'Calamansi Juice', 'Pineapple Juice', 'Orange Juice']);
 
   const bronze = packageMenu('Bronze Package')!;
   const firstMain = bronze.fields.find(field => field.key === 'firstMainDish')?.dishChoices;
@@ -61,6 +62,8 @@ test('publishes catalog dishes for the fields and categories offered by each pac
   assert.ok(firstMain.byCategory['Pork'].includes('Grilled Liempo'));
 
   const ruby = packageMenu('Ruby Package')!;
+  assert.deepEqual(ruby.fields.find(field => field.key === 'drink')?.dishChoices,
+    ['Iced Tea', 'Calamansi Juice', 'Pineapple Juice', 'Orange Juice']);
   const main = ruby.fields.find(field => field.key === 'main1')?.dishChoices;
   assert.ok(main && !('categoryField' in main));
   assert.ok(main.includes('Fish & Tofu with Oyster Sauce'));

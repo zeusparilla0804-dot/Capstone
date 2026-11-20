@@ -50,6 +50,12 @@ export class BookingMenuComponent {
   private select(field: PackageMenuField, value: string): void {
     this.edited.update(keys => new Set([...keys, field.key]));
     const values = { ...this.values(), [field.key]: value };
+    const dishChoices = field.dishChoices;
+    if (field.key === 'sideDish' && dishChoices && 'categoryField' in dishChoices
+        && !Object.hasOwn(dishChoices.byCategory, values[dishChoices.categoryField])) {
+      const matches = Object.keys(dishChoices.byCategory).filter(category => dishChoices.byCategory[category].includes(value));
+      if (matches.length === 1) values[dishChoices.categoryField] = matches[0];
+    }
     if (field.options && value !== this.values()[field.key]) {
       for (const dish of this.definition().fields) {
         const choices = dish.dishChoices;
@@ -70,7 +76,8 @@ export class BookingMenuComponent {
     if (field.options) return field.options;
     const choices = field.dishChoices;
     const dishes = choices && 'categoryField' in choices
-      ? choices.byCategory[this.values()[choices.categoryField]] ?? []
+      ? choices.byCategory[this.values()[choices.categoryField]]
+        ?? (field.key === 'sideDish' ? [...new Set(Object.values(choices.byCategory).flat())] : [])
       : choices ?? [];
     const saved = this.values()[field.key];
     return saved && saved !== chefMenuChoice && !dishes.includes(saved)

@@ -59,6 +59,7 @@ const sideDishes = {
 } as const;
 
 const soupDishes = ['Crab & Corn Soup', 'Mushroom Soup', 'Pumpkin Soup'];
+const drinks = ['Iced Tea', 'Calamansi Juice', 'Pineapple Juice', 'Orange Juice'];
 const desserts = [
   'Coffee Jelly with Cream',
   'Fruit Salad',
@@ -124,7 +125,7 @@ export function packageMenu(packageName: string): PackageMenuDefinition | undefi
       } },
       ...(vegetable ? [{ key: 'vegetable', label: 'Vegetable dish', dishChoices: sideDishes.Vegetables }] : []),
       { key: 'dessert', label: 'Dessert', dishChoices: desserts },
-      { key: 'drink', label: 'Drink' },
+      { key: 'drink', label: 'Drink', dishChoices: drinks },
     ],
     includedItems,
   };

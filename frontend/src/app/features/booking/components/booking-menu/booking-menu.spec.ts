@@ -85,4 +85,31 @@ describe('Booking menu preferences', () => {
     side.dispatchEvent(new Event('change'));
     expect(fixture.componentInstance.values()).toEqual({ sideKind: 'Noodles', sideDish: 'Pansit Malabon' });
   });
+
+  it('offers side dishes and photos before a category is chosen, then fills the category when a dish is picked', () => {
+    const fixture = TestBed.createComponent(BookingMenuComponent);
+    fixture.componentRef.setInput('definition', { fields: [
+      { key: 'sideKind', label: 'Side dish category', options: ['Pasta', 'Noodles', 'Vegetables'] },
+      { key: 'sideDish', label: 'Preferred side dish', dishChoices: {
+        categoryField: 'sideKind', byCategory: { Pasta: ['Bolognese'], Noodles: ['Pansit Malabon'], Vegetables: ['Chopsuey'] },
+      } },
+    ], includedItems: [] });
+    fixture.componentInstance.changed.subscribe(values => fixture.componentRef.setInput('values', values));
+    fixture.detectChanges();
+
+    const page: HTMLElement = fixture.nativeElement;
+    const side = page.querySelector<HTMLSelectElement>('#menu-sideDish')!;
+    expect(Array.from(side.options).map(option => option.value)).toContain('Chopsuey');
+    page.querySelector<HTMLButtonElement>('[aria-controls="dish-photos-sideDish"]')!.click();
+    fixture.detectChanges();
+    const gallery = page.querySelector('#dish-photos-sideDish')!;
+    expect(gallery.querySelectorAll('img')).toHaveLength(3);
+    Array.from(gallery.querySelectorAll('button')).find(button => button.textContent?.trim() === 'Pansit Malabon')!.click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.values()).toEqual({ sideKind: 'Noodles', sideDish: 'Pansit Malabon' });
+    expect(page.querySelector<HTMLSelectElement>('#menu-sideKind')!.value).toBe('Noodles');
+    expect(side.value).toBe('Pansit Malabon');
+    expect(Array.from(side.options).map(option => option.value)).not.toContain('Bolognese');
+  });
 });

@@ -80,4 +80,8 @@ export const menuDishPhotos: ReadonlyMap<string, ReturnType<typeof commonsPhoto>
   ["Corn Salad", commonsPhoto("corn-salad.jpg", "Sweet corn salad.jpg", "Jirka Matousek", "CC BY 2.0")],
   ["Oreo Cheesecake", commonsPhoto("oreo-cheesecake.jpg", "Oreo cheesecake.jpg", "Cobalt9", "CC BY-SA 4.0")],
   ["Mango Panna Cotta", commonsPhoto("mango-panna-cotta.jpg", "Panacotta.jpg", "Nikitha Jotheswari", "CC BY-SA 4.0")],
+  ["Iced Tea", commonsPhoto("iced-tea.jpg", "Ice tea glass.jpg", "Kanko from Nagasaki, Japan", "CC BY 2.0")],
+  ["Calamansi Juice", commonsPhoto("calamansi-juice.jpg", "Calamansi juice (Filipino lemonade).jpg", "Obsidian Soul", "CC0")],
+  ["Pineapple Juice", commonsPhoto("pineapple-juice.jpg", "Pineapple juice in glass.jpg", "B722N", "CC BY-SA 4.0")],
+  ["Orange Juice", commonsPhoto("orange-juice.jpg", "Glass of Fresh Orange Juice.jpg", "Rebeloasisx", "CC BY-SA 4.0")],
 ]);
