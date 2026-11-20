@@ -83,6 +83,8 @@
             </aside>
           </div>
         } @else {
+          @let checkingDate = availabilityState().phase === 'checking';
+          @if (currentStep() > 1 && checkingDate) { <p class="booking-help" role="status">Checking event date availability...</p> }
           @if (currentStep() >= 3 && draftService.catalogSelectionError()) {
             <div class="availability-status availability-status--error" role="alert">
               <p>{{ draftService.catalogSelectionError() }}</p>
@@ -200,7 +202,7 @@
             } @else {
               <p class="booking-help">LA Chef will confirm the menu for this package with you.</p>
             }
-            <div class="step-actions"><button class="btn btn-secondary" type="button" (click)="goToStep(1)">Back</button><button class="btn btn-primary" type="button" (click)="goToStep(3)">Continue to Add-ons</button></div>
+            <div class="step-actions"><button class="btn btn-secondary" type="button" (click)="goToStep(1)">Back</button><button class="btn btn-primary" type="button" [disabled]="checkingDate" (click)="goToStep(3)">Continue to Add-ons</button></div>
           }
           @case (3) {
             <div class="step-heading"><p>Step 3</p><h2>Select Add-ons</h2><span>Add optional services to complete your event setup.</span></div>
@@ -250,7 +252,7 @@
               }
             </fieldset>
             <div class="step-total"><span>Selected add-ons</span><strong>{{ draftService.pricing().addOnTotal | currency:'PHP':'symbol-narrow':'1.0-0' }}</strong></div>
-            <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="!!draftService.catalogSelectionError()" (click)="goToStep(4)">Review Booking</button></div>
+            <div class="step-actions"><button class="btn btn-secondary" type="button" (click)="goToStep(2)">Back</button><button class="btn btn-primary" type="button" [disabled]="checkingDate || !!draftService.catalogSelectionError()" (click)="goToStep(4)">Review Booking</button></div>
           }
           @case (4) {
             <div class="step-heading"><p>Step 4</p><h2>Review Your Booking</h2><span>Submit your request for LA Chef's review. Choose payment after approval.</span></div>
@@ -267,7 +269,7 @@
               <p>You can edit or cancel a pending reservation in My Reservations. Contact LA Chef for changes after approval. A 50% down payment is required to confirm your reservation, and the remaining balance is due on the event date.</p>
               <p>If you request cancellation at least 7 calendar days before the event, LA Chef retains 20% of the verified down payment. For requests made within 6 calendar days before the event or on the event date, LA Chef retains 50% of the verified down payment after reviewing the signed agreement.</p>
             </section>
-            <div class="step-actions"><button class="btn btn-primary" type="button" [disabled]="isSubmitting() || !!draftService.catalogSelectionError()" (click)="confirmBooking()">{{ isSubmitting() ? 'Submitting...' : editingBookingId() ? 'Save Booking Changes' : 'Submit Booking for Review' }}</button></div>
+            <div class="step-actions"><button class="btn btn-secondary" type="button" [disabled]="isSubmitting()" (click)="goToStep(3)">Back</button><button class="btn btn-primary" type="button" [disabled]="isSubmitting() || checkingDate || !!draftService.catalogSelectionError()" (click)="confirmBooking()">{{ isSubmitting() ? 'Submitting...' : editingBookingId() ? 'Save Booking Changes' : 'Submit Booking for Review' }}</button></div>
             @if (submissionError()) { <p class="submission-error" role="alert">{{ submissionError() }}</p> }
           }
           @case (5) {

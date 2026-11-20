@@ -97,6 +97,7 @@ describe('BookingPageComponent submission validation', () => {
       missingAddOnIds: signal<string[]>([]), removeUnavailableAddOns: () => undefined,
       incompatibleAddOnIds: signal<string[]>([]), availableAddOns: signal([]),
       unlockedStep: signal<1 | 2 | 3 | 4 | 5>(1),
+      restoredStep: 1, rememberStep: () => undefined, persist: () => false,
       draft: draftState.asReadonly(), selectedPackage: signal(pkg), selectedAddOns: signal<[]>([]),
       pricing: signal({ packageTotal: 21600, addOnTotal: 0, subtotal: 21600, discount: 0, total: 21600, downPayment: 10800, remainingBalance: 10800 }),
       addOns: signal([]), loadAddOns: () => undefined, toggleAddOn: () => undefined,
@@ -450,6 +451,7 @@ describe('BookingPageComponent submission validation', () => {
     const button = [...fixture.nativeElement.querySelectorAll('button')].find((item: HTMLButtonElement) => item.textContent?.includes('Submit Booking')) as HTMLButtonElement | undefined;
     expect(button).toBeDefined();
     expect(fixture.nativeElement.textContent).not.toContain('Choose Payment Method');
+    vi.advanceTimersByTime(300);
     await component.confirmBooking();
     expect(bookingService.submitDraft).toHaveBeenCalledOnce();
   });
@@ -537,6 +539,7 @@ describe('BookingPageComponent submission validation', () => {
       expect(cashTerms.querySelector('[role="alert"]')).toBeNull();
       expect(cashTerms.textContent).toContain('October 30, 2026');
       expect(cashTerms.textContent).toContain('6:00 PM');
+      vi.advanceTimersByTime(300);
       await component.confirmBooking();
       expect(component.bookingReference()).toBe('BK-TEST');
     });
@@ -726,6 +729,52 @@ describe('BookingPageComponent submission validation', () => {
     component.navigateFromStepper(3);
     expect(component.currentStep()).toBe(3);
     expect(draftState()).toEqual(saved);
+  });
+
+  it('saves partial event details before the user continues to the menu', () => {
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    component.eventForm.controls.venue.setValue('Still typing');
+    component.eventForm.controls.specialRequest.setValue(' Ask about setup ');
+
+    expect(draftState().venue).toBe('Still typing');
+    expect(draftState().specialRequest).toBe(' Ask about setup ');
+  });
+
+  it('offers a Back button from Review and Add-ons', () => {
+    const fixture = TestBed.createComponent(BookingPageComponent);
+    const component = fixture.componentInstance as any;
+    vi.advanceTimersByTime(300);
+    component.continueToMenu();
+    component.goToStep(3);
+    component.goToStep(4);
+    fixture.detectChanges();
+
+    const back = () => Array.from(fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>)
+      .find(button => button.textContent?.trim() === 'Back');
+    expect(back()).toBeDefined();
+    back()!.click();
+    fixture.detectChanges();
+    expect(component.currentStep()).toBe(3);
+    expect(back()).toBeDefined();
+    back()!.click();
+    expect(component.currentStep()).toBe(2);
+    expect(draftState().venue).toBe('Venue');
+  });
+
+  it('waits for five idle minutes and defers a refresh during submission', () => {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const persist = vi.spyOn(TestBed.inject(BookingDraftService), 'persist');
+    const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    vi.advanceTimersByTime(4 * 60_000);
+    document.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(4 * 60_000);
+    expect(persist).not.toHaveBeenCalled();
+    component.isSubmitting.set(true);
+    vi.advanceTimersByTime(60_000);
+    expect(persist).not.toHaveBeenCalled();
+    component.isSubmitting.set(false);
+    vi.advanceTimersByTime(30_000);
+    expect(persist).toHaveBeenCalledOnce();
   });
 
   it('requires event details to be validated again after editing an earlier step', () => {
@@ -981,6 +1030,7 @@ describe('BookingPageComponent submission validation', () => {
     let resolveUpdate!: (booking: Booking) => void;
     bookingService.updatePendingBooking.mockImplementation(() => new Promise<Booking>(resolve => { resolveUpdate = resolve; }));
     const component = TestBed.createComponent(BookingPageComponent).componentInstance as any;
+    vi.advanceTimersByTime(300);
 
     const first = component.confirmBooking();
     const second = component.confirmBooking();

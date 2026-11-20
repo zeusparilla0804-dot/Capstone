@@ -47,7 +47,107 @@ for (const width of [390, 1440]) {
       }
     }
   });
+
+  test(`booking draft resumes after refresh and Back at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.clock.install();
+    await page.route('**/api/packages', route => route.fulfill({ json: { success: true, data: packages.map(pkg => ({
+      ...pkg, menu: { fields: [{ key: 'drink', label: 'Drink', dishChoices: ['Iced Tea'] }], includedItems: [] },
+    })) } }));
+    await page.route('**/api/add-ons', route => route.fulfill({ json: { success: true, data: [{ id: 8, name: 'Tiffany Chair', price: 100 }] } }));
+    await page.route('**/api/bookings/availability**', route => {
+      const url = new URL(route.request().url());
+      const month = url.searchParams.get('month');
+      const data = month
+        ? Array.from({ length: 31 }, (_, i) => ({ date: `${month}-${String(i + 1).padStart(2, '0')}`, status: 'AVAILABLE' }))
+        : { date: url.searchParams.get('date'), guestCount: Number(url.searchParams.get('guestCount')), status: 'AVAILABLE' };
+      return route.fulfill({ json: { success: true, data } });
+    });
+
+    await page.goto('/book-event?package=1&new=1');
+    const venue = page.getByLabel('Venue *');
+    await venue.fill('Sample venue, Santa Rosa');
+    await page.reload();
+    await expect(venue).toHaveValue('Sample venue, Santa Rosa');
+    await page.locator('#eventType').selectOption('birthday');
+    await page.locator('#eventTime').selectOption({ index: 2 });
+    await page.locator('#guestCount').fill('80');
+    await page.getByRole('button', { name: 'Open available dates' }).click();
+    let availableDays = page.locator('[data-calendar-date]:not([disabled])');
+    if (!await availableDays.count()) {
+      await page.getByRole('button', { name: 'Next month' }).click();
+      availableDays = page.locator('[data-calendar-date]:not([disabled])');
+    }
+    await availableDays.first().click();
+    const date = await page.locator('#eventDate').inputValue();
+    await page.getByRole('button', { name: 'Continue to Menu' }).click();
+    await page.locator('#menu-drink').selectOption('Iced Tea');
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Menu Selection' })).toBeVisible();
+    await expect(page.locator('#menu-drink')).toHaveValue('Iced Tea');
+
+    await page.getByRole('button', { name: 'Continue to Add-ons' }).click();
+    await page.getByRole('checkbox', { name: 'Tiffany Chair' }).check();
+    await page.getByRole('spinbutton', { name: 'Tiffany Chair quantity' }).fill('8');
+    await page.reload();
+    await expect(page.getByRole('checkbox', { name: 'Tiffany Chair' })).toBeChecked();
+    await expect(page.getByRole('spinbutton', { name: 'Tiffany Chair quantity' })).toHaveValue('8');
+    await page.getByRole('button', { name: 'Review Booking' }).click();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Review Your Booking' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Submit Booking for Review' })).toBeEnabled();
+    await expect(page.getByText('Sample venue, Santa Rosa', { exact: true })).toBeVisible();
+
+    await page.clock.fastForward(4 * 60_000);
+    await page.keyboard.press('Shift');
+    await page.clock.fastForward(60_000);
+    await expect(page.getByRole('heading', { name: 'Review Your Booking' })).toBeVisible();
+    const autoReload = page.waitForEvent('framenavigated', frame => frame === page.mainFrame());
+    await page.clock.fastForward(4 * 60_000);
+    await autoReload;
+    await expect(page.getByRole('heading', { name: 'Review Your Booking' })).toBeVisible();
+    await expect(page.getByText('Sample venue, Santa Rosa', { exact: true })).toBeVisible();
+
+    const back = page.getByRole('button', { name: 'Back', exact: true });
+    await back.click();
+    await back.click();
+    await back.click();
+    await expect(venue).toHaveValue('Sample venue, Santa Rosa');
+    await expect(page.locator('#eventDate')).toHaveValue(date);
+    await expect(page.locator('#guestCount')).toHaveValue('80');
+  });
 }
+
+test('admin idle refresh reloads Overview and Reservations without clearing a search in progress', async ({ page }) => {
+  await page.clock.install();
+  await page.route('**/api/auth/admin/me', route => route.fulfill({ json: { success: true, data: { id: '99', fullName: 'QA Administrator', email: 'admin@example.test', role: 'admin' } } }));
+  await page.route('**/api/admin/dashboard?**', route => route.fulfill({ json: { success: true, data: {
+    period: new URL(route.request().url()).searchParams.get('period'),
+    priority: { pendingBookingReviews: 0, proofsAwaitingVerification: 0, confirmedEventsNextSevenDays: 0, outstandingBalanceTotal: 0, failedEmailNotifications: 0 },
+    ledger: { confirmedRevenue: 0, submittedProofValue: 0, overdueOutstanding: 0, averageConfirmedBookingValue: 0 },
+    actionQueues: [], attention: [],
+  } } }));
+  await page.route('**/api/admin/bookings?**', route => route.fulfill({ json: { success: true, data: { items: [], total: 0, page: 1, pageSize: 20, totalPages: 0 } } }));
+  await page.route('**/api/admin/notifications?**', route => route.fulfill({ json: { success: true, data: { items: [], unreadCount: 0, totalItems: 0, page: 1, pageSize: 10, totalPages: 0 } } }));
+
+  await page.goto('/admin/dashboard');
+  await expect(page.getByRole('heading', { name: 'Priority queues' })).toBeVisible();
+  const overviewReload = page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame(), timeout: 10_000 });
+  await page.clock.fastForward(5 * 60_000);
+  await overviewReload;
+  await expect(page.getByRole('heading', { name: 'Priority queues' })).toBeVisible();
+
+  await page.goto('/admin/bookings?status=PENDING');
+  const search = page.getByRole('textbox', { name: 'Search reservations' });
+  await search.fill('Unsubmitted search');
+  await page.clock.fastForward(5 * 60_000);
+  await expect(search).toHaveValue('Unsubmitted search');
+  await search.fill('');
+  const reservationsReload = page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame(), timeout: 10_000 });
+  await page.clock.fastForward(5 * 60_000);
+  await reservationsReload;
+  await expect(page.getByRole('combobox', { name: 'Filter status' })).toHaveValue('PENDING');
+});
 
 for (const state of ['unpaid', 'partial', 'paid']) {
   const paid = state !== 'unpaid';

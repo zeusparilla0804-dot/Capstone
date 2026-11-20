@@ -96,7 +96,6 @@
 .step-total > span { font-size: 13px; font-weight: 500; }
 .step-total > strong { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .booking-surface--addons .step-actions .btn { font-size: 13px; font-weight: 500; }
-.booking-surface--addons .step-actions { justify-content: flex-end; }
 @media (max-width: 767px) { .booking-surface--addons .step-actions .btn { flex: 1; white-space: normal; } }
 .review-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .review-grid section { border-top: 1px solid var(--color-border); padding-top: 18px; }
@@ -131,7 +130,7 @@
 .pricing-review { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
 .pricing-review dl { margin-left: auto; grid-column: 2; grid-row: 1; width: 100%; max-width: none; margin: 0; }
 .pricing-review__total { border-top: 1px solid var(--color-border); padding-top: 10px; font-size: 1rem !important; margin-top: 8px; padding-block: 10px; }
-.booking-review .step-actions { align-items: center; justify-content: flex-end; margin-top: 24px; padding-top: 24px; }
+.booking-review .step-actions { align-items: center; margin-top: 24px; padding-top: 24px; }
 @media (min-width: 768px) {
   .pricing-review dl { transform: translateX(calc(-50% - 15px)); }
 }

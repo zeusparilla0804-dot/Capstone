@@ -1,5 +1,5 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AdminBooking, PageResult } from '../../core/models';
@@ -9,6 +9,7 @@ import { AdminShellComponent } from '../../shared/components/admin-shell/admin-s
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge';
 import { SuccessDialogComponent } from '../../shared/components/success-dialog/success-dialog';
 import { adminPaymentDisplayStatus } from '../../core/utils/payment-display-status';
+import { refreshPageAfterIdle } from '../../core/utils/idle-page-refresh';
 
 const genericActions: Record<string, readonly string[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -57,7 +58,12 @@ export class AdminBookingsPage {
   constructor() {
     const requestedStatus = inject(ActivatedRoute, { optional: true })?.snapshot.queryParamMap.get('status');
     if (requestedStatus && this.statuses.includes(requestedStatus)) this.status = requestedStatus;
+    const initialStatus = this.status;
     this.load();
+    refreshPageAfterIdle(inject(DestroyRef), () => this.page === 1 && this.status === initialStatus
+      && !this.search && !this.date && !this.eventType && !this.loading() && !this.actionPending()
+      && !this.approving() && !this.pendingAction() && !this.approvedReference()
+      && !this.feedbackDialog.confirmation() && !this.feedbackDialog.notice());
   }
 
   protected actionsFor(status: string): readonly string[] { return genericActions[status] ?? []; }

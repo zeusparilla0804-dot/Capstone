@@ -8,7 +8,9 @@ import type { AdminAttentionItem, AdminDashboard } from '../../core/models';
 import { AdminService } from '../../core/services/admin.service';
 import type { AdminNotification } from '../../core/models/admin-notification.model';
 import { AdminNotificationsService } from '../../core/services/admin-notifications.service';
+import { ActionFeedbackService } from '../../core/services/action-feedback.service';
 import { PortalBadgeStateService } from '../../core/services/portal-badge-state.service';
+import { refreshPageAfterIdle } from '../../core/utils/idle-page-refresh';
 import { AdminShellComponent } from '../../shared/components/admin-shell/admin-shell';
 
 @Component({
@@ -23,6 +25,7 @@ export class AdminDashboardPageComponent {
   private readonly badgeState = inject(PortalBadgeStateService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly feedback = inject(ActionFeedbackService);
   protected readonly notifications = inject(AdminNotificationsService);
   private requestPending = false;
   private appliedPeriod = '';
@@ -30,12 +33,16 @@ export class AdminDashboardPageComponent {
   protected readonly loading = signal(true);
   protected readonly error = signal('');
   protected readonly refreshError = signal('');
-  protected period = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit' }).format(new Date()).replace('/', '-');
+  private readonly initialPeriod = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit' }).format(new Date()).replace('/', '-');
+  protected period = this.initialPeriod;
 
   constructor() {
     this.load();
     const refreshTimer = setInterval(() => this.refresh(), 30_000);
     this.destroyRef.onDestroy(() => clearInterval(refreshTimer));
+    refreshPageAfterIdle(this.destroyRef, () => this.period === this.initialPeriod && this.appliedPeriod === this.initialPeriod
+      && !this.notifications.markingAll() && this.notifications.readingIds().length === 0
+      && !this.feedback.confirmation() && !this.feedback.notice());
   }
 
   @HostListener('window:focus')

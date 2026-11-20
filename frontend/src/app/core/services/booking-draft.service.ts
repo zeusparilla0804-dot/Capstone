@@ -23,15 +23,35 @@ const EMPTY_DRAFT: BookingDraft = {
   menuSelections: {},
 };
 
+const DRAFT_STORAGE_KEY = 'la-chef.booking-draft.v1';
+type DraftStep = 1 | 2 | 3 | 4;
+
+interface StoredDraft {
+  readonly customerId: string;
+  readonly draft: BookingDraft;
+  readonly step: DraftStep;
+  readonly unlockedStep: DraftStep;
+  readonly editingBookingId: string | null;
+  readonly submissionKey: string;
+}
+
+function isDraftStep(value: unknown): value is DraftStep {
+  return value === 1 || value === 2 || value === 3 || value === 4;
+}
+
 @Injectable({ providedIn: 'root' })
 export class BookingDraftService {
   private readonly packageService = inject(PackageService);
   private readonly calculationService = inject(BookingCalculationService);
   private readonly http = inject(HttpClient);
   private readonly accountScope = inject(CustomerAccountScopeService);
+  private customerId = this.accountScope.customerId;
   private readonly draftState = signal<BookingDraft>(EMPTY_DRAFT);
-  private readonly submissionKeyState = signal(crypto.randomUUID());
+  private readonly submissionKeyState = signal<string>(crypto.randomUUID());
   readonly submissionKey = this.submissionKeyState.asReadonly();
+  private activeStep: DraftStep = 1;
+
+  get restoredStep(): DraftStep { return this.activeStep; }
 
   readonly addOns = signal<readonly BookingAddOn[]>([]);
   readonly addOnsLoading = signal(false);
@@ -48,8 +68,11 @@ export class BookingDraftService {
     || (this.missingAddOnIds().length || this.incompatibleAddOnIds().length ? 'Some selected add-ons are unavailable for this event. Review them before saving.' : ''));
 
   constructor() {
+    this.restore();
     this.accountScope.changes.pipe(takeUntilDestroyed()).subscribe(() => {
       this.reset();
+      this.customerId = this.accountScope.customerId;
+      this.restore();
       this.addOns.set([]);
       this.addOnsLoading.set(false);
       this.addOnsLoaded.set(false);
@@ -79,6 +102,31 @@ export class BookingDraftService {
 
   update(values: Partial<BookingDraft>): void {
     this.draftState.update((draft) => ({ ...draft, ...values }));
+    this.persist();
+  }
+
+  rememberStep(step: DraftStep): void {
+    this.activeStep = step;
+    this.persist();
+  }
+
+  persist(): boolean {
+    if (!this.customerId) return false;
+    const unlocked = this.unlockedStep();
+    const snapshot: StoredDraft = {
+      customerId: this.customerId,
+      draft: this.draftState(),
+      step: this.activeStep,
+      unlockedStep: unlocked === 5 ? 4 : unlocked,
+      editingBookingId: this.editingBookingId(),
+      submissionKey: this.submissionKey(),
+    };
+    try {
+      window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   selectPackage(packageId: string | null): void {
@@ -152,7 +200,42 @@ export class BookingDraftService {
   reset(): void {
     this.submissionKeyState.set(crypto.randomUUID());
     this.editingBookingId.set(null);
+    this.activeStep = 1;
     this.unlockedStep.set(1);
     this.draftState.set(EMPTY_DRAFT);
+    if (this.customerId) this.clearStoredDraft();
+  }
+
+  private restore(): void {
+    if (!this.customerId) return;
+    try {
+      const stored = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!stored) return;
+      const saved = JSON.parse(stored) as Partial<StoredDraft> | null;
+      const draft = saved?.draft;
+      if (saved?.customerId !== this.customerId || !draft || !Array.isArray(draft.selectedAddOnIds)
+          || typeof draft.eventDate !== 'string' || typeof draft.eventTime !== 'string' || typeof draft.venue !== 'string'
+          || !Number.isFinite(draft.guestCount) || !isDraftStep(saved.step) || !isDraftStep(saved.unlockedStep)
+          || saved.step > saved.unlockedStep || typeof saved.submissionKey !== 'string'
+          || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(saved.submissionKey)) {
+        this.clearStoredDraft();
+        return;
+      }
+      this.draftState.set({ ...EMPTY_DRAFT, ...draft });
+      this.editingBookingId.set(typeof saved.editingBookingId === 'string' ? saved.editingBookingId : null);
+      this.submissionKeyState.set(saved.submissionKey);
+      this.activeStep = saved.step;
+      this.unlockedStep.set(saved.unlockedStep);
+    } catch {
+      this.clearStoredDraft();
+    }
+  }
+
+  private clearStoredDraft(): void {
+    try {
+      window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch {
+      // The in-memory draft still works when browser storage is blocked.
+    }
   }
 }

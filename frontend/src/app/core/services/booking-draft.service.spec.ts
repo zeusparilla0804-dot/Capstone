@@ -171,3 +171,38 @@ describe('BookingDraftService package selection', () => {
     http.verify();
   });
 });
+
+describe('BookingDraftService browser refresh', () => {
+  const storageKey = 'la-chef.booking-draft.v1';
+
+  afterEach(() => window.sessionStorage.removeItem(storageKey));
+
+  function openDraft(customerId: string) {
+    TestBed.configureTestingModule({ providers: [provideHttpClient()] });
+    TestBed.inject(CustomerAccountScopeService).setPrincipal(customerId);
+    return TestBed.inject(BookingDraftService);
+  }
+
+  it('restores the saved draft and submission key in the same signed-in tab', () => {
+    const draft = openDraft('customer-1');
+    const key = draft.submissionKey();
+    draft.update({ venue: 'Typed venue', packageId: '5', menuSelections: { drink: 'Iced Tea' }, selectedAddOnIds: ['2'] });
+
+    TestBed.resetTestingModule();
+    const restored = openDraft('customer-1');
+    expect(restored.draft()).toMatchObject({ venue: 'Typed venue', packageId: '5', menuSelections: { drink: 'Iced Tea' }, selectedAddOnIds: ['2'] });
+    expect(restored.submissionKey()).toBe(key);
+    restored.reset();
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it('removes a saved draft when the account changes', () => {
+    const draft = openDraft('customer-1');
+    draft.update({ venue: 'Private venue' });
+    expect(window.sessionStorage.getItem(storageKey)).not.toBeNull();
+
+    TestBed.inject(CustomerAccountScopeService).setPrincipal('customer-2');
+    expect(draft.draft().venue).toBe('');
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
+  });
+});

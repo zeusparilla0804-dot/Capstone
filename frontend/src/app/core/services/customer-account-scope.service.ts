@@ -10,6 +10,7 @@ export class CustomerAccountScopeService {
   readonly changes = this.changed.asObservable();
 
   get generation(): number { return this.revision; }
+  get customerId(): string | null { return this.principal; }
 
   setPrincipal(id: string | null): void {
     if (id === this.principal) return;
