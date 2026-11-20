@@ -51,6 +51,9 @@ h3 { margin-top: 9px; color: var(--color-text); font-family: var(--font-serif); 
   .text-action:hover { text-decoration-color: currentColor; }
 }
 @media (hover: none), (pointer: coarse) { .gallery-zone { pointer-events: none; } }
+@media (min-width: 1280px) {
+  .package-experience { align-items: start; gap: 48px; padding-block: 42px; }
+}
 @media (max-width: 1023px) {
   .package-experience { grid-template-columns: minmax(0, 1.05fr) minmax(280px, .95fr); gap: 36px; }
   h3 { font-size: 2.1rem; }

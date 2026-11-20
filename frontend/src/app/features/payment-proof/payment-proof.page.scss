@@ -1,7 +1,7 @@
 :host { font-family: var(--font-sans); color: var(--color-text); }
 .payment-layout { display: grid; grid-template-columns: auto minmax(0, 1fr); min-height: 100dvh; background: var(--portal-canvas, var(--color-surface-alt)); }
 .payment-content { min-width: 0; padding: 28px 40px 56px; }
-.payment-container { width: min(100%, 1080px); margin-inline: auto; }
+.payment-container { width: min(100%, var(--wide-content-width)); margin-inline: auto; }
 .back-link { display: inline-flex; min-height: 40px; align-items: center; color: var(--color-text-muted); font-size: 13px; font-weight: 500; text-decoration: none; }
 .back-link:hover { color: var(--color-primary-dark); }
 .back-link:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 4px; }

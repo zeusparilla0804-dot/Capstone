@@ -13,8 +13,8 @@
 .booking-list { display: grid; }
 /* Reference layout, scoped to this page. */
 .bookings-layout { --portal-canvas: #faf9f6; --portal-text: #10131b; --portal-text-secondary: #686970; --portal-divider: #e5e0d7; --portal-gold: #ac7618; background: #faf9f6; font-family: Arial, sans-serif; }
-.bookings-content { padding: 20px clamp(28px, 6vw, 98px) 48px; }
-.bookings-container { width: min(100%, 1436px); }
+.bookings-content { padding: 20px clamp(32px, 3.2vw, 52px) 48px; }
+.bookings-container { width: min(100%, var(--wide-content-width)); }
 .bookings-header { align-items: center; gap: 24px; padding-bottom: 26px; }
 .bookings-header h1 { color: #080808; font-family: var(--font-serif); font-size: 44px; font-weight: 400; letter-spacing: -.025em; line-height: 1.1; }
 .bookings-header p:last-child { margin-top: 7px; color: #686868; font-size: 15px; font-weight: 400; line-height: 1.4; }

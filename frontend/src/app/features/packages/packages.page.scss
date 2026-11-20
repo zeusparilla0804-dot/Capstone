@@ -50,6 +50,13 @@ app-package-experience:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, 
   .category-filters button:hover { color: var(--color-primary-dark); }
   .custom-event__link:hover span, .planning-cta__link:hover span { transform: translateX(4px); }
 }
+@media (min-width: 1280px) {
+  .packages-intro { padding-block: 52px 50px; }
+  .packages-intro__inner { row-gap: 24px; }
+  .packages-content { padding-top: 40px; }
+  .packages-count { margin-top: 20px; }
+  .package-experiences { margin-top: 8px; }
+}
 @media (max-width: 1023px) {
   .packages-intro__inner { grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr); gap: 36px 48px; }
   .packages-intro h1 { font-size: 3.6rem; }

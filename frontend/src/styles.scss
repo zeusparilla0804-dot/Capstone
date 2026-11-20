@@ -53,6 +53,7 @@
   --shadow-soft: #{$shadow-soft};
   --shadow-card: #{$shadow-card};
   --content-width: #{$content-width};
+  --wide-content-width: 1440px;
   --button-height: 42px;
   --button-radius: 8px;
   --button-primary: var(--color-primary);
@@ -218,6 +219,10 @@ h2,
 
 .page-container {
   @include container;
+}
+
+@media (min-width: 1368px) {
+  .page-container { width: min(100% - 128px, var(--wide-content-width)); }
 }
 
 .page-kicker {

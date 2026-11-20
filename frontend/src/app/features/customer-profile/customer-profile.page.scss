@@ -22,7 +22,7 @@
 }
 
 .profile-container {
-  width: min(100%, 1040px);
+  width: min(100%, var(--wide-content-width));
   margin-inline: auto;
 }
 

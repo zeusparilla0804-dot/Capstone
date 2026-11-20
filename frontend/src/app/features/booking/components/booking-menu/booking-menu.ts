@@ -19,9 +19,9 @@ export class BookingMenuComponent {
 
   constructor() {
     effect(() => {
-      this.definition();
+      const sideDish = this.definition().fields.find(field => field.key === 'sideDish' && field.dishChoices);
       this.edited.set(new Set());
-      this.openGallery.set(null);
+      this.openGallery.set(sideDish?.key ?? null);
     });
   }
 
@@ -61,7 +61,8 @@ export class BookingMenuComponent {
         const choices = dish.dishChoices;
         if (choices && 'categoryField' in choices && choices.categoryField === field.key) {
           values[dish.key] = chefMenuChoice;
-          if (this.openGallery() === dish.key) this.openGallery.set(null);
+          if (dish.key === 'sideDish') this.openGallery.set(dish.key);
+          else if (this.openGallery() === dish.key) this.openGallery.set(null);
         }
       }
     }

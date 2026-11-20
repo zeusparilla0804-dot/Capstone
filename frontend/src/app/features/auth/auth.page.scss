@@ -40,7 +40,7 @@
 }
 
 .auth-shell:not(.auth-shell--register) {
-  width: min(980px, 100%);
+  width: min(1120px, 100%);
   min-height: 640px;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   overflow: hidden;
@@ -62,7 +62,7 @@
   --auth-button: #9b6d29;
   --auth-button-hover: #855b1f;
   --auth-focus: #87520c;
-  width: min(1000px, 100%);
+  width: min(1120px, 100%);
   min-height: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   overflow: hidden;

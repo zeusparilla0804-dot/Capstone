@@ -14,7 +14,7 @@
 }
 
 .dashboard-content { min-width: 0; padding: 40px clamp(32px, 3.2vw, 52px) 64px; container: customer-dashboard / inline-size; }
-.dashboard-container { width: min(100%, 1240px); margin-inline: auto; }
+.dashboard-container { width: min(100%, var(--wide-content-width)); margin-inline: auto; }
 
 .dashboard-header {
   position: relative;
@@ -92,7 +92,7 @@
   grid-row: 1;
   grid-column: 1;
   width: 100%;
-  height: clamp(300px, 23vw, 340px);
+  height: clamp(300px, 20vw, 384px);
   border-radius: 2px;
   object-fit: cover;
   object-position: center 54%;
