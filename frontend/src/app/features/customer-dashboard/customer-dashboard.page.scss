@@ -13,7 +13,7 @@
   font-family: var(--font-sans);
 }
 
-.dashboard-content { min-width: 0; padding: 40px clamp(32px, 3.2vw, 52px) 64px; container: customer-dashboard / inline-size; }
+.dashboard-content { min-width: 0; padding: 32px clamp(32px, 3.2vw, 52px) 56px; container: customer-dashboard / inline-size; }
 .dashboard-container { width: min(100%, var(--wide-content-width)); margin-inline: auto; }
 
 .dashboard-header {
@@ -23,7 +23,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 40px;
-  padding-bottom: 32px;
+  padding-bottom: 24px;
 }
 .dashboard-header > div:first-child { position: relative; z-index: 1; min-width: 0; }
 .dashboard-header h1 {
@@ -35,7 +35,7 @@
   line-height: 1.12;
   overflow-wrap: anywhere;
 }
-.dashboard-header p { margin-top: 12px; color: var(--portal-text-secondary); font-size: 15px; font-weight: 400; letter-spacing: normal; line-height: 1.5; }
+.dashboard-header p { margin-top: 12px; color: var(--portal-text-secondary); font-size: 16px; font-weight: 400; letter-spacing: normal; line-height: 1.5; }
 .dashboard-header__actions { position: relative; z-index: 1; flex: 0 0 auto; }
 .dashboard-header__cta {
   display: inline-flex;
@@ -85,8 +85,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(330px, 0.85fr);
   align-items: stretch;
-  gap: 32px;
-  margin-top: 24px;
+  gap: 28px;
+  margin-top: 20px;
 }
 .next-event__feature > img {
   grid-row: 1;
@@ -141,7 +141,7 @@
   text-align: left;
 }
 
-.planning { border-bottom: 1px solid var(--portal-gold-divider); padding: 32px 2px 28px; }
+.planning { border-bottom: 1px solid var(--portal-gold-divider); padding: 24px 2px 24px; }
 .planning .section-heading { display: grid; grid-template-columns: auto 1fr; }
 .planning .section-heading::after { height: 1px; background: var(--portal-gold-divider); content: ''; }
 .planning .section-heading h2 { font-size: 26px; }
@@ -183,7 +183,7 @@
   padding-inline: 3px;
 }
 .booking-table__head { min-height: 32px; border-bottom: 1px solid var(--portal-divider); color: #77736c; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; }
-.booking-table__row { min-height: 44px; border-bottom: 1px solid var(--portal-divider); color: #5d5a54; font-size: 13px; font-weight: 400; }
+.booking-table__row { min-height: 44px; border-bottom: 1px solid var(--portal-divider); color: #5d5a54; font-size: 14px; font-weight: 400; }
 .booking-table__head > span,
 .booking-table__row > span { min-width: 0; width: 100%; overflow-wrap: anywhere; text-align: center; }
 .booking-table__row > span:nth-child(1),

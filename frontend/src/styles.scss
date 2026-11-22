@@ -53,13 +53,13 @@
   --shadow-soft: #{$shadow-soft};
   --shadow-card: #{$shadow-card};
   --content-width: #{$content-width};
-  --wide-content-width: 1440px;
+  --wide-content-width: 1560px;
   --button-height: 42px;
   --button-radius: 8px;
   --button-primary: var(--color-primary);
   --button-primary-hover: var(--color-primary-hover);
   --button-border: #b9b3a7;
-  --section-spacing: clamp(56px, 8vw, 112px);
+  --section-spacing: clamp(40px, 5vw, 72px);
   --transition: 180ms ease;
 }
 

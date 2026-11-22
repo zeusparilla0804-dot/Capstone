@@ -108,7 +108,7 @@
 }
 
 /* Reservation review layout. These selectors override the shared admin shell only on this page. */
-:host ::ng-deep app-admin-shell .admin-main { max-width: 1440px; margin-inline: auto; font-family: var(--font-admin); font-size: 14px; line-height: 1.5; }
+:host ::ng-deep app-admin-shell .admin-main { max-width: var(--wide-content-width); margin-inline: auto; font-family: var(--font-admin); font-size: 14px; line-height: 1.5; }
 :host ::ng-deep app-admin-shell .admin-page-header { position: relative; align-items: center; border: 0; margin-bottom: 0; padding: 0 0 8px; }
 :host ::ng-deep app-admin-shell .admin-page-header::before { position: absolute; top: 31px; right: 0; left: 0; border-top: 1px solid var(--portal-gold-divider); content: ''; }
 :host ::ng-deep app-admin-shell .admin-page-header .page-kicker { color: #8a611e; font-family: var(--font-admin); font-size: 12px; font-weight: 600; line-height: 1.5; letter-spacing: .12em; }
