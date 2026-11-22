@@ -24,7 +24,8 @@ export class CustomerNotificationsService {
   readonly readStatus = this.statusFilter.asReadonly();
   readonly category = this.categoryFilter.asReadonly();
   readonly readFilters = notificationReadFilters;
-  readonly categories = notificationCategories;
+  readonly categories = notificationCategories.filter(({ value }) =>
+    value === 'all' || value === 'reservations' || value === 'payments');
   readonly filteredItems = computed(() => this.items().filter(item =>
     (this.readStatus() === 'all' || (this.readStatus() === 'read' ? item.isRead : !item.isRead)) &&
     (this.category() === 'all' || this.itemCategory(item) === this.category())));

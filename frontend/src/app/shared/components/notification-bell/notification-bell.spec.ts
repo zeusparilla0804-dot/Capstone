@@ -31,9 +31,11 @@ describe('Customer notification bell filters', () => {
     category.value = 'payments'; category.dispatchEvent(new Event('change')); fixture.detectChanges();
     expect(root.querySelectorAll('li')).toHaveLength(1); expect(root.querySelector('li')?.textContent).toContain('Payment recorded');
     expect(root.querySelector('.notifications__trigger')?.getAttribute('aria-label')).toBe('Notifications, 1 unread');
-    category.value = 'customers'; category.dispatchEvent(new Event('change')); fixture.detectChanges();
+    category.value = 'reservations'; category.dispatchEvent(new Event('change')); fixture.detectChanges();
     expect(root.querySelectorAll('li')).toHaveLength(0); expect(root.textContent).toContain('No notifications match these filters.');
-    expect([...category.options].map(option => option.text)).toEqual(['All types', 'Reservations', 'Payments', 'Customers', 'Other / System']);
+    root.querySelector<HTMLButtonElement>('[data-notification-filter="unread"]')!.click(); fixture.detectChanges();
+    expect(root.querySelectorAll('li')).toHaveLength(1); expect(root.querySelector('li')?.textContent).toContain('Booking approved');
+    expect([...category.options].map(option => option.text)).toEqual(['All types', 'Reservations', 'Payments']);
     http.expectNone(request => request.method === 'POST');
   });
 });
