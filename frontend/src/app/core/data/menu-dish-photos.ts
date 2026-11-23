@@ -18,7 +18,12 @@ function commonsPhoto(file: string, title: string, artist: string, license: Phot
   };
 }
 
-/** Reference photos keyed by the exact booking option sent to the catalog API. */
+export const appetizerReferencePhoto = commonsPhoto(
+  "appetizer-example.jpg", "Lumpiang Shanghai (Philippines).jpg", "Arnold Gatilao", "CC BY 2.0",
+  "Example: lumpiang Shanghai. LA Chef will confirm the appetizer.",
+);
+
+/** Reference photos keyed by the exact menu choice or included item from the catalog. */
 export const menuDishPhotos: ReadonlyMap<string, ReturnType<typeof commonsPhoto>> = new Map([
   ["Roast Beef with Mashed Potato", commonsPhoto("roast-beef-with-mashed-potato.jpg", "Traditional.Sunday.Roast-01.jpg", "robbie jim", "CC BY 2.0")],
   ["Roast Beef Royale", commonsPhoto("roast-beef-royale.jpg", "Roast beef with gravy, mashed potato, and vegetables - Massachusetts.jpg", "Daderot", "CC0", "Shown: roast beef with gravy.")],
@@ -84,4 +89,9 @@ export const menuDishPhotos: ReadonlyMap<string, ReturnType<typeof commonsPhoto>
   ["Calamansi Juice", commonsPhoto("calamansi-juice.jpg", "Calamansi juice (Filipino lemonade).jpg", "Obsidian Soul", "CC0")],
   ["Pineapple Juice", commonsPhoto("pineapple-juice.jpg", "Pineapple juice in glass.jpg", "B722N", "CC BY-SA 4.0")],
   ["Orange Juice", commonsPhoto("orange-juice.jpg", "Glass of Fresh Orange Juice.jpg", "Rebeloasisx", "CC BY-SA 4.0")],
+  ["Steamed rice", commonsPhoto("steamed-rice.jpg", "Steamed rice in bowl 01.jpg", "Anna Frodesiak", "CC0")],
+  ["Purified water with tube ice", commonsPhoto("purified-water-with-ice.jpg", "Water and ice.jpg", "Victor Blacus", "CC BY-SA 4.0", "Shown: iced water. Ice shape may vary.")],
+  ["Dinner rolls with butter", commonsPhoto("dinner-rolls.jpg", "Dinner rolls - Massachusetts.jpg", "Daderot", "CC0", "Shown: dinner rolls.")],
+  ["Seasonal fresh fruit platter", commonsPhoto("fresh-fruit-platter.jpg", "Fruit plate.jpg", "frank wouters", "CC BY 2.0", "Fruit selection varies by season.")],
+  ["Fresh garden salad with dressing", commonsPhoto("fresh-garden-salad.jpg", "Garden salad - San Francisco.jpg", "Daderot", "CC0", "Shown: garden salad. Dressing may vary.")],
 ]);

@@ -1,4 +1,5 @@
-.booking-menu__included { margin: 8px 0 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
+.booking-menu__inclusions { margin-top: 8px; }
+.booking-menu__included { margin: 0; color: var(--color-text-muted); font-size: 13px; line-height: 1.6; }
 .booking-menu__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
 .form-field { display: grid; align-content: start; gap: 7px; min-width: 0; }
 label { font-size: 14px; }
@@ -74,7 +75,8 @@ select:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
   cursor: pointer;
 }
 
-.booking-menu__photo-option:hover,
+.booking-menu__photo-option--reference { cursor: auto; }
+button.booking-menu__photo-option:hover,
 .booking-menu__photo-option[aria-pressed=true] { border-color: var(--color-primary); }
 .booking-menu__photo-option:focus-visible,
 .booking-menu__photos-toggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }

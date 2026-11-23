@@ -23,35 +23,64 @@
         <small [id]="'menu-error-' + field.key" class="booking-menu__feedback" aria-live="polite">{{ error(field) }}</small>
       </div>
       @if (openGallery() === field.key && dishPhotos.length) {
-        <section class="booking-menu__gallery" [id]="'dish-photos-' + field.key" [attr.aria-label]="field.label + ' photos'">
-          <p class="booking-menu__gallery-note">Reference photos. LA Chef’s presentation may vary.</p>
-          <ul class="booking-menu__photo-grid">
-            @for (entry of dishPhotos; track entry.dish) {
-              <li>
-                <button class="booking-menu__photo-option" type="button" [attr.aria-pressed]="values()[field.key] === entry.dish"
-                  (click)="pickPhoto(field, entry.dish, galleryOpener)">
-                  <img [src]="entry.photo.imageUrl" alt="" width="320" height="240" loading="lazy" decoding="async" />
-                  <span>{{ entry.dish }}</span>
-                </button>
-                @if (entry.photo.note) { <small class="booking-menu__photo-note">{{ entry.photo.note }}</small> }
-              </li>
-            }
-          </ul>
-          <details class="booking-menu__credits">
-            <summary>Photo credits</summary>
-            <p>Photos resized and framed for display.</p>
-            <ul>
-              @for (entry of dishPhotos; track entry.dish) {
-                <li><a [href]="entry.photo.source" target="_blank" rel="noopener">{{ entry.photo.title }}</a> by {{ entry.photo.artist }},
-                  @if (entry.photo.licenseUrl) { <a [href]="entry.photo.licenseUrl" target="_blank" rel="noopener">{{ entry.photo.license }}</a> }
-                  @else { {{ entry.photo.license }} }
-                </li>
-              }
-            </ul>
-          </details>
-        </section>
+        <ng-container [ngTemplateOutlet]="gallery"
+          [ngTemplateOutletContext]="{ $implicit: dishPhotos, key: field.key, label: field.label, field, opener: galleryOpener }" />
       }
     }
   </div>
-  <p class="booking-menu__included"><strong>Also included</strong> {{ definition().includedItems.join(' · ') }}</p>
+  @let included = includedPhotos();
+  <div class="booking-menu__field-heading booking-menu__inclusions">
+    <p class="booking-menu__included"><strong>Also included</strong> {{ definition().includedItems.join(' · ') }}</p>
+    @if (included.length) {
+      <button class="booking-menu__photos-toggle" type="button"
+        [attr.aria-expanded]="openGallery() === 'included'" aria-controls="dish-photos-included"
+        (click)="toggleGallery('included')">
+        {{ openGallery() === 'included' ? 'Hide included photos' : 'View included photos' }}
+      </button>
+    }
+  </div>
+  @if (openGallery() === 'included' && included.length) {
+    <ng-container [ngTemplateOutlet]="gallery"
+      [ngTemplateOutletContext]="{ $implicit: included, key: 'included', label: 'Included items' }" />
+  }
 </div>
+
+<ng-template #gallery let-photos let-key="key" let-label="label" let-field="field" let-opener="opener">
+  <section class="booking-menu__gallery" [id]="'dish-photos-' + key" [attr.aria-label]="label + ' photos'">
+    <p class="booking-menu__gallery-note">Reference photos. LA Chef’s presentation may vary.</p>
+    <ul class="booking-menu__photo-grid">
+      @for (entry of photos; track entry.dish) {
+        <li>
+          @if (field) {
+            <button class="booking-menu__photo-option" type="button" [attr.aria-pressed]="values()[key] === entry.dish"
+              (click)="pickPhoto(field, entry.dish, opener)">
+              <ng-container [ngTemplateOutlet]="photoTile" [ngTemplateOutletContext]="{ $implicit: entry }" />
+            </button>
+          } @else {
+            <div class="booking-menu__photo-option booking-menu__photo-option--reference">
+              <ng-container [ngTemplateOutlet]="photoTile" [ngTemplateOutletContext]="{ $implicit: entry }" />
+            </div>
+          }
+          @if (entry.photo.note) { <small class="booking-menu__photo-note">{{ entry.photo.note }}</small> }
+        </li>
+      }
+    </ul>
+    <details class="booking-menu__credits">
+      <summary>Photo credits</summary>
+      <p>Photos resized and framed for display.</p>
+      <ul>
+        @for (entry of photos; track entry.dish) {
+          <li><a [href]="entry.photo.source" target="_blank" rel="noopener">{{ entry.photo.title }}</a> by {{ entry.photo.artist }},
+            @if (entry.photo.licenseUrl) { <a [href]="entry.photo.licenseUrl" target="_blank" rel="noopener">{{ entry.photo.license }}</a> }
+            @else { {{ entry.photo.license }} }
+          </li>
+        }
+      </ul>
+    </details>
+  </section>
+</ng-template>
+
+<ng-template #photoTile let-entry>
+  <img [src]="entry.photo.imageUrl" alt="" width="320" height="240" loading="lazy" decoding="async" />
+  <span>{{ entry.dish }}</span>
+</ng-template>
