@@ -2,14 +2,15 @@
   <div class="booking-menu__fields">
     @for (field of definition().fields; track field.key) {
       @let dishPhotos = photos(field);
+      @let galleryOpen = openGallery() === field.key;
       <div class="form-field">
         <div class="booking-menu__field-heading">
           <label [for]="'menu-' + field.key">{{ field.label }} *</label>
           <button #galleryOpener class="booking-menu__photos-toggle" type="button"
-            [hidden]="!dishPhotos.length" [attr.aria-label]="(openGallery() === field.key ? 'Hide dish photos for ' : 'View dish photos for ') + field.label"
-            [attr.aria-expanded]="openGallery() === field.key" [attr.aria-controls]="'dish-photos-' + field.key"
+            [hidden]="!dishPhotos.length"
+            [attr.aria-expanded]="galleryOpen" [attr.aria-controls]="'dish-photos-' + field.key"
             (click)="toggleGallery(field.key)">
-            {{ openGallery() === field.key ? 'Hide photos' : 'View dish photos' }}
+            {{ galleryOpen ? 'Hide' : 'View' }} {{ field.label.toLowerCase() }} photos
           </button>
         </div>
         <select [id]="'menu-' + field.key" required
@@ -22,7 +23,7 @@
         </select>
         <small [id]="'menu-error-' + field.key" class="booking-menu__feedback" aria-live="polite">{{ error(field) }}</small>
       </div>
-      @if (openGallery() === field.key && dishPhotos.length) {
+      @if (galleryOpen && dishPhotos.length) {
         <ng-container [ngTemplateOutlet]="gallery"
           [ngTemplateOutletContext]="{ $implicit: dishPhotos, key: field.key, label: field.label, field, opener: galleryOpener }" />
       }

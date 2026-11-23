@@ -12,11 +12,15 @@ describe('Booking menu preferences', () => {
     fixture.detectChanges();
     const page: HTMLElement = fixture.nativeElement;
     const open = page.querySelector<HTMLButtonElement>('[aria-controls="dish-photos-chicken"]')!;
+    const dessertPhotos = page.querySelector<HTMLButtonElement>('[aria-controls="dish-photos-dessert"]')!;
+    expect(open.textContent?.trim()).toBe('View chicken dish photos');
+    expect(dessertPhotos.textContent?.trim()).toBe('View dessert photos');
     expect(page.querySelectorAll('img')).toHaveLength(0);
     open.click();
     fixture.detectChanges();
 
     const gallery = page.querySelector<HTMLElement>('#dish-photos-chicken')!;
+    expect(open.textContent?.trim()).toBe('Hide chicken dish photos');
     const choices = Array.from(gallery.querySelectorAll<HTMLButtonElement>('button'));
     expect(gallery.querySelectorAll('img')).toHaveLength(2);
     expect(gallery.textContent).toContain('Reference photos');
